@@ -245,3 +245,26 @@ change.
   Home unchanged), and AnchoredComment (D7) mounts in the
   Plans reader (plan anchor) and the Mockups entry detail
   (entry anchor) alongside its Overview showcase mount.
+- Annotation (spec §12) BUILT on branch `build/annotation`
+  (8 step commits over `a33161a`, gate green, awaiting
+  merge): annotation = a message + a nullable `selection`
+  payload (messages.db schema v3; raw offsets refused
+  400; replies carry no selection). One re-location
+  algorithm in `lib/annotations.py` + its client mirror
+  (`sections/plans/relocation.ts`), pinned identical by
+  the shared fixtures `tests/fixtures/relocation.json`
+  (runner: `viewer/tools/test-relocation.ts`); status is
+  derived at read, never stored. Lifecycle tokens +
+  `AnnotationBadge` (→ Sent / ◐ Acknowledged / ✓ Done,
+  Okabe hues; text variants follow the house contrast
+  discipline — `viewer/tools/verify-contrast.mjs`, 280
+  pairs, 0 failures). Plans UI: in-component text
+  selection, draft-on-first-keystroke composer, Okabe
+  marks, margin threads, `Annotations · N`. Mockups UI:
+  drill-in anchors added (stage + all cards), click-to-
+  select components with pinned composer/cards,
+  per-exhibit list. Pickup (§13): `messages_list` attaches
+  the derived `anchor_context` (excerpt + step when
+  located; stored quote / label snapshot when moved).
+  Anchor-leg audit: `viewer/tools/audit-anchors.ts` —
+  21 required sites, 0 failures.
