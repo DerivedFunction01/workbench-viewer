@@ -106,7 +106,8 @@ workbench-viewer/
     config.py                the settings seam (file+env)
     server.py                routing, feeds, guarded writes,
                              mutation endpoints (no SQL)
-    healthcheck.py           /health probe (watchdog's check)
+    healthcheck.py           /api/health probe (watchdog's
+                             check; release-N /health fallback)
   ops/                       AS BUILT
     workbench-viewer-server.service.template
     install-unit.sh
@@ -221,8 +222,9 @@ Sweep mechanics: walk each root to bounded depth; a directory
 containing the manifest file at its top level IS a project —
 record it and never descend into it. Pruned names are never
 entered. Runs at server start and on explicit rescan
-(`POST /projects/rescan`, `wb projects --rescan`). No
-filesystem watcher in v1.
+(`POST /api/projects/rescan`). `wb projects` runs the
+same sweep locally — it imports lib/ and is not an HTTP
+caller. No filesystem watcher in v1.
 
 **Manifest format** (`workbench.yaml`, restricted YAML
 subset): flat `key: value` lines; `#` starts a comment; blank
@@ -301,15 +303,22 @@ stays entry-pure).
 
 ## Server API (feeds the artifact consumes)
 
-`GET /health` · `GET /config` · `GET /projects` ·
-`POST /projects/rescan` · `GET /projects/<slug>/mockups`
-(`?archived=1`) · `GET /projects/<slug>/entries/<id>` ·
-`GET|POST /projects/<slug>/entries/<id>/file` ·
-`POST /projects/<slug>/entries/<id>/action`
+`GET /api/health` · `GET /api/config` · `GET /api/projects` ·
+`POST /api/projects/rescan` · `GET /api/projects/<slug>/mockups`
+(`?archived=1`) · `GET /api/projects/<slug>/entries/<id>` ·
+`GET|POST /api/projects/<slug>/entries/<id>/file` ·
+`POST /api/projects/<slug>/entries/<id>/action`
 (`{verb, ...}` → lib/ mutation, actor=viewer) ·
-`GET /projects/<slug>/plans` · `GET /projects/<slug>/plan?path=` ·
-`GET /projects/<slug>/todos` · `GET /todos` ·
-`POST /projects/<slug>/todos` (`{verb, ...}`) · `GET /board`.
+`GET /api/projects/<slug>/plans` · `GET /api/projects/<slug>/plan?path=` ·
+`GET /api/projects/<slug>/todos` · `GET /api/todos` ·
+`POST /api/projects/<slug>/todos` (`{verb, ...}`) · `GET /api/board`.
+
+The whole HTTP surface lives under `/api`. The 15 legacy
+unprefixed patterns are served as exact aliases — internal
+dispatch to the same handlers, never redirects — for one
+published checkpoint cycle after the unification; the
+following cycle removes them (the unification plan's
+Step 8, tracked as an open bundle todo).
 
 Per-project failure containment: every project feed is built
 independently; a locked or broken DB degrades only that

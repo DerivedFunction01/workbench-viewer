@@ -184,8 +184,9 @@ Sweep mechanics:
 - Pruned names are never entered (default prune list in
   the config table below).
 - The sweep runs at server start and on explicit rescan
-  (`POST /projects/rescan`, `wb projects --rescan`). There
-  is **no filesystem watcher in v1**.
+  (`POST /api/projects/rescan`). `wb projects` runs the
+  same sweep locally — it imports lib/ and is not an HTTP
+  caller. There is **no filesystem watcher in v1**.
 - Sweep results are cached for `sweep_ttl_s`.
 
 Server configuration is one seam — env (`WB_VIEWER_*`) wins
@@ -205,10 +206,10 @@ over the config file (`config.json`) wins over defaults:
 | `feed_lock_timeout_ms` | 250 | Per-project feed lock budget |
 | `state_dir` | `state` | Lock, logs, edit backups |
 
-`GET /health` reports the resolved config (with hash) and
-the last sweep's project list, and `GET /config` the resolved
-config — "why doesn't it see my repo?" is answered from the
-server, not from guesswork.
+`GET /api/health` reports the resolved config (with hash)
+and the last sweep's project list, and `GET /api/config`
+the resolved config — "why doesn't it see my repo?" is
+answered from the server, not from guesswork.
 
 ## 4. Registry — the per-project data model
 
@@ -432,18 +433,25 @@ to lib/ first (§1.1).
 
 API (the feeds the artifact consumes):
 
-- `GET /health` · `GET /config` · `GET /projects` ·
-  `POST /projects/rescan`
-- `GET /projects/<slug>/mockups` (`?archived=1`) ·
-  `GET /projects/<slug>/entries/<id>` ·
-  `GET|POST /projects/<slug>/entries/<id>/file` ·
-  `POST /projects/<slug>/entries/<id>/action`
+- `GET /api/health` · `GET /api/config` · `GET /api/projects` ·
+  `POST /api/projects/rescan`
+- `GET /api/projects/<slug>/mockups` (`?archived=1`) ·
+  `GET /api/projects/<slug>/entries/<id>` ·
+  `GET|POST /api/projects/<slug>/entries/<id>/file` ·
+  `POST /api/projects/<slug>/entries/<id>/action`
   (`{verb, ...}` → lib/ mutation, actor=viewer)
-- `GET /projects/<slug>/plans` ·
-  `GET /projects/<slug>/plan?path=`
-- `GET /projects/<slug>/todos` · `GET /todos` ·
-  `POST /projects/<slug>/todos` (`{verb, ...}`)
-- `GET /board`
+- `GET /api/projects/<slug>/plans` ·
+  `GET /api/projects/<slug>/plan?path=`
+- `GET /api/projects/<slug>/todos` · `GET /api/todos` ·
+  `POST /api/projects/<slug>/todos` (`{verb, ...}`)
+- `GET /api/board`
+
+The whole HTTP surface lives under `/api`. The 15 legacy
+unprefixed patterns are served as exact aliases — internal
+dispatch to the same handlers, never redirects — for one
+published checkpoint cycle after the unification; the
+following cycle removes them (the unification plan's
+Step 8, tracked as an open bundle todo).
 
 Conventions: request input is validated and parsed before
 any logic runs. Success payloads carry `captured_at`;
@@ -545,7 +553,7 @@ flagged in the UI as source format (§1.7).
 
 ### 8.3 Todos
 
-Per project and cross-project (`GET /todos`). Stored in
+Per project and cross-project (`GET /api/todos`). Stored in
 each project's registry DB (§4.3), managed by the `wb`
 todo verbs and editable in the viewer through the same
 lib/ mutation path. Plan steps are NOT todos and are never

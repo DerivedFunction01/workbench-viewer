@@ -73,9 +73,11 @@ mockup data model is example-project's subplan 09, Part B.
   `config.example.json`). Always-on under systemd
   (`ops/install-unit.sh`) with a watchdog (`ops/watchdog.sh`,
   healthcheck cron every ~5 min).
-- `GET /health` reports the resolved config hash and the last
-  sweep's project list — "why doesn't it see my repo?" is
-  answered there.
+- `GET /api/health` reports the resolved config hash and
+  the last sweep's project list — "why doesn't it see my
+  repo?" is answered there. (All routes are under `/api`;
+  the former unprefixed paths answer as exact aliases for
+  one published checkpoint cycle only.)
 - The artifact is published from `viewer/` via `./viewer.sh`
   (drift-guarded copy to the runtime tree, then a builder
   publish pass). Editing in the viewer is OFF by default

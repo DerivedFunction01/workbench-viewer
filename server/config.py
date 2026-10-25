@@ -43,13 +43,13 @@ DEFAULTS = {
     "file_editing_enabled": False,
     # Peek/save caps are enforced in lib/files.py
     # (PEEK_MAX_BYTES / PEEK_MAX_LINES, same values); they are
-    # listed here so /config reports the whole surface.
+    # listed here so /api/config reports the whole surface.
     "peek_max_bytes": 200 * 1024,
     "peek_max_lines": 2000,
     # Per-project feed lock budget: a locked project DB
     # degrades only its own payload. Enforcement is lib/'s
     # connect_readonly busy_timeout (250 ms); this key
-    # records the value for the /config surface.
+    # records the value for the /api/config surface.
     "feed_lock_timeout_ms": 250,
     # Relative paths resolve against the repo root.
     "state_dir": "state",

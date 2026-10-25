@@ -76,7 +76,11 @@ the relevant file before continuing.
   `stale`, `validate`, `export`, `rebuild`, `bundle *`,
   `todo *`, `activate`, `print-schedule`)
 - Server: `.venv/bin/python run.py` (binds per `config.json`;
-  default 127.0.0.1:8792). Health: `GET /health`.
+  default 127.0.0.1:8792). Health: `GET /api/health`. All
+  HTTP routes live under `/api`; the 15 legacy unprefixed
+  patterns are served as exact aliases for one published
+  checkpoint cycle only (release N) and are removed in
+  release N+1.
 - Viewer artifact sync: `./viewer.sh status|pull|deploy`
   (repo `viewer/` is canonical; the runtime is the
   `workbench-viewer` runtime space in the sibling ts-spaces

@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Read-only health probe for the workbench-viewer server.
 
-Answers "is it up right now" from GET /health plus the lock
-file's PID. Changes nothing except the configured health
-file. Safe to run any time.
+Answers "is it up right now" from GET /api/health plus the
+lock file's PID. Changes nothing except the configured
+health file. Safe to run any time.
+
+Release N transition only: if the canonical path answers
+404 — the healthcheck files landed before the unified
+server restarted — the probe falls back once to the legacy
+/health alias. That fallback is removed with the aliases
+in release N+1 (the unification plan's Step 8).
 
     python3 healthcheck.py        # exit 0 = healthy, 1 = not
 
@@ -16,6 +22,7 @@ literals here.
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +32,12 @@ import config as cfgmod  # noqa: E402
 
 CFG = cfgmod.load()
 STATE = cfgmod.state_dir(CFG)
+
+
+def fetch_health(path: str) -> dict:
+    url = f"http://{CFG['host']}:{CFG['port']}{path}"
+    with urllib.request.urlopen(url, timeout=3) as r:
+        return json.loads(r.read())
 
 
 def main() -> int:
@@ -40,10 +53,19 @@ def main() -> int:
         result["server_pid"] = pid
     except Exception as e:
         result["last_error"] = f"lock/pid: {e}"
+    health = None
     try:
-        url = f"http://{CFG['host']}:{CFG['port']}/health"
-        with urllib.request.urlopen(url, timeout=3) as r:
-            health = json.loads(r.read())
+        try:
+            health = fetch_health("/api/health")
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            # Release N only: the unified server has not
+            # restarted yet — fall back once to the alias.
+            health = fetch_health("/health")
+    except Exception as e:
+        result["last_error"] = f"health http: {e}"
+    if health is not None:
         if health.get("ok"):
             result["ok"] = True
             result["uptime_s"] = health.get("uptime_s")
@@ -55,8 +77,6 @@ def main() -> int:
         else:
             result["last_error"] = \
                 "health endpoint returned ok=false"
-    except Exception as e:
-        result["last_error"] = f"health http: {e}"
     health_path = cfgmod.state_file(CFG, "health_file")
     health_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = health_path.with_suffix(".json.tmp")
