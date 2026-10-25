@@ -11,6 +11,8 @@ export type FrameProps = {
   headerActions?: ReactNode;
   footer?: ReactNode;
   archived?: boolean;
+  /** Anchor id (`<section-or-exhibit>/<component>`, §14) — renders `data-anchor` on the root. */
+  anchor?: string;
   className?: string;
   children?: ReactNode;
 };
@@ -21,11 +23,13 @@ export function Frame({
   headerActions,
   footer,
   archived = false,
+  anchor,
   className,
   children,
 }: FrameProps) {
   return (
     <figure
+      data-anchor={anchor}
       className={[archived ? "saturate-[0.6]" : "", className ?? ""].filter(Boolean).join(" ")}
       style={{
         backgroundColor: "var(--wb-surface-2)",

@@ -9,12 +9,14 @@ export type SheetProps = {
   open: boolean;
   title: string;
   onClose: () => void;
+  /** Anchor id (`<section-or-exhibit>/<component>`, §14) — renders `data-anchor` on the root. */
+  anchor?: string;
   className?: string;
   children?: ReactNode;
   footer?: ReactNode;
 };
 
-export function Sheet({ open, title, onClose, className, children, footer }: SheetProps) {
+export function Sheet({ open, title, onClose, anchor, className, children, footer }: SheetProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function Sheet({ open, title, onClose, className, children, footer }: She
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+    <div data-anchor={anchor} className="fixed inset-0 z-50 flex items-stretch justify-end">
       <button
         type="button"
         aria-label="Dismiss"

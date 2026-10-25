@@ -11,6 +11,8 @@ export type LaneProps = {
   accent?: boolean;
   /** Soft warning tone on the count (Doing > 7, display only). */
   countWarning?: boolean;
+  /** Anchor id (`<section-or-exhibit>/<component>`, §14) — renders `data-anchor` on the root. */
+  anchor?: string;
   className?: string;
   children?: ReactNode;
 };
@@ -20,11 +22,13 @@ export function Lane({
   count,
   accent = false,
   countWarning = false,
+  anchor,
   className,
   children,
 }: LaneProps) {
   return (
     <section
+      data-anchor={anchor}
       aria-label={title}
       className={className}
       style={{

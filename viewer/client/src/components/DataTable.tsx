@@ -24,6 +24,8 @@ export type DataTableProps<T> = {
   /** Rendered in place of rows (an EmptyState). */
   empty?: ReactNode;
   ariaLabel: string;
+  /** Anchor id (`<section-or-exhibit>/<component>`, §14) — renders `data-anchor` on the root. */
+  anchor?: string;
   className?: string;
 };
 
@@ -42,6 +44,7 @@ export function DataTable<T>({
   onRowActivate,
   empty,
   ariaLabel,
+  anchor,
   className,
 }: DataTableProps<T>) {
   const selectable = Boolean(onRowSelect);
@@ -65,7 +68,7 @@ export function DataTable<T>({
   });
 
   return (
-    <div className={className}>
+    <div data-anchor={anchor} className={className}>
       <table aria-label={ariaLabel} className="w-full border-collapse text-sm">
         <thead>
           <tr style={{ backgroundColor: "var(--wb-surface-1)", height: "var(--wb-row-height)" }}>
