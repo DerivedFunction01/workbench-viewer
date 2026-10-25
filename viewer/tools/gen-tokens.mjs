@@ -15,7 +15,7 @@
 //                      modes via [data-mode="dark"] and, for Auto, the
 //                      prefers-color-scheme media query.
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -84,9 +84,7 @@ function cssValue(raw) {
 }
 
 function declarations(entries, indent = "  ") {
-  return entries
-    .map(([name, value]) => indent + name + ": " + value + ";")
-    .join("\n");
+  return entries.map(([name, value]) => indent + name + ": " + value + ";").join("\n");
 }
 
 // Flatten a token subtree into [varName, cssValue] pairs, in file order.
@@ -156,12 +154,16 @@ function paletteCss(palette) {
   const isDefault = palette === "olive";
   const sel = (extra = "") =>
     isDefault
-      ? '[data-palette="' + palette + '"]' + extra + ', :root:not([data-palette])' + extra
+      ? '[data-palette="' + palette + '"]' + extra + ", :root:not([data-palette])" + extra
       : '[data-palette="' + palette + '"]' + extra;
   const selAuto = (extra = "") =>
     isDefault
-      ? '[data-palette="' + palette + '"]:not([data-mode="light"])' + extra +
-        ', :root:not([data-palette]):not([data-mode="light"])' + extra
+      ? '[data-palette="' +
+        palette +
+        '"]:not([data-mode="light"])' +
+        extra +
+        ', :root:not([data-palette]):not([data-mode="light"])' +
+        extra
       : '[data-palette="' + palette + '"]:not([data-mode="light"])' + extra;
 
   function modeDecls(mode) {
@@ -180,12 +182,23 @@ function paletteCss(palette) {
   const dark = modeDecls("dark");
   return (
     HEADER +
-    "/* Palette: " + palette + (isDefault ? " (default)" : "") +
+    "/* Palette: " +
+    palette +
+    (isDefault ? " (default)" : "") +
     " — semantic + status + component tokens, both modes. */\n" +
-    sel() + " {\n  color-scheme: light;\n" + declarations(light) + "\n}\n" +
-    sel('[data-mode="dark"]') + " {\n  color-scheme: dark;\n" + declarations(dark) + "\n}\n" +
-    "@media (prefers-color-scheme: dark) {\n  " + selAuto() + " {\n    color-scheme: dark;\n" +
-    declarations(dark, "    ") + "\n  }\n}\n"
+    sel() +
+    " {\n  color-scheme: light;\n" +
+    declarations(light) +
+    "\n}\n" +
+    sel('[data-mode="dark"]') +
+    " {\n  color-scheme: dark;\n" +
+    declarations(dark) +
+    "\n}\n" +
+    "@media (prefers-color-scheme: dark) {\n  " +
+    selAuto() +
+    " {\n    color-scheme: dark;\n" +
+    declarations(dark, "    ") +
+    "\n  }\n}\n"
   );
 }
 
@@ -198,8 +211,12 @@ function paletteCss(palette) {
 const densityComfortable = flatten(tokens.density.comfortable, ["density", "comfortable"]);
 const densityCompact = flatten(tokens.density.compact, ["density", "compact"]);
 const densityCss =
-  '\n:root, [data-density="comfortable"] {\n' + declarations(densityComfortable) + "\n}\n" +
-  '\n[data-density="compact"] {\n' + declarations(densityCompact) + "\n}\n";
+  '\n:root, [data-density="comfortable"] {\n' +
+  declarations(densityComfortable) +
+  "\n}\n" +
+  '\n[data-density="compact"] {\n' +
+  declarations(densityCompact) +
+  "\n}\n";
 
 // ---- index.css ------------------------------------------------------------------
 const indexCss =
@@ -210,10 +227,12 @@ const indexCss =
   "\n\n:root {\n" +
   declarations([...primitiveDecls, ...chartDecls]) +
   "\n  scrollbar-color: var(--wb-border-default) transparent;\n  scrollbar-width: thin;\n}\n" +
-  "\n@theme {\n" + themeLines.join("\n") + "\n}\n" +
+  "\n@theme {\n" +
+  themeLines.join("\n") +
+  "\n}\n" +
   "\nbody {\n  font-family: var(--wb-font-ui);\n  background: var(--wb-surface-canvas);\n  color: var(--wb-content-primary);\n}\n" +
-  "\n.num {\n  font-feature-settings: \"tnum\";\n}\n" +
-  "\n.mono {\n  font-family: var(--wb-font-mono);\n  font-feature-settings: \"zero\";\n}\n" +
+  '\n.num {\n  font-feature-settings: "tnum";\n}\n' +
+  '\n.mono {\n  font-family: var(--wb-font-mono);\n  font-feature-settings: "zero";\n}\n' +
   "\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n" +
   densityCss;
 
@@ -221,4 +240,6 @@ mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "index.css"), indexCss);
 writeFileSync(join(outDir, "fonts.css"), fontsCss);
 for (const p of palettes) writeFileSync(join(outDir, p + ".css"), paletteCss(p));
-console.log("gen-tokens: wrote index.css, fonts.css, " + palettes.map((p) => p + ".css").join(", "));
+console.log(
+  "gen-tokens: wrote index.css, fonts.css, " + palettes.map((p) => p + ".css").join(", "),
+);
