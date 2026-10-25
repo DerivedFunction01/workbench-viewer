@@ -24,14 +24,21 @@ PYTHON_SPEC = "3.11"
 
 
 def find_uv() -> str:
+    # Resolution order: PATH first (uv is absent from PATH in
+    # non-login shells on some machines), then the known install
+    # locations — astral installer and `cargo install` — so no
+    # single machine's uv location is hardcoded.
     uv = shutil.which("uv")
     if uv:
         return uv
-    candidate = Path.home() / ".local" / "bin" / "uv"
-    if candidate.exists():
-        return str(candidate)
+    candidates = [Path.home() / ".local" / "bin" / "uv",
+                  Path.home() / ".cargo" / "bin" / "uv"]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
     raise SystemExit("init_venv: uv not found on PATH or at "
-                     "~/.local/bin/uv — install uv first")
+                     "~/.local/bin/uv or ~/.cargo/bin/uv "
+                     "— install uv first")
 
 
 def main() -> int:
