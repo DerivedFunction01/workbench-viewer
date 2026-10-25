@@ -428,6 +428,138 @@ def _set_meta(conn, key, value):
         " excluded.value", (key, value))
 
 
+# ----------------------------------------------------------------
+# Cleanup lifecycle (spec §5.3/§5.4)
+# ----------------------------------------------------------------
+
+def _older(ts, now, days) -> bool:
+    return bool(ts) and parse_iso(ts) < now - timedelta(
+        days=days)
+
+
+def cleanup(db_path, *, known_slugs=None, policy=None,
+            now=None) -> dict:
+    """One idempotent cleanup pass (§5.3). All thresholds
+    come from the policy dict (DEFAULT_POLICY merged with
+    the caller's values — the server builds it from the
+    config seam). Rules, in order:
+
+      drafts untouched draft_ttl_days        -> purged
+      done older than done_archive_days      -> archived
+      archived older than archive_ttl_days   -> purged
+      project no longer discovered (orphans) -> archived
+      per-project cap overflow               -> oldest
+        DONE roots archived first; sent/acknowledged
+        roots are never archived by the cap
+
+    Sent-but-unacknowledged messages are NEVER purged.
+    The orphan rule is skipped when known_slugs is None
+    or empty — a failed sweep must not archive the world.
+    Counts count ROOT messages for archive moves (a
+    thread follows its root) and rows for purges. The
+    pass records itself in meta (last_cleanup_at/counts)
+    in the same transaction, so a re-run at the same clock
+    changes nothing."""
+    policy = {**DEFAULT_POLICY, **(policy or {})}
+    now = now or datetime.now(timezone.utc)
+    counts = {"drafts_purged": 0, "done_archived": 0,
+              "archived_purged": 0, "orphans_archived": 0,
+              "cap_archived": 0}
+    conn = connect(db_path)
+    try:
+        with _tx(conn):
+            for row in conn.execute(
+                    "SELECT * FROM messages WHERE state ="
+                    " 'draft'").fetchall():
+                if _older(row["updated_at"], now,
+                          policy["draft_ttl_days"]):
+                    _purge_row(conn, row,
+                               detail="cleanup: draft ttl")
+                    counts["drafts_purged"] += 1
+            for row in conn.execute(
+                    "SELECT * FROM messages WHERE state ="
+                    " 'done' AND parent_id IS NULL").fetchall():
+                if _older(row["done_at"], now,
+                          policy["done_archive_days"]):
+                    _archive_tree(conn, row,
+                                  detail="cleanup: done age")
+                    counts["done_archived"] += 1
+            for row in conn.execute(
+                    "SELECT * FROM messages WHERE state ="
+                    " 'archived'").fetchall():
+                if _older(row["archived_at"], now,
+                          policy["archive_ttl_days"]):
+                    _purge_row(conn, row,
+                               detail="cleanup: archive ttl")
+                    counts["archived_purged"] += 1
+            if known_slugs:
+                known = set(known_slugs)
+                for row in conn.execute(
+                        "SELECT * FROM messages WHERE"
+                        " project_slug IS NOT NULL AND state"
+                        " != 'archived' AND parent_id IS NULL"
+                        ).fetchall():
+                    if row["project_slug"] not in known:
+                        _archive_tree(
+                            conn, row,
+                            detail="cleanup: orphan project")
+                        counts["orphans_archived"] += 1
+            cap = policy["per_project_cap"]
+            roots = conn.execute(
+                "SELECT * FROM messages WHERE parent_id IS"
+                " NULL AND state != 'archived' ORDER BY id"
+            ).fetchall()
+            by_project = {}
+            for row in roots:
+                by_project.setdefault(
+                    row["project_slug"], []).append(row)
+            for slug, rows in by_project.items():
+                excess = len(rows) - cap
+                if excess <= 0:
+                    continue
+                done_roots = sorted(
+                    (r for r in rows if r["state"] == "done"),
+                    key=lambda r: r["done_at"] or "")
+                for row in done_roots[:excess]:
+                    _archive_tree(conn, row,
+                                  detail="cleanup: cap")
+                    counts["cap_archived"] += 1
+            _set_meta(conn, "last_cleanup_at",
+                      now.isoformat())
+            _set_meta(conn, "last_cleanup_counts",
+                      json.dumps(counts, sort_keys=True))
+    finally:
+        conn.close()
+    return counts
+
+
+def purge_archived(db_path) -> int:
+    """Manual control (§5.4): purge every archived row.
+    Returns the row count; events remain."""
+    return _purge_state(db_path, "archived",
+                        "manual: purge-archived")
+
+
+def purge_drafts(db_path) -> int:
+    """Manual control (§5.4): purge every draft row."""
+    return _purge_state(db_path, "draft",
+                        "manual: purge-drafts")
+
+
+def _purge_state(db_path, state, detail) -> int:
+    conn = connect(db_path)
+    try:
+        with _tx(conn):
+            rows = conn.execute(
+                "SELECT * FROM messages WHERE state = ?",
+                (state,)).fetchall()
+            for row in rows:
+                _purge_row(conn, row, detail=detail)
+            return len(rows)
+    finally:
+        conn.close()
+
+
 def store_stats(db_path) -> dict:
     """Counts by state + the last cleanup record (Settings →
     Workspace/Messages panels, spec §3/§5.3)."""
