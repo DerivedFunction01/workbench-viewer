@@ -32,6 +32,16 @@ checkpoints; the cleanup pass prunes outbox rows once
 they age past the archived horizon. The server's notify
 checkpoint (meta key `notify_checkpoint`) is read/written
 through the helpers here so no SQL lives outside lib/.
+
+Annotations (spec §12): an annotation is a message whose
+anchor is a SELECTION — a text passage in a plan
+(anchor_type `text`) or a component in a mockup exhibit
+(anchor_type `component`). The selection payload rides in
+the nullable `selection` JSON column (schema v3): quote +
+surrounding context for text, the deterministic manifest
+component id for components. Raw offsets are REFUSED at
+create — quote + context is the anchor, re-located at
+read time by lib/annotations.py (never stored back).
 """
 
 import json
@@ -45,7 +55,21 @@ from .util import now_iso, parse_iso
 STATES = ("draft", "sent", "acknowledged", "done",
           "archived", "purged")
 AUTHORS = ("owner", "Muse")
-ANCHOR_TYPES = ("plan", "todo", "entry", "repo", "none")
+ANCHOR_TYPES = ("plan", "todo", "entry", "repo", "none",
+                "text", "component")
+
+# Selection payload rules (spec §12, annotation plan):
+# quote cap at create (longer selections are refused,
+# never truncated silently); prefix/suffix context caps;
+# offset-shaped keys refused outright — quote + context is
+# the anchor, raw offsets are too fragile across edits.
+QUOTE_CAP = 500
+CONTEXT_CAP = 120
+OFFSET_KEYS = frozenset({
+    "offset", "offsets", "start", "end", "char_offset",
+    "start_offset", "end_offset", "char_start", "char_end",
+    "range_start", "range_end",
+})
 
 # Legal transitions for the explicit mutation functions.
 # cleanup() and the purge controls use their own guarded
@@ -123,7 +147,16 @@ CREATE TABLE outbox (
 CREATE INDEX idx_outbox_message ON outbox(message_id);
 """
 
-SCHEMA_VERSION = 2
+# Schema v3 (spec §12): the annotation selection payload.
+# One nullable column; plain messages carry NULL. Existing
+# rows are untouched — a NULL selection on a text/component
+# anchor cannot occur (create validates), and pre-v3 rows
+# are all plain anchors by construction.
+SCHEMA_V3 = """
+ALTER TABLE messages ADD COLUMN selection TEXT;
+"""
+
+SCHEMA_VERSION = 3
 
 
 class MessageError(Exception):
@@ -154,7 +187,8 @@ def _migrate(conn):
     1 -> 2 adds the watcher outbox (existing rows are
     untouched — the outbox starts empty; nothing already
     sent is backfilled, per §15.1's same-transaction rule:
-    an event exists only with its state change)."""
+    an event exists only with its state change), 2 -> 3
+    adds the annotation selection column (§12)."""
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version == 0:
         conn.executescript(SCHEMA_V1)
@@ -164,6 +198,10 @@ def _migrate(conn):
         conn.executescript(SCHEMA_V2)
         conn.execute("PRAGMA user_version = 2")
         version = 2
+    if version == 2:
+        conn.executescript(SCHEMA_V3)
+        conn.execute("PRAGMA user_version = 3")
+        version = 3
     if version != SCHEMA_VERSION:
         raise MessageError(
             f"unsupported messages schema version {version}")
@@ -204,7 +242,111 @@ def message_dict(row) -> dict:
             out["showcase"] = json.loads(raw)
         except json.JSONDecodeError:
             out["showcase"] = None
+    raw = out.get("selection")
+    if raw:
+        try:
+            out["selection"] = json.loads(raw)
+        except json.JSONDecodeError:
+            out["selection"] = None
     return out
+
+
+def _validate_selection(anchor_type, anchor_ref, selection,
+                        parent_id):
+    """The selection-payload rules (spec §12 + the
+    annotation plan's anchor design), enforced on the one
+    create path:
+
+      - required iff anchor_type is text/component,
+        forbidden otherwise (and on replies — the thread
+        root holds the anchor; replies inherit it for
+        display);
+      - kind must match the anchor type;
+      - text: component_id + quote (<= QUOTE_CAP) required,
+        prefix/suffix <= CONTEXT_CAP;
+      - component: component_id required (the manifest id,
+        verbatim);
+      - any offset-shaped key is refused outright: quote
+        + context is the anchor, raw offsets are too
+        fragile across edits.
+    Returns the payload to store (or None)."""
+    if anchor_type not in ("text", "component"):
+        if selection is not None:
+            raise MessageError(
+                "selection payload requires anchor_type "
+                "'text' or 'component' (got "
+                f"{anchor_type!r})")
+        return None
+    if parent_id is not None:
+        raise MessageError(
+            "replies carry no selection payload — the "
+            "thread root holds the anchor")
+    if not anchor_ref:
+        raise MessageError(
+            f"anchor_type {anchor_type!r} requires "
+            "anchor_ref (the plan path for text, the entry "
+            "id for component)")
+    if selection is None:
+        raise MessageError(
+            f"annotation (anchor_type {anchor_type!r}) "
+            "requires a selection payload")
+    if not isinstance(selection, dict):
+        raise MessageError("selection must be an object")
+    bad = sorted(OFFSET_KEYS & selection.keys())
+    if bad:
+        raise MessageError(
+            f"selection must not carry raw offsets "
+            f"(key {bad[0]!r}): quote + context is the "
+            "anchor (spec §12)")
+    kind = selection.get("kind")
+    if kind != anchor_type:
+        raise MessageError(
+            f"selection kind {kind!r} does not match "
+            f"anchor_type {anchor_type!r}")
+    component_id = selection.get("component_id")
+    if not isinstance(component_id, str) \
+            or not component_id.strip():
+        raise MessageError(
+            "selection requires a component_id (the "
+            "enclosing component's data-anchor id)")
+    label = selection.get("component_label")
+    if label is not None and not isinstance(label, str):
+        raise MessageError(
+            "selection component_label must be a string")
+    if anchor_type == "text":
+        quote = selection.get("quote")
+        if not isinstance(quote, str) or not quote:
+            raise MessageError(
+                "text selection requires a quote (the "
+                "selected text, verbatim)")
+        if len(quote) > QUOTE_CAP:
+            raise MessageError(
+                f"selection quote is {len(quote)} chars; "
+                f"the cap is {QUOTE_CAP} — select a "
+                "shorter passage")
+        for key in ("prefix", "suffix"):
+            value = selection.get(key)
+            if value is not None:
+                if not isinstance(value, str):
+                    raise MessageError(
+                        f"selection {key} must be a string")
+                if len(value) > CONTEXT_CAP:
+                    raise MessageError(
+                        f"selection {key} is {len(value)} "
+                        f"chars; the cap is {CONTEXT_CAP}")
+        heading = selection.get("section_heading")
+        if heading is not None \
+                and not isinstance(heading, str):
+            raise MessageError(
+                "selection section_heading must be a "
+                "string")
+    else:
+        entry_id = selection.get("entry_id")
+        if entry_id is not None \
+                and not isinstance(entry_id, str):
+            raise MessageError(
+                "selection entry_id must be a string")
+    return selection
 
 
 def _check_transition(row, target, verb):
@@ -257,11 +399,14 @@ def _move(conn, row, target, *, event, detail=None,
 def create_message(db_path, *, author, body="",
                    project_slug=None, anchor_type="none",
                    anchor_ref=None, showcase=None,
-                   parent_id=None, send=False) -> dict:
+                   parent_id=None, send=False,
+                   selection=None) -> dict:
     """Create a message: a draft, or sent when send=True.
     A reply is a create with parent_id set (replies are
     normally sent immediately — spec §7 — so pass send=True).
-    Returns the stored message."""
+    An annotation is a create with anchor_type text/component
+    and a validated selection payload (§12). Returns the
+    stored message."""
     if author not in AUTHORS:
         raise MessageError(
             f"bad author {author!r}: one of {AUTHORS}")
@@ -272,6 +417,8 @@ def create_message(db_path, *, author, body="",
     if showcase is not None and not isinstance(showcase, dict):
         raise MessageError("showcase must be an object "
                            "{main: ref, docs: [ref...]}")
+    selection = _validate_selection(anchor_type, anchor_ref,
+                                    selection, parent_id)
     conn = connect(db_path)
     try:
         with _tx(conn):
@@ -282,13 +429,14 @@ def create_message(db_path, *, author, body="",
                 "INSERT INTO messages (project_slug,"
                 " anchor_type, anchor_ref, author, body,"
                 " showcase, state, created_at, updated_at,"
-                " sent_at, parent_id) VALUES (?, ?, ?, ?, ?,"
-                " ?, ?, ?, ?, ?, ?)",
+                " sent_at, parent_id, selection) VALUES"
+                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (project_slug, anchor_type, anchor_ref, author,
                  body,
                  json.dumps(showcase) if showcase else None,
                  "sent" if send else "draft", ts, ts,
-                 ts if send else None, parent_id))
+                 ts if send else None, parent_id,
+                 json.dumps(selection) if selection else None))
             mid = cur.lastrowid
             _event(conn, mid, "created",
                    "reply" if parent_id is not None else None)
