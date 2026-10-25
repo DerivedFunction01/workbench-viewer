@@ -30,6 +30,7 @@ import { groupProjects } from "./lib/grouping";
 import { sectionLabel } from "./lib/labels";
 import type { Appearance } from "./lib/preferences";
 import { applyAppearance, loadAppearance, saveAppearance } from "./lib/preferences";
+import { useIsPhone } from "./lib/responsive";
 import {
   boardAllHref,
   homeHref,
@@ -84,6 +85,205 @@ function useHashRoute(): Route {
   return route;
 }
 
+// ----------------------------------------------------------------
+// Phone chrome (mobile variant, <= the responsive seam's
+// breakpoint): the approved mockup's shell — a top bar
+// (back affordance + title/sub, structure per exhibit), the
+// project section nav (the rail's Sections list as a
+// segmented row, inside the body), and the bottom tab bar
+// (◆1: Home / Project / Inbox / Settings). Routing and
+// section state are the desktop ones — presentation only.
+// The mockup top bar's theme toggle is NOT reproduced:
+// appearance controls live on the Settings route only
+// (repo-home spec §3), and the Settings tab is one tap away.
+// ----------------------------------------------------------------
+
+const tabIconProps = {
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  width: 20,
+  height: 20,
+} as const;
+
+function HomeIcon() {
+  return (
+    <svg {...tabIconProps} aria-hidden="true">
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+    </svg>
+  );
+}
+
+function ProjectIcon() {
+  return (
+    <svg {...tabIconProps} aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
+function InboxIcon() {
+  return (
+    <svg {...tabIconProps} aria-hidden="true">
+      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+      <path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1z" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg {...tabIconProps} aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg {...tabIconProps} aria-hidden="true">
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+type PhoneTab = "home" | "project" | "inbox" | "settings";
+
+function PhoneTabBar({
+  active,
+  projectHref,
+  inboxCount,
+}: {
+  active: PhoneTab;
+  projectHref: string;
+  inboxCount: number | null;
+}) {
+  const tabs: { id: PhoneTab; label: string; href: string; icon: React.ReactNode }[] = [
+    { id: "home", label: "Home", href: homeHref(), icon: <HomeIcon /> },
+    { id: "project", label: "Project", href: projectHref, icon: <ProjectIcon /> },
+    { id: "inbox", label: "Inbox", href: inboxHref(), icon: <InboxIcon /> },
+    { id: "settings", label: "Settings", href: settingsHref(), icon: <SettingsIcon /> },
+  ];
+  return (
+    <nav
+      data-anchor="shell/tab-bar"
+      aria-label="Primary"
+      style={{
+        position: "sticky",
+        bottom: 0,
+        zIndex: 20,
+        display: "grid",
+        gridTemplateColumns: "repeat(4, 1fr)",
+        borderTop: "1px solid var(--wb-border-default)",
+        background: "var(--wb-surface-1)",
+        padding:
+          "var(--wb-space-4) var(--wb-space-4) calc(var(--wb-space-8) + env(safe-area-inset-bottom, 0px))",
+      }}
+    >
+      {tabs.map((tab) => {
+        const current = tab.id === active;
+        return (
+          <a
+            key={tab.id}
+            href={tab.href}
+            aria-current={current ? "page" : undefined}
+            style={{
+              position: "relative",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "2px",
+              padding: "var(--wb-space-4) var(--wb-space-4)",
+              borderRadius: "var(--wb-radius-md)",
+              fontSize: "11px",
+              lineHeight: "14px",
+              fontWeight: current ? 700 : 500,
+              color: current ? "var(--wb-accent)" : "var(--wb-content-muted)",
+              textDecoration: "none",
+            }}
+          >
+            {tab.icon}
+            <span style={{ whiteSpace: "nowrap" }}>{tab.label}</span>
+            {tab.id === "inbox" && inboxCount != null && inboxCount > 0 ? (
+              <span
+                style={{
+                  ...badgeStyle,
+                  position: "absolute",
+                  top: "2px",
+                  left: "calc(50% + 2px)",
+                }}
+                className="num"
+              >
+                {inboxCount}
+              </span>
+            ) : null}
+          </a>
+        );
+      })}
+    </nav>
+  );
+}
+
+function PhoneSectionNav({ slug, current }: { slug: string; current: SectionId }) {
+  return (
+    <nav
+      data-anchor="shell/section-nav"
+      aria-label="Project sections"
+      style={{
+        display: "flex",
+        gap: "var(--wb-space-4)",
+        background: "var(--wb-surface-2)",
+        border: "1px solid var(--wb-border-default)",
+        borderRadius: "var(--wb-radius-lg)",
+        padding: "var(--wb-space-4)",
+        marginBottom: "var(--wb-space-16)",
+      }}
+    >
+      {(["overview", "mockups", "plans", "todos", "board"] as SectionId[]).map((section) => {
+        const isCurrent = section === current;
+        return (
+          <a
+            key={section}
+            href={sectionHref(slug, section)}
+            aria-current={isCurrent ? "page" : undefined}
+            style={{
+              flex: "1 1 0",
+              minWidth: 0,
+              minHeight: "38px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "var(--wb-space-8) 2px",
+              borderRadius: "var(--wb-radius-md)",
+              border: isCurrent ? "1px solid var(--wb-border-default)" : "1px solid transparent",
+              background: isCurrent ? "var(--wb-surface-1)" : "transparent",
+              boxShadow: isCurrent ? "var(--wb-shadow-overlay)" : "none",
+              color: isCurrent ? "var(--wb-content-primary)" : "var(--wb-content-secondary)",
+              fontSize: "var(--wb-font-size-xs)",
+              lineHeight: "var(--wb-line-height-xs)",
+              fontWeight: isCurrent ? 700 : 500,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {sectionLabel(section)}
+          </a>
+        );
+      })}
+    </nav>
+  );
+}
+
 function projectStatus(project: ProjectSummary): { word: string; degraded: boolean } {
   const anySection = project.sections.mockups || project.sections.todos || project.sections.plans;
   if (anySection) return { word: "ok", degraded: false };
@@ -95,6 +295,7 @@ function projectStatus(project: ProjectSummary): { word: string; degraded: boole
 
 export function App() {
   const route = useHashRoute();
+  const isPhone = useIsPhone();
   const [appearance, setAppearance] = useState<Appearance>(() => loadAppearance());
 
   useEffect(() => {
@@ -189,6 +390,211 @@ export function App() {
     if (section === "board") return doingCount;
     return null;
   };
+
+  // The route content — identical for both presentations;
+  // only the chrome around it differs.
+  const content =
+    route.view === "settings" ? (
+      <SettingsSection appearance={appearance} onChange={changeAppearance} />
+    ) : route.view === "inbox" ? (
+      <InboxSection />
+    ) : route.view === "board-all" ? (
+      <BoardSection slug={null} projectName={null} />
+    ) : route.view === "section" ? (
+      selected == null && !projectsQuery.isPending ? (
+        <p style={{ color: "var(--wb-content-secondary)" }}>
+          Project <span className="mono">{route.slug}</span> is not in the current sweep.{" "}
+          <a href={homeHref()} style={{ color: "var(--wb-accent)" }}>
+            Back to projects
+          </a>
+        </p>
+      ) : route.section === "overview" ? (
+        <OverviewSection slug={route.slug} projectName={selected?.name ?? route.slug} />
+      ) : route.section === "mockups" ? (
+        <MockupsSection slug={route.slug} projectName={selected?.name ?? route.slug} />
+      ) : route.section === "plans" ? (
+        <PlansSection
+          slug={route.slug}
+          projectName={selected?.name ?? route.slug}
+          item={route.item}
+        />
+      ) : route.section === "todos" ? (
+        <TodosSection slug={route.slug} projectName={selected?.name ?? route.slug} />
+      ) : (
+        <BoardSection slug={route.slug} projectName={selected?.name ?? route.slug} />
+      )
+    ) : (
+      <HomeSection />
+    );
+
+  if (isPhone) {
+    // Phone shell (mobile variant): top bar + optional
+    // section nav + content + bottom tab bar, one column.
+    const phoneTab: PhoneTab =
+      route.view === "inbox"
+        ? "inbox"
+        : route.view === "settings"
+          ? "settings"
+          : route.view === "home"
+            ? "home"
+            : "project";
+    const firstProject = projectGroups[0]?.project ?? null;
+    const projectHref =
+      routeSlugValue != null
+        ? sectionHref(routeSlugValue, "overview")
+        : firstProject
+          ? sectionHref(firstProject.slug, "overview")
+          : homeHref();
+    const homeRow =
+      route.view === "section" ? (homeRows?.find((row) => row.slug === route.slug) ?? null) : null;
+    // Top bar per the mockup's exhibits: Home is the root
+    // (no back); a project view's back returns Home (◆3);
+    // an open plan's back returns to its plan list.
+    let backHref: string | null = null;
+    let backLabel = "Back to Home";
+    let title = "Workbench";
+    let sub: string | null = null;
+    let headerBadge: string | null = null;
+    if (route.view === "inbox") {
+      title = "Inbox";
+    } else if (route.view === "settings") {
+      title = "Settings";
+    } else if (route.view === "board-all") {
+      title = "Board";
+      sub = "all projects";
+      backHref = homeHref();
+      if (board) {
+        const total =
+          board.review_queue.length +
+          Object.values(board.todos).reduce((n, list) => n + list.length, 0) +
+          Object.values(board.plans).reduce((n, list) => n + list.length, 0);
+        headerBadge = `${total} cards`;
+      }
+    } else if (route.view === "section") {
+      backHref = route.item ? sectionHref(route.slug, route.section) : homeHref();
+      backLabel = route.item ? "Back to list" : "Back to Home";
+      if (route.section === "board") {
+        title = "Board";
+        sub = route.slug;
+        if (board) {
+          const inScope = (project: string | undefined) => project === route.slug;
+          const total =
+            board.review_queue.filter((item) => inScope(item.project)).length +
+            Object.values(board.todos).reduce(
+              (n, list) => n + list.filter((todo) => inScope(todo.project)).length,
+              0,
+            ) +
+            Object.values(board.plans).reduce(
+              (n, list) => n + list.filter((plan) => inScope(plan.project)).length,
+              0,
+            );
+          headerBadge = `${total} cards`;
+        }
+      } else if (route.section === "plans" && route.item) {
+        title = "Plan";
+        sub = route.slug;
+      } else {
+        title = selected?.name ?? route.slug;
+        sub = homeRow?.git
+          ? `${route.slug} · ${homeRow.git.branch ?? "detached"}${homeRow.git.head_short ? ` · ${homeRow.git.head_short}` : ""}`
+          : route.slug;
+      }
+    }
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100dvh",
+          background: "var(--wb-surface-canvas)",
+          color: "var(--wb-content-primary)",
+          fontFamily: "var(--wb-font-ui)",
+        }}
+      >
+        <header
+          data-anchor="shell/top-bar"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--wb-space-8)",
+            padding: "var(--wb-space-12) var(--wb-space-16) var(--wb-space-8)",
+            borderBottom: "1px solid var(--wb-border-default)",
+            background: "var(--wb-surface-1)",
+          }}
+        >
+          {backHref ? (
+            <a
+              href={backHref}
+              aria-label={backLabel}
+              style={{
+                width: "38px",
+                height: "38px",
+                flexShrink: 0,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "var(--wb-radius-md)",
+                border: "1px solid var(--wb-border-default)",
+                background: "var(--wb-surface-2)",
+                color: "var(--wb-content-secondary)",
+                textDecoration: "none",
+              }}
+            >
+              <BackIcon />
+            </a>
+          ) : null}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: "var(--wb-font-size-base)",
+                lineHeight: "var(--wb-line-height-base)",
+                fontWeight: 700,
+                letterSpacing: "-0.01em",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {title}
+            </div>
+            {sub ? (
+              <div
+                className="mono"
+                style={{
+                  fontSize: "var(--wb-font-size-xs)",
+                  lineHeight: "var(--wb-line-height-xs)",
+                  color: "var(--wb-content-muted)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {sub}
+              </div>
+            ) : null}
+          </div>
+          {headerBadge ? <span style={badgeStyle}>{headerBadge}</span> : null}
+        </header>
+
+        <main
+          data-anchor="shell/content"
+          style={{
+            flex: 1,
+            width: "100%",
+            minWidth: 0,
+            padding: "var(--wb-space-16)",
+          }}
+        >
+          {route.view === "section" ? (
+            <PhoneSectionNav slug={route.slug} current={route.section} />
+          ) : null}
+          {content}
+        </main>
+
+        <PhoneTabBar active={phoneTab} projectHref={projectHref} inboxCount={inboxCount} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -435,38 +841,7 @@ export function App() {
             padding: "var(--wb-page-padding)",
           }}
         >
-          {route.view === "settings" ? (
-            <SettingsSection appearance={appearance} onChange={changeAppearance} />
-          ) : route.view === "inbox" ? (
-            <InboxSection />
-          ) : route.view === "board-all" ? (
-            <BoardSection slug={null} projectName={null} />
-          ) : route.view === "section" ? (
-            selected == null && !projectsQuery.isPending ? (
-              <p style={{ color: "var(--wb-content-secondary)" }}>
-                Project <span className="mono">{route.slug}</span> is not in the current sweep.{" "}
-                <a href={homeHref()} style={{ color: "var(--wb-accent)" }}>
-                  Back to projects
-                </a>
-              </p>
-            ) : route.section === "overview" ? (
-              <OverviewSection slug={route.slug} projectName={selected?.name ?? route.slug} />
-            ) : route.section === "mockups" ? (
-              <MockupsSection slug={route.slug} projectName={selected?.name ?? route.slug} />
-            ) : route.section === "plans" ? (
-              <PlansSection
-                slug={route.slug}
-                projectName={selected?.name ?? route.slug}
-                item={route.item}
-              />
-            ) : route.section === "todos" ? (
-              <TodosSection slug={route.slug} projectName={selected?.name ?? route.slug} />
-            ) : (
-              <BoardSection slug={route.slug} projectName={selected?.name ?? route.slug} />
-            )
-          ) : (
-            <HomeSection />
-          )}
+          {content}
         </main>
       </div>
     </div>
