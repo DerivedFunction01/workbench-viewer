@@ -315,3 +315,9 @@ change.
 - Plan syntax conformance MERGED to main 2026-10-25:
   gate green on the merged tree, 246 tests. Server
   restart picks up the parser's semantic sections.
+- API unification (release N) BUILDING on branch
+  `build/api-unification`: Step 1 created the
+  `api-unification` bundle and the Step 8
+  alias-removal todo `t-01M5TNR7V99D3P2ENBA85N0W2F`
+  (status `todo`; it stays open through release N and
+  is executed in release N+1).
