@@ -245,3 +245,14 @@ change.
   Home unchanged), and AnchoredComment (D7) mounts in the
   Plans reader (plan anchor) and the Mockups entry detail
   (entry anchor) alongside its Overview showcase mount.
+- SWEEP WORKTREE DEDUPE landed on main 2026-10-25
+  (branch `build/sweep-worktree-dedupe`, tip `787bc03`):
+  the sweep canonicalizes discovered checkouts by git
+  common dir — a linked worktree never registers as a
+  duplicate-slug project (the P1 that broke the rail);
+  the main checkout's manifest is the one that registers,
+  worktrees stay visible via its worktree derivations.
+  If only worktrees are discovered, the project roots at
+  the main checkout (manifest loaded from there); a main
+  with no manifest registers nothing. Gate green, 191
+  tests.
