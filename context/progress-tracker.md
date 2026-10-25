@@ -218,3 +218,15 @@ change.
   home derivations (`lib/worktrees.py`, `lib/home.py`) —
   gate green at 128 tests. The repo-home UI phase (Home /
   Overview / Inbox / Settings panels) is still pending.
+- Repo-home UI phase built 2026-10-25 on branch
+  `build/repo-home-ui` (not yet merged): watcher core
+  (§15.1 — outbox table in messages.db schema v2,
+  same-transaction append on sent, `GET /api/outbox`,
+  generic notify targets from the maintenance loop);
+  active-plan resolution (§17 — `lib/active.py`, `wb
+  activate`, per-worktree actives + row showcase in the
+  home feed) with the lib/home.py todo seam closed (bundle
+  file todos, §3.7 DB fallback); Home + Overview + Inbox
+  + Settings Workspace/Messages UI; grouped worktree
+  presentation (§19) in Home, Overview, and the rail.
+  Gate green at 161 tests.
