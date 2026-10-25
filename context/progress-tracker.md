@@ -296,3 +296,6 @@ change.
   never reaches a payload: reasons/errors come from
   a small label vocabulary in lib/worktrees +
   lib/diffs. Gate green, 238 tests.
+- Vanished-refs fix MERGED to main 2026-10-25: gate green
+  on the merged tree, 238 tests. Server restart picks up
+  the new worktree/diff derivations.
