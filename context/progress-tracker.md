@@ -312,3 +312,6 @@ change.
   never transcripts). Proof: the conforming fixture
   (tests/fixtures/conforming-plan.md) through
   tests/test_plans.py and viewer/tools/test-math.ts.
+- Plan syntax conformance MERGED to main 2026-10-25:
+  gate green on the merged tree, 246 tests. Server
+  restart picks up the parser's semantic sections.
