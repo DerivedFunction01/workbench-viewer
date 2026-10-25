@@ -238,3 +238,10 @@ change.
   + Settings Workspace/Messages UI; grouped worktree
   presentation (§19) in Home, Overview, and the rail.
   Gate green at 161 tests on the branch.
+- Mount seams closed on main 2026-10-25 (branch
+  `build/viewer-mounts`, tip `d68beb0`): ChangesPanel now
+  mounts in Overview worktree drill-ins (linked worktrees
+  on expansion, main checkout behind a Changes toggle;
+  Home unchanged), and AnchoredComment (D7) mounts in the
+  Plans reader (plan anchor) and the Mockups entry detail
+  (entry anchor) alongside its Overview showcase mount.
