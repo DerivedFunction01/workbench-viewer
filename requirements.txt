@@ -1,0 +1,7 @@
+# Workbench Viewer dependencies.
+#
+# lib/ and server/ are Python stdlib-only by design (founding
+# plan, architecture invariant) — there is nothing to install.
+# This file exists so init_venv.py has one uniform shape and a
+# future dependency, if one is ever ruled in, lands here with
+# its justification in context/progress-tracker.md.
