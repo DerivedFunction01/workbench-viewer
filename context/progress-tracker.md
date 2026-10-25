@@ -55,9 +55,26 @@ change.
   mermaid fence yet — that path is proven on a
   corpus-shaped fixture; a real fence will parse unchanged.
 
+- Step 4: server + ops DONE — 14 server tests green
+  (suite total 70): real launch via run.py against two
+  fixture projects; every feed answers for both; a locked
+  DB degrades only its own project's payload; wrong-sha
+  save = 409 with the file byte-identical; editing disabled
+  = 403; canonical-without-ruling via the action endpoint
+  refused (400), with ruling = 200 + registry.json
+  regenerated; orphan-folder reconciliation surfaces as
+  problems. `server/` holds no SQL (lib/ owns it all);
+  config seam in `server/config.py` (port **8792**);
+  ops/ unit template + installer + watchdog mirror the git
+  viewer donor; `viewer.sh` sync is ready for the (held)
+  viewer source. Live smoke on the real config: healthcheck
+  exit 0, sweep finds 0 projects until Step 7's manifests
+  land. (curl in this shell needs --noproxy for loopback —
+  the egress-proxy trap; healthcheck.py is the probe.)
+
 ## In Progress
 
-- Step 4: server + ops (systemd, watchdog).
+- Step 7: adoptions (project zero + the v2 manifest).
 
 ## Held (the owner's direction, 2026-10-25 — not a failure)
 
@@ -70,8 +87,9 @@ change.
 
 ## Next Up
 
-- Step 3: plan parser against the real corpus.
-- Step 4: server + ops (systemd, watchdog).
+- Step 7: adoptions (project zero + the v2 manifest).
+- Step 8: systemd units + watchdog cron (publish held with
+  Steps 5–6; declutter blocked on subplan 09 Part A data).
 - Step 7: adoptions (project zero, then v2 manifest).
 - Step 8: systemd units; publish held with Steps 5–6;
   declutter blocked on subplan 09 Part A data (reported,

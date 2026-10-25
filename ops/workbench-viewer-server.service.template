@@ -1,0 +1,16 @@
+[Unit]
+Description=Workbench Viewer companion API server (project feeds + guarded writes over HTTP)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+EnvironmentFile=-@ROOT@/viewer.env
+ExecStart=@PYTHON@ @ROOT@/run.py
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:@ROOT@/state/server.log
+StandardError=append:@ROOT@/state/server.log
+
+[Install]
+WantedBy=default.target
