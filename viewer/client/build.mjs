@@ -21,6 +21,10 @@ await rm(OUTDIR, { force: true, recursive: true });
 const result = await Bun.build({
   entrypoints: [ENTRY],
   outdir: OUTDIR,
+  // Splitting keeps dynamic imports (mermaid, highlight.js)
+  // as separate lazy chunks in the bundle — a page without
+  // diagrams never loads the diagram chunk (Subplan 07).
+  splitting: true,
   minify: true,
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
