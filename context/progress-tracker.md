@@ -279,3 +279,6 @@ change.
   located; stored quote / label snapshot when moved).
   Anchor-leg audit: `viewer/tools/audit-anchors.ts` —
   21 required sites, 0 failures.
+- Annotation MERGED to main 2026-10-25 (merge `490d9a6`):
+  gate green on the merged tree, 228 tests. Server
+  restart migrates the live messages.db to schema v3.
