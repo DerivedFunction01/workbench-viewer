@@ -52,6 +52,12 @@ function varName(path) {
   if (tier === "component") {
     return "--wb-" + parts.slice(1).join("-");
   }
+  if (tier === "density") {
+    // density.<set>.<name> -> the SAME variable the component tier defines
+    // (--wb-card-padding, --wb-row-height, ...): density re-points names,
+    // it never renames them.
+    return "--wb-" + parts.slice(2).join("-");
+  }
   throw new Error("unknown tier: " + path.join("."));
 }
 
@@ -183,6 +189,18 @@ function paletteCss(palette) {
   );
 }
 
+// ---- density (first-class dimension; same names, two value sets) -------------
+// Comfortable = fundamentals SS2.5 defaults. Compact steps each value down
+// one step of the spacing scale where a smaller step exists (24->16, 16->12;
+// row height 40px->32px per SS2.5). Interactive targets are never density
+// tokens. Emitted last in index.css so [data-density="compact"] re-points
+// the palette-scoped component tokens of the same name.
+const densityComfortable = flatten(tokens.density.comfortable, ["density", "comfortable"]);
+const densityCompact = flatten(tokens.density.compact, ["density", "compact"]);
+const densityCss =
+  '\n:root, [data-density="comfortable"] {\n' + declarations(densityComfortable) + "\n}\n" +
+  '\n[data-density="compact"] {\n' + declarations(densityCompact) + "\n}\n";
+
 // ---- index.css ------------------------------------------------------------------
 const indexCss =
   HEADER +
@@ -196,7 +214,8 @@ const indexCss =
   "\nbody {\n  font-family: var(--wb-font-ui);\n  background: var(--wb-surface-canvas);\n  color: var(--wb-content-primary);\n}\n" +
   "\n.num {\n  font-feature-settings: \"tnum\";\n}\n" +
   "\n.mono {\n  font-family: var(--wb-font-mono);\n  font-feature-settings: \"zero\";\n}\n" +
-  "\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n";
+  "\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n" +
+  densityCss;
 
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "index.css"), indexCss);

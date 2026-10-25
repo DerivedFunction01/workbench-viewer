@@ -52,6 +52,10 @@
   --wb-frame-radius: var(--wb-radius-md);
   --wb-panel-radius: var(--wb-radius-lg);
   --wb-panel-padding: var(--wb-space-24);
+  --wb-layout-section-gap: var(--wb-space-24);
+  --wb-layout-page-padding: var(--wb-space-24);
+  --wb-layout-content-gap: var(--wb-space-16);
+  --wb-row-height: 40px;
 }
 [data-palette="teal"][data-mode="dark"] {
   color-scheme: dark;
@@ -105,6 +109,10 @@
   --wb-frame-radius: var(--wb-radius-md);
   --wb-panel-radius: var(--wb-radius-lg);
   --wb-panel-padding: var(--wb-space-24);
+  --wb-layout-section-gap: var(--wb-space-24);
+  --wb-layout-page-padding: var(--wb-space-24);
+  --wb-layout-content-gap: var(--wb-space-16);
+  --wb-row-height: 40px;
 }
 @media (prefers-color-scheme: dark) {
   [data-palette="teal"]:not([data-mode="light"]) {
@@ -159,5 +167,9 @@
     --wb-frame-radius: var(--wb-radius-md);
     --wb-panel-radius: var(--wb-radius-lg);
     --wb-panel-padding: var(--wb-space-24);
+    --wb-layout-section-gap: var(--wb-space-24);
+    --wb-layout-page-padding: var(--wb-space-24);
+    --wb-layout-content-gap: var(--wb-space-16);
+    --wb-row-height: 40px;
   }
 }

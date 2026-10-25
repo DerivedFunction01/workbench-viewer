@@ -110,3 +110,21 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+:root, [data-density="comfortable"] {
+  --wb-card-padding: var(--wb-space-16);
+  --wb-panel-padding: var(--wb-space-24);
+  --wb-section-gap: var(--wb-space-24);
+  --wb-page-padding: var(--wb-space-24);
+  --wb-content-gap: var(--wb-space-16);
+  --wb-row-height: 40px;
+}
+
+[data-density="compact"] {
+  --wb-card-padding: var(--wb-space-12);
+  --wb-panel-padding: var(--wb-space-16);
+  --wb-section-gap: var(--wb-space-16);
+  --wb-page-padding: var(--wb-space-16);
+  --wb-content-gap: var(--wb-space-12);
+  --wb-row-height: 32px;
+}
