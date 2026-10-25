@@ -402,57 +402,6 @@ def cmd_review(args):
     return 0
 
 
-def cmd_todo_add(args):
-    ctx = Ctx(args)
-    todo = reg.add_todo(ctx.db_path, args.id, args.title,
-                        actor="cli", notes=args.notes,
-                        link_kind=args.link_kind,
-                        link_ref=args.link_ref)
-    ctx.regenerate()
-    _print(todo)
-    return 0
-
-
-def cmd_todo_list(args):
-    ctx = Ctx(args)
-    todos = reg.list_todos(ctx.db_path, status=args.status)
-    for t in todos:
-        link = f" -> {t['link_kind']}:{t['link_ref']}" \
-            if t["link_kind"] else ""
-        print(f"{t['id']:<28} {t['status']:<7} "
-              f"{t['title']}{link}")
-    if not todos:
-        print("wb: no todos")
-    return 0
-
-
-def cmd_todo_set_status(args):
-    ctx = Ctx(args)
-    todo = reg.set_todo_status(ctx.db_path, args.id, args.status,
-                               actor="cli",
-                               expect_version=args.expect_version)
-    ctx.regenerate()
-    _print(todo)
-    return 0
-
-
-def cmd_todo_set(args):
-    ctx = Ctx(args)
-    fields = {}
-    for pair in args.pairs:
-        if "=" not in pair:
-            raise SystemExit(f"wb todo-set: expected "
-                             f"field=value, got {pair!r}")
-        key, _, value = pair.partition("=")
-        fields[key] = value
-    todo = reg.set_todo_fields(ctx.db_path, args.id, fields,
-                               actor="cli",
-                               expect_version=args.expect_version)
-    ctx.regenerate()
-    _print(todo)
-    return 0
-
-
 def cmd_bundle_new(args):
     ctx = PlansCtx(args)
     result = bundle_mod.create_bundle(
@@ -643,30 +592,6 @@ def build_parser():
                     choices=list(reg.REVIEW_DISPOSITIONS))
     sp.add_argument("--comment")
     sp.set_defaults(fn=cmd_review)
-
-    sp = sub.add_parser("todo-add")
-    sp.add_argument("id")
-    sp.add_argument("title")
-    sp.add_argument("--notes")
-    sp.add_argument("--link-kind")
-    sp.add_argument("--link-ref")
-    sp.set_defaults(fn=cmd_todo_add)
-
-    sp = sub.add_parser("todo-list")
-    sp.add_argument("--status")
-    sp.set_defaults(fn=cmd_todo_list)
-
-    sp = sub.add_parser("todo-set-status")
-    sp.add_argument("id")
-    sp.add_argument("status")
-    sp.add_argument("--expect-version", type=int)
-    sp.set_defaults(fn=cmd_todo_set_status)
-
-    sp = sub.add_parser("todo-set")
-    sp.add_argument("id")
-    sp.add_argument("pairs", nargs="+")
-    sp.add_argument("--expect-version", type=int)
-    sp.set_defaults(fn=cmd_todo_set)
 
     sp = sub.add_parser(
         "bundle", help="plan bundles (spec §3.4)")

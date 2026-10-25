@@ -24,6 +24,7 @@ const DERIVED_STATE_LABELS: Record<string, string> = {
 const TODO_STATUS_LABELS: Record<string, string> = {
   todo: "To do",
   doing: "Doing",
+  blocked: "Blocked",
   done: "Done",
 };
 

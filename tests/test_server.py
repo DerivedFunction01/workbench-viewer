@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from lib import bundles as bundle_mod
 from lib import registry as reg
 
 REPO = Path(__file__).resolve().parent.parent
@@ -75,7 +76,17 @@ def make_project(ws: Path, slug: str, name: str) -> Path:
     main = Path(entry["entry_dir"]) / "mock.html"
     main.write_text(MOCK, encoding="utf-8")
     reg.verify_entry(db, "tile-a", accept_drift=True)
-    reg.add_todo(db, "do-thing", "Do the thing")
+    # a DB todo exists too — the file todos below supersede
+    # it (§3.7), so "DB only thing" must never reach a feed
+    reg.add_todo(db, "db-only", "DB only thing")
+    bundle_mod.create_bundle(root / ".plans", "fixture-work",
+                             today="2026-10-25")
+    bundle_mod.create_todo(root / ".plans", "fixture-work",
+                           "Do the thing")
+    bundle_mod.create_todo(root / ".plans", "fixture-work",
+                           "Blocked thing", status="blocked")
+    bundle_mod.create_bundle(root / ".plans", "fixture-planned",
+                             plan=True, today="2026-10-25")
     (root / ".plans" / "2026-10-25-fixture-plan.md").write_text(
         PLAN, encoding="utf-8")
     return root
@@ -210,6 +221,19 @@ class TestFeeds(ServerCase):
         self.assertEqual(status, 200)
         self.assertEqual(len(feed["plans"]), 1)
         self.assertEqual(feed["plans"][0]["step_count"], 2)
+        # bundles ride the same feed: the fixture bundle with
+        # its checklist strip, and the planned bundle's plan
+        bundles = {b["id"]: b for b in feed["bundles"]}
+        work = bundles["2026-10-25-fixture-work"]
+        self.assertEqual(work["todo_count"], 2)
+        self.assertEqual(work["open_count"], 2)
+        planned = bundles["2026-10-25-fixture-planned"]
+        self.assertIsNotNone(planned["plan"])
+        status, doc = self.req(
+            "GET", "/projects/alpha/plan"
+                   "?path=2026-10-25-fixture-planned/plan.md")
+        self.assertEqual(status, 200)
+        self.assertEqual(doc["title"], "Fixture Planned")
         status, doc = self.req(
             "GET", "/projects/alpha/plan"
                    "?path=2026-10-25-fixture-plan.md")
@@ -225,11 +249,20 @@ class TestFeeds(ServerCase):
         self.assertEqual(status, 200)
         projects = {t["project"] for t in feed["todos"]}
         self.assertEqual(projects, {"alpha", "beta"})
+        # file todos are the source; the DB todo is superseded
+        titles = [t["title"] for t in feed["todos"]]
+        self.assertNotIn("DB only thing", titles)
+        self.assertEqual(titles.count("Do the thing"), 2)
+        self.assertTrue(all(t["bundle"] == "2026-10-25-fixture-work"
+                            for t in feed["todos"]))
         status, board = self.req("GET", "/board")
         self.assertEqual(status, 200)
         todo_titles = [t["title"]
                        for t in board["todos"]["todo"]]
         self.assertEqual(todo_titles.count("Do the thing"), 2)
+        blocked = [t["title"]
+                   for t in board["todos"]["blocked"]]
+        self.assertEqual(blocked.count("Blocked thing"), 2)
         plan_projects = {p["project"]
                          for p in board["plans"]["todo"]}
         self.assertEqual(plan_projects, {"alpha", "beta"})
@@ -314,14 +347,36 @@ class TestActions(ServerCase):
             detail["latest_review"]["payload"]["disposition"],
             "approve")
         self.assertTrue(detail["approval"]["approved"])
+        # the board drag path: one set-status mutation on a
+        # bundle todo file, through the lib writer
+        status, feed = self.req("GET", "/projects/beta/todos")
+        self.assertEqual(status, 200)
+        todo = [t for t in feed["todos"]
+                if t["title"] == "Do the thing"][0]
+        status, payload = self.req(
+            "POST", "/projects/beta/todos",
+            {"verb": "set-status", "id": todo["id"],
+             "status": "doing"})
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["todo"]["status"], "doing")
+        on_disk = (self.beta / ".plans" / todo["path"])
+        self.assertIn("status: doing",
+                      on_disk.read_text(encoding="utf-8"))
+        status, feed = self.req("GET", "/projects/beta/todos")
+        moved = [t for t in feed["todos"]
+                 if t["id"] == todo["id"]][0]
+        self.assertEqual(moved["status"], "doing")
+        # the retired DB verb and unknown ids are refused
         status, payload = self.req(
             "POST", "/projects/beta/todos",
             {"verb": "add", "id": "second-thing",
              "title": "Second thing"})
-        self.assertEqual(status, 200)
-        status, feed = self.req("GET", "/projects/beta/todos")
-        ids = [t["id"] for t in feed["todos"]]
-        self.assertIn("second-thing", ids)
+        self.assertEqual(status, 400)
+        status, payload = self.req(
+            "POST", "/projects/beta/todos",
+            {"verb": "set-status", "id": "t-nope",
+             "status": "done"})
+        self.assertEqual(status, 400)
         status, payload = self.req(
             "POST", "/projects/beta/todos",
             {"verb": "bogus"})

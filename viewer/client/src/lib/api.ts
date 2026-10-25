@@ -90,23 +90,101 @@ export interface MockupsFeed extends FeedEnvelope {
 export interface PlanSummary {
   path: string;
   title: string;
-  status_raw: string;
+  status_raw: string | null;
   status_bucket: string;
   conforming: boolean;
   step_count: number;
   mermaid_count: number;
   archived: boolean;
   modified: number;
+  feature?: string | null;
+}
+
+/** One bundle (live-work spec §3): a directory with an
+ * optional plan + its todo files, or a legacy flat plan. */
+export interface BundleItem {
+  kind: "bundle" | "flat-plan";
+  id: string;
+  slug: string;
+  path: string;
+  archived: boolean;
+  feature: string | null;
+  plan: PlanSummary | null;
+  todos: TodoItem[];
+  errors: { path: string; error: string }[];
+  todo_count: number;
+  open_count: number;
 }
 
 export interface PlansFeed extends FeedEnvelope {
   plans: PlanSummary[];
+  bundles: BundleItem[];
+}
+
+/** A plan's structured document (lib/plans/parser.py via
+ * GET /projects/<slug>/plan?path=). */
+export interface PlanBlock {
+  type: "markdown" | "code" | "mermaid";
+  text?: string;
+  source?: string;
+  raw: string;
+  lang?: string;
+}
+
+export interface PlanSection {
+  heading: string;
+  level: number;
+  raw: string;
+  blocks: PlanBlock[];
+  is_rulings: boolean;
+  is_steps: boolean;
+}
+
+export interface PlanStep {
+  n: number;
+  title: string;
+  body: string;
+  files: string;
+  verify: string;
+  done_when: string;
+  raw: string;
+}
+
+export interface PlanDoc {
+  path: string;
+  title: string;
+  fields: Record<string, string>;
+  status_raw: string | null;
+  status_bucket: string;
+  conforming: boolean;
+  header_raw: string;
+  sections: PlanSection[];
+  steps: PlanStep[];
+  step_count: number;
+  mermaid_count: number;
+  markdown: string;
+  archived?: boolean;
 }
 
 export interface TodoItem {
-  id: string;
-  title: string;
-  status: string;
+  id: string | null;
+  title: string | null;
+  status: string | null;
+  // bundle todo-file fields (live-work spec §3.2)
+  bundle?: string | null;
+  feature?: string | null;
+  plan?: string | null;
+  plan_step?: number | null;
+  worktree?: string | null;
+  body?: string;
+  path?: string;
+  valid?: boolean;
+  errors?: string[];
+  archived?: boolean;
+  created?: string | null;
+  updated?: string | null;
+  // registry-DB fallback rows (§3.7) keep their DB shape
+  source?: string;
   notes?: string;
   link_kind?: string | null;
   link_ref?: string | null;
@@ -117,15 +195,21 @@ export interface TodoItem {
 
 export interface TodosFeed extends FeedEnvelope {
   todos: TodoItem[];
+  /** "files" = bundle todo files; "db-fallback" = §3.7. */
+  source?: string;
+  errors?: { path: string; error: string }[];
 }
 
 export interface AllTodosPayload {
   todos: TodoItem[];
+  errors?: unknown[];
 }
 
 export interface BoardPlan extends PlanSummary {
   project?: string;
   project_name?: string;
+  bundle?: string;
+  bundle_kind?: string;
 }
 
 export interface ReviewItem {
