@@ -211,3 +211,10 @@ change.
   mockup lifecycle proof runs on fixture projects in tests.
 - The SPEC extraction effort owns v2's SPEC.md and
   `.plans/spec-extraction/` — never touch those.
+- Repo-home BACKEND landed on main 2026-10-25 (branch
+  `build/repo-home`, tip `e9f5ae1`, merged `4932a01`): the
+  viewer message store + cleanup lifecycle (`lib/messages.py`),
+  the messages / settings-effective API, and the worktree +
+  home derivations (`lib/worktrees.py`, `lib/home.py`) —
+  gate green at 128 tests. The repo-home UI phase (Home /
+  Overview / Inbox / Settings panels) is still pending.
