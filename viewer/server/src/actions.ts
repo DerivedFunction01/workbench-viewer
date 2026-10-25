@@ -300,18 +300,6 @@ export const Actions = {
     },
   }),
 
-  getWorktrees: defineAction({
-    request: slugArg,
-    // The worktrees payload ({slug, name, captured_at,
-    // available, worktrees}) is not a feed envelope — it
-    // passes through verbatim like getPlan.
-    response: rawResult,
-    privileged: [privileged.wbApi],
-    async handler(ctx, args) {
-      return callServer<unknown>(ctx, `/api/projects/${enc(args.slug)}/worktrees`);
-    },
-  }),
-
   getDiff: defineAction({
     request: z.object({
       slug: z.string().min(1),
