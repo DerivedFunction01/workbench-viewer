@@ -221,6 +221,122 @@ export interface ReviewItem {
   [key: string]: unknown;
 }
 
+/** One worktree derivation (lib/worktrees via
+ * GET /api/projects/<slug>/worktrees, repo-home §6). */
+export interface WorktreeItem {
+  path: string;
+  branch: string | null;
+  head: string | null;
+  head_short: string | null;
+  is_main: boolean;
+  base: string | null;
+  ahead: number | null;
+  behind: number | null;
+  dirty: boolean | null;
+  changed_count: number | null;
+  degraded: boolean;
+  reason: string | null;
+  [key: string]: unknown;
+}
+
+export interface WorktreesPayload {
+  slug: string;
+  name: string;
+  captured_at: string;
+  available: boolean;
+  reason?: string;
+  worktrees: WorktreeItem[];
+}
+
+/** One rendered diff line (lib/diffs, repo-home §18). */
+export interface DiffLine {
+  kind: "context" | "add" | "del" | "meta";
+  text: string;
+  old_no: number | null;
+  new_no: number | null;
+}
+
+export interface DiffHunk {
+  old_start: number;
+  old_lines: number;
+  new_start: number;
+  new_lines: number;
+  lines: DiffLine[];
+}
+
+export interface DiffFileEntry {
+  path: string;
+  old_path: string | null;
+  status: "modified" | "added" | "deleted" | "renamed";
+  binary: boolean;
+  additions: number;
+  deletions: number;
+  truncated: boolean;
+  legs?: string[];
+  hunks: DiffHunk[];
+}
+
+/** An untracked file's new-file rendering, or an ignored
+ * file's peek (same shape; §18.4). */
+export interface DiffPeek {
+  path: string;
+  withheld: "secret" | "symlink" | "missing" | "escapes" | null;
+  is_binary: boolean;
+  size_bytes: number;
+  truncated: boolean;
+  hunks: DiffHunk[];
+  is_dir?: boolean;
+}
+
+export interface IgnoredChangedEntry {
+  path: string;
+  size_bytes: number;
+  modified: number;
+  withheld: "secret" | null;
+  is_binary: boolean;
+}
+
+export interface DiffWarning {
+  kind: string;
+  path: string;
+  message: string;
+}
+
+/** The anchored diff payload (GET /api/projects/<slug>/
+ * diff, §18.5). */
+export interface DiffPayload {
+  slug: string;
+  name: string;
+  captured_at: string;
+  anchor: {
+    kind: "worktree" | "bundle" | "commit";
+    worktree: string;
+    branch: string | null;
+    bundle: string | null;
+  };
+  mode: string;
+  base: string | null;
+  target: string | null;
+  merge_base: string | null;
+  head: string;
+  narrowed: boolean;
+  declared_files: string[];
+  files: DiffFileEntry[];
+  totals: { files: number; additions: number; deletions: number };
+  empty: boolean;
+  untracked: DiffPeek[];
+  ignored_changed: IgnoredChangedEntry[];
+  ignored_truncated: boolean;
+  warnings: DiffWarning[];
+}
+
+export interface DiffPeekPayload {
+  slug: string;
+  name: string;
+  captured_at: string;
+  peek: DiffPeek;
+}
+
 export interface BoardPayload {
   todos: Record<string, TodoItem[]>;
   plans: Record<string, BoardPlan[]>;

@@ -19,6 +19,7 @@ import { formatDate, formatRelative } from "../lib/format";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";
 import { anchor } from "./plans/anchors";
+import { ChangesPanel, WorktreeChanges } from "./plans/ChangesPanel";
 import { BlockView, MarkdownBlock, StepBlock } from "./plans/PlanBody";
 import {
   DegradedBanner,
@@ -203,7 +204,7 @@ function PlanReader({
   path: string;
   bundle: BundleItem | null;
 }) {
-  const [view, setView] = useState<"formatted" | "source">("formatted");
+  const [view, setView] = useState<"formatted" | "changes" | "source">("formatted");
   const query = useQuery({
     queryKey: ["plan", slug, path],
     queryFn: () => api.getPlan({ slug, path }),
@@ -239,6 +240,7 @@ function PlanReader({
           ariaLabel="Plan view"
           options={[
             { value: "formatted", label: "Formatted" },
+            { value: "changes", label: "Changes" },
             { value: "source", label: "Raw" },
           ]}
           value={view}
@@ -255,7 +257,11 @@ function PlanReader({
           />
         </div>
       ) : null}
-      {view === "source" ? (
+      {view === "changes" ? (
+        <div style={{ marginTop: "var(--wb-space-16)" }}>
+          <ChangesPanel slug={slug} bundle={bundle?.id ?? null} />
+        </div>
+      ) : view === "source" ? (
         <SourceView source={doc.markdown} />
       ) : !doc.conforming ? (
         <MarkdownBlock text={doc.markdown} sectionHeading="source" />
@@ -426,6 +432,7 @@ export function PlansSection({
               ))}
             </>
           ) : null}
+          <WorktreeChanges slug={slug} />
         </div>
       )}
     </section>
