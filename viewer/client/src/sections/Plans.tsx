@@ -33,6 +33,7 @@ import {
 import { AnchoredComment } from "./inbox/AnchoredComment";
 import { anchor } from "./plans/anchors";
 import { ChangesPanel, WorktreeChanges } from "./plans/ChangesPanel";
+import { groupBundles, type PlanGroupEntry, type PlanGrouping } from "./plans/grouping";
 import { BlockView, MarkdownBlock, StepBlock } from "./plans/PlanBody";
 import { normalizeText } from "./plans/relocation";
 import {
@@ -101,7 +102,20 @@ function bundleTitle(bundle: BundleItem): string {
   return bundle.plan?.title || bundle.id;
 }
 
-function BundleRow({ slug, bundle }: { slug: string; bundle: BundleItem }) {
+function BundleRow({
+  slug,
+  bundle,
+  subplansCount,
+  children,
+}: {
+  slug: string;
+  bundle: BundleItem;
+  /** Resolved `## Subplans` declarations (§21): the
+   * count a group parent — or a nested child with its
+   * own subplans — carries on its row. */
+  subplansCount?: number;
+  children?: React.ReactNode;
+}) {
   const plan = bundle.plan;
   const inner = (
     <>
@@ -121,6 +135,12 @@ function BundleRow({ slug, bundle }: { slug: string; bundle: BundleItem }) {
           <span style={metaStyle}>
             <span className="num">{plan.step_count}</span> steps
           </span>
+          {subplansCount ? (
+            <span style={metaStyle}>
+              <span className="num">{subplansCount}</span>{" "}
+              {subplansCount === 1 ? "subplan" : "subplans"}
+            </span>
+          ) : null}
           <span style={metaStyle}>
             {formatDate(plan.modified)} {formatRelative(plan.modified)}
           </span>
@@ -147,7 +167,60 @@ function BundleRow({ slug, bundle }: { slug: string; bundle: BundleItem }) {
           {bundle.errors.map((e) => `${e.path}: ${e.error}`).join(" · ")}
         </p>
       ) : null}
+      {children}
     </li>
+  );
+}
+
+/** A top-level list row with its grouping (§21): the
+ * claimed subplan bundles nested one level beneath it,
+ * then a muted row for each declared path that resolves
+ * to nothing — vanished references degrade honestly,
+ * never silently dropped. */
+function BundleGroupRow({
+  slug,
+  grouping,
+  entry,
+}: {
+  slug: string;
+  grouping: PlanGrouping;
+  entry: PlanGroupEntry;
+}) {
+  const hasNested = entry.children.length > 0 || entry.missing.length > 0;
+  return (
+    <BundleRow slug={slug} bundle={entry.bundle} subplansCount={entry.resolvedCount}>
+      {hasNested ? (
+        <ul
+          style={{
+            listStyle: "none",
+            margin: 0,
+            padding: 0,
+            paddingLeft: "var(--wb-space-24)",
+          }}
+        >
+          {entry.children.map((child) => (
+            <BundleRow
+              key={child.path}
+              slug={slug}
+              bundle={child}
+              subplansCount={
+                child.plan ? grouping.byPlanPath.get(child.plan.path)?.resolvedCount : undefined
+              }
+            />
+          ))}
+          {entry.missing.map((declaredPath) => (
+            <li key={`missing-${declaredPath}`}>
+              <div style={{ ...listRowStyle, color: "var(--wb-content-muted)" }}>
+                <span className="mono" style={{ flex: 1 }}>
+                  {declaredPath}
+                </span>
+                <span style={metaStyle}>missing</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </BundleRow>
   );
 }
 
@@ -642,8 +715,13 @@ export function PlansSection({
     return <ErrorWell section="Plans" message={error ?? "the companion server did not answer."} />;
   }
   const feed = payload as unknown as import("../lib/api").PlansFeed;
-  const active = feed.bundles.filter((bundle) => !bundle.archived);
-  const finished = feed.bundles.filter((bundle) => bundle.archived);
+  // §21 grouping: claimed subplans leave the top level
+  // and nest under their first declaring parent, in
+  // whichever list (active or finished) the parent
+  // renders — resolution covers both alike.
+  const grouping = groupBundles(feed.bundles);
+  const active = grouping.topLevel.filter((entry) => !entry.bundle.archived);
+  const finished = grouping.topLevel.filter((entry) => entry.bundle.archived);
   const readerBundle = item
     ? (feed.bundles.find((bundle) => bundle.plan?.path === item) ?? null)
     : null;
@@ -664,8 +742,13 @@ export function PlansSection({
             </EmptyWell>
           ) : (
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {active.map((bundle) => (
-                <BundleRow key={bundle.path} slug={slug} bundle={bundle} />
+              {active.map((entry) => (
+                <BundleGroupRow
+                  key={entry.bundle.path}
+                  slug={slug}
+                  grouping={grouping}
+                  entry={entry}
+                />
               ))}
             </ul>
           )}
@@ -680,12 +763,17 @@ export function PlansSection({
                 Finished
               </h2>
               <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                {finished.map((bundle) => (
-                  <BundleRow key={bundle.path} slug={slug} bundle={bundle} />
+                {finished.map((entry) => (
+                  <BundleGroupRow
+                    key={entry.bundle.path}
+                    slug={slug}
+                    grouping={grouping}
+                    entry={entry}
+                  />
                 ))}
               </ul>
-              {finished.map((bundle) => (
-                <FinishedTodos key={`todos-${bundle.path}`} bundle={bundle} />
+              {finished.map((entry) => (
+                <FinishedTodos key={`todos-${entry.bundle.path}`} bundle={entry.bundle} />
               ))}
             </>
           ) : null}
