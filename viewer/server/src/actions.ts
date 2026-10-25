@@ -375,6 +375,8 @@ export const Actions = {
     request: z.object({
       project: z.string().optional(),
       state: z.string().optional(),
+      anchorType: z.string().optional(),
+      anchorRef: z.string().optional(),
       pickup: z.boolean().optional(),
     }),
     response: rawResult,
@@ -383,9 +385,22 @@ export const Actions = {
       const params = new URLSearchParams();
       if (args.project) params.set("project", args.project);
       if (args.state) params.set("state", args.state);
+      if (args.anchorType) params.set("anchor_type", args.anchorType);
+      if (args.anchorRef) params.set("anchor_ref", args.anchorRef);
       if (args.pickup) params.set("pickup", "1");
       const query = params.toString();
       return callServer<unknown>(ctx, `/api/messages${query ? `?${query}` : ""}`);
+    },
+  }),
+
+  updateMessageBody: defineAction({
+    request: z.object({ id: z.number().int(), body: z.string() }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/messages/${args.id}/body`, "POST", {
+        body: args.body,
+      });
     },
   }),
 

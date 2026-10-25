@@ -5,6 +5,7 @@
 // Justified past the ~300-line guideline in
 // docs/component-contracts.md#specimen on exactly that ground.
 import { type ReactNode, useState } from "react";
+import { AnnotationBadge, annotationMarkStyle, selectionMarkStyle } from "./AnnotationBadge";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { Card } from "./Card";
@@ -104,6 +105,18 @@ export function KitSpecimen() {
         <Badge kind="needs-changes" text="Needs changes · 2 open" />
         <Badge kind="approved" text="Approved" stateHash="a3f9c1" />
         <Badge kind="in-triage" text="In triage" />
+      </Section>
+
+      <Section title="AnnotationBadge — message lifecycle + marks">
+        <AnnotationBadge state="sent" />
+        <AnnotationBadge state="acknowledged" />
+        <AnnotationBadge state="done" />
+        <AnnotationBadge state="draft" />
+        <AnnotationBadge state="archived" />
+        <p className="text-sm" style={{ margin: 0 }}>
+          A <mark style={selectionMarkStyle}>live selection</mark> wears the palette accent; a{" "}
+          <mark style={annotationMarkStyle}>saved annotation</mark> wears Okabe orange.
+        </p>
       </Section>
 
       <Section title="Button">

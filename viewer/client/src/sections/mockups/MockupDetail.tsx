@@ -9,16 +9,26 @@
 // never as a silent failure or a spinner.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { Frame } from "../../components/Frame";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { Sheet } from "../../components/Sheet";
 import { StateControls, type StateValues } from "../../components/StateControls";
-import { api } from "../../lib/api";
+import { api, type TextSelection } from "../../lib/api";
 import { formatDate, formatDateTime, formatShortHash } from "../../lib/format";
 import { kindLabel, ruledStatusLabel } from "../../lib/labels";
+import {
+  AnnotationComposer,
+  AnnotationList,
+  AnnotationThreadCard,
+  clearAnnotationMarks,
+  highlightSelectionInElement,
+  SelectionTintStyle,
+  useAnnotationThreads,
+} from "../Annotations";
+import { normalizeText } from "../plans/relocation";
 import { FilePanel } from "./FilePanel";
 import { HistoryList, ReviewLog } from "./HistoryLog";
 import { EntryBadges, hasState, PreviewSummary, stateValues } from "./helpers";
@@ -26,6 +36,36 @@ import type { EntryDetail, Envelope, FullEntry } from "./types";
 import { RULED_STATUSES } from "./types";
 
 type Disposition = "approve" | "needs-changes" | "stale";
+
+/** Display labels for the drill-in's components (§12):
+ * the stored snapshot an annotation carries. An explicit
+ * data-anchor-label on the element wins; the id-derived
+ * form is the fallback. */
+const COMPONENT_LABELS: Record<string, string> = {
+  "mockups/exhibit-stage": "Exhibit stage",
+  "mockups/disposition": "Disposition",
+  "mockups/metadata-card": "Metadata",
+  "mockups/state-card": "State",
+  "mockups/approval-card": "Approval",
+  "mockups/lifecycle-card": "Lifecycle",
+  "mockups/files-card": "Files",
+  "mockups/review-log-card": "Review log",
+  "mockups/history-card": "History",
+  "mockups/entry-sheet": "Entry sheet",
+};
+
+function labelForComponent(el: HTMLElement, id: string): string {
+  return (
+    el.getAttribute("data-anchor-label") ??
+    COMPONENT_LABELS[id] ??
+    id.split("/").pop()?.replace(/-/g, " ") ??
+    id
+  );
+}
+
+type Selected =
+  | { kind: "component"; entryId: string; id: string; label: string }
+  | { kind: "text"; entryId: string; selection: TextSelection };
 
 const labelStyle: React.CSSProperties = {
   color: "var(--wb-content-muted)",
@@ -129,6 +169,83 @@ export function MockupDetail({
     }
   }, [entry]);
 
+  // Annotation state (§12): the exhibit's threads, the
+  // selected component / armed text selection (one
+  // composer at a time), and each thread's derived
+  // presence/re-location status. Viewing never
+  // acknowledges anything — pickup is an agent act.
+  const detailRef = useRef<HTMLElement | null>(null);
+  const { threads, count } = useAnnotationThreads(slug, entryId);
+  const [selectedState, setSelected] = useState<Selected | null>(null);
+  // A selection belongs to the entry it was made on; it
+  // never renders (or posts) against another entry.
+  const selected = selectedState?.entryId === entryId ? selectedState : null;
+  const [statusById, setStatusById] = useState<Record<number, "located" | "moved">>({});
+  useEffect(() => {
+    const rootEl = detailRef.current;
+    if (!rootEl || !entry) return;
+    clearAnnotationMarks(rootEl);
+    const next: Record<number, "located" | "moved"> = {};
+    for (const t of threads) {
+      const sel = t.root.selection;
+      if (!sel) {
+        next[t.root.id] = "located";
+        continue;
+      }
+      const el = rootEl.querySelector(`[data-anchor="${sel.component_id}"]`);
+      if (!el) {
+        next[t.root.id] = "moved";
+        continue;
+      }
+      next[t.root.id] =
+        sel.kind === "component" ||
+        highlightSelectionInElement(el as HTMLElement, sel) === "located"
+          ? "located"
+          : "moved";
+    }
+    setStatusById(next);
+  }, [threads, entry]);
+  useEffect(() => {
+    const rootEl = detailRef.current;
+    if (!rootEl || !entry) return;
+    const clearSelected = () => {
+      const prev = rootEl.querySelector<HTMLElement>("[data-wb-selected-component]");
+      if (!prev) return;
+      prev.style.outline = "";
+      prev.style.outlineOffset = "";
+      prev.style.position = "";
+      delete prev.dataset.wbSelectedComponent;
+      prev.querySelector(":scope > [data-wb-anchor-tag]")?.remove();
+    };
+    clearSelected();
+    if (selected?.kind !== "component") return;
+    const el = rootEl.querySelector<HTMLElement>(`[data-anchor="${selected.id}"]`);
+    if (!el) return;
+    el.dataset.wbSelectedComponent = "";
+    el.style.outline = "2.5px solid var(--wb-accent)";
+    el.style.outlineOffset = "3px";
+    if (window.getComputedStyle(el).position === "static") el.style.position = "relative";
+    const tag = document.createElement("span");
+    tag.dataset.wbAnchorTag = "";
+    tag.setAttribute("data-annotation-ui", "true");
+    tag.textContent = selected.label;
+    Object.assign(tag.style, {
+      position: "absolute",
+      top: "-10px",
+      right: "10px",
+      background: "var(--wb-accent)",
+      color: "var(--wb-on-accent)",
+      fontFamily: "var(--wb-font-mono)",
+      fontSize: "var(--wb-font-size-xs)",
+      padding: "1px 7px",
+      borderRadius: "999px",
+      zIndex: "5",
+      pointerEvents: "none",
+    });
+    el.appendChild(tag);
+    return clearSelected;
+  }, [selected, entry]);
+
   const savedStateJson = useMemo(
     () => JSON.stringify(stateValues(entry ?? ({} as FullEntry))),
     [entry],
@@ -194,6 +311,108 @@ export function MockupDetail({
   const needsChanges = latestReview?.payload?.disposition === "needs-changes";
   const busy = actionMutation.isPending;
 
+  // Component selection (§12): a plain click inside the
+  // drill-in selects the nearest component — accent
+  // outline + anchor-tag pill (the effect above renders
+  // them) — and pins the composer beneath the stage.
+  // Clicks on controls and inside the annotation UI are
+  // not selection; a live text selection owns its gesture
+  // (the mouseup handler arms the text composer instead).
+  function onDetailClick(e: React.MouseEvent) {
+    const rootEl = detailRef.current;
+    if (!rootEl) return;
+    const target = e.target as Element;
+    if (target.closest("[data-annotation-ui]")) return;
+    if (target.closest("button, a, input, select, textarea, label")) return;
+    const winSel = window.getSelection();
+    if (winSel && !winSel.isCollapsed) return;
+    const el = target.closest<HTMLElement>("[data-anchor]");
+    if (!el || !rootEl.contains(el)) return;
+    const id = el.dataset.anchor as string;
+    setSelected({ kind: "component", entryId, id, label: labelForComponent(el, id) });
+  }
+
+  // Text selection inside a component arms a text
+  // annotation scoped by that component (the §12 rules,
+  // identical to the Plans reader's): one component only,
+  // quote/prefix/suffix from the rendered text, oversize
+  // refused quietly.
+  function onDetailMouseUp() {
+    const rootEl = detailRef.current;
+    const winSel = window.getSelection();
+    if (!rootEl || !winSel || winSel.isCollapsed || winSel.rangeCount === 0) return;
+    const range = winSel.getRangeAt(0);
+    const cac = range.commonAncestorContainer;
+    const cacEl = cac.nodeType === Node.ELEMENT_NODE ? (cac as Element) : cac.parentElement;
+    if (!cacEl || cacEl.closest("[data-annotation-ui]") || !rootEl.contains(cac)) return;
+    const elementOf = (node: Node): Element | null =>
+      node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+    const startEl = elementOf(range.startContainer)?.closest<HTMLElement>("[data-anchor]");
+    const endEl = elementOf(range.endContainer)?.closest<HTMLElement>("[data-anchor]");
+    if (!startEl || startEl !== endEl || !rootEl.contains(startEl)) return;
+    const componentId = startEl.dataset.anchor as string;
+    const text = startEl.textContent ?? "";
+    const pre = document.createRange();
+    pre.selectNodeContents(startEl);
+    pre.setEnd(range.startContainer, range.startOffset);
+    const start = pre.toString().length;
+    const quote = range.toString();
+    if (!quote || normalizeText(quote) === "" || quote.length > 500) return;
+    if (text.slice(start, start + quote.length) !== quote) return;
+    setSelected({
+      kind: "text",
+      entryId,
+      selection: {
+        kind: "text",
+        component_id: componentId,
+        component_label: labelForComponent(startEl, componentId),
+        quote,
+        prefix: text.slice(Math.max(0, start - 120), start),
+        suffix: text.slice(start + quote.length, start + quote.length + 120),
+      },
+    });
+  }
+
+  const annotationComposer = selected ? (
+    selected.kind === "component" ? (
+      <AnnotationComposer
+        key={`component:${selected.id}`}
+        slug={slug}
+        anchorType="component"
+        anchorRef={entryId}
+        selection={{
+          kind: "component",
+          component_id: selected.id,
+          component_label: selected.label,
+          entry_id: entryId,
+        }}
+        onClose={() => setSelected(null)}
+        onSent={() => setSelected(null)}
+      />
+    ) : (
+      <AnnotationComposer
+        key={`text:${selected.selection.component_id}:${selected.selection.quote}`}
+        slug={slug}
+        anchorType="text"
+        anchorRef={entryId}
+        selection={selected.selection}
+        quote={selected.selection.quote}
+        onClose={() => setSelected(null)}
+        onSent={() => setSelected(null)}
+      />
+    )
+  ) : null;
+
+  const pinnedThreads =
+    selected?.kind === "component"
+      ? threads.filter(
+          (t) =>
+            t.root.selection?.kind === "component" &&
+            t.root.selection.component_id === selected.id &&
+            statusById[t.root.id] !== "moved",
+        )
+      : [];
+
   const doDisposition = (disposition: Disposition) => {
     if (disposition === "approve") {
       setApproveComment(comment);
@@ -213,7 +432,15 @@ export function MockupDetail({
   };
 
   return (
-    <section data-anchor="mockups/entry-sheet">
+    // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: the drill-in root only OBSERVES clicks/selection to select components and arm the annotation composer; it has no activation behavior of its own
+    <section
+      data-anchor="mockups/entry-sheet"
+      data-annotation-scope="true"
+      ref={detailRef}
+      onClick={onDetailClick}
+      onMouseUp={onDetailMouseUp}
+    >
+      <SelectionTintStyle />
       <div
         style={{
           display: "flex",
@@ -278,6 +505,7 @@ export function MockupDetail({
         <div style={{ position: "sticky", top: "var(--wb-space-16)" }}>
           <div data-palette={palette} data-mode={frameMode}>
             <Frame
+              anchor="mockups/exhibit-stage"
               title={entry.title}
               viewportLabel={`${entry.source_kind} · ${frameMode}`}
               archived={entry.archived}
@@ -300,7 +528,22 @@ export function MockupDetail({
             </Frame>
           </div>
 
-          <Card title="Disposition">
+          {annotationComposer}
+          {pinnedThreads.length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gap: "var(--wb-space-8)",
+                marginTop: "var(--wb-space-16)",
+              }}
+            >
+              {pinnedThreads.map((t) => (
+                <AnnotationThreadCard key={t.root.id} slug={slug} thread={t} />
+              ))}
+            </div>
+          ) : null}
+
+          <Card title="Disposition" anchor="mockups/disposition">
             <p style={{ margin: "0 0 var(--wb-space-8)", color: "var(--wb-content-secondary)" }}>
               Review this entry in {projectName}. Each disposition is recorded in the review log
               with its comment.
@@ -348,7 +591,7 @@ export function MockupDetail({
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--wb-space-16)" }}>
-          <Card title="Metadata">
+          <Card title="Metadata" anchor="mockups/metadata-card">
             <MetaRow label="Id">
               <span className="mono">{entry.id}</span>
             </MetaRow>
@@ -405,6 +648,7 @@ export function MockupDetail({
           {hasState(entry) && draftState ? (
             <div>
               <StateControls
+                anchor="mockups/state-card"
                 schema={entry.state_schema}
                 values={draftState}
                 onChange={(key, value) =>
@@ -435,14 +679,14 @@ export function MockupDetail({
               </div>
             </div>
           ) : (
-            <Card title="State">
+            <Card title="State" anchor="mockups/state-card">
               <p style={{ margin: 0, color: "var(--wb-content-secondary)" }}>
                 No state schema declared — this entry has no editable internal state.
               </p>
             </Card>
           )}
 
-          <Card title="Approval">
+          <Card title="Approval" anchor="mockups/approval-card">
             {approval?.approved ? (
               <>
                 <p style={{ margin: "0 0 var(--wb-space-8)" }}>
@@ -482,7 +726,7 @@ export function MockupDetail({
             )}
           </Card>
 
-          <Card title="Lifecycle">
+          <Card title="Lifecycle" anchor="mockups/lifecycle-card">
             <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
               <span style={labelStyle}>Set status</span>
               <select
@@ -649,17 +893,40 @@ export function MockupDetail({
             </label>
           </Card>
 
+          <div data-annotation-ui="true">
+            <Card title={`Annotations · ${count}`} anchor="mockups/annotations-card">
+              {threads.length === 0 ? (
+                <p style={{ margin: 0, color: "var(--wb-content-secondary)" }}>
+                  No annotations yet — click a component in the stage, or select text inside one, to
+                  annotate this exhibit.
+                </p>
+              ) : (
+                <AnnotationList
+                  slug={slug}
+                  threads={threads}
+                  statusOf={(root) => (statusById[root.id] === "moved" ? "moved" : "located")}
+                />
+              )}
+            </Card>
+          </div>
+
           {detail ? (
             <>
-              <FilePanel
-                slug={slug}
-                entryId={entryId}
-                files={detail.files}
-                configPath={entry.config_path ?? null}
-                onMutated={invalidate}
-              />
-              <ReviewLog history={detail.history} />
-              <HistoryList history={detail.history} />
+              <div data-anchor="mockups/files-card">
+                <FilePanel
+                  slug={slug}
+                  entryId={entryId}
+                  files={detail.files}
+                  configPath={entry.config_path ?? null}
+                  onMutated={invalidate}
+                />
+              </div>
+              <div data-anchor="mockups/review-log-card">
+                <ReviewLog history={detail.history} />
+              </div>
+              <div data-anchor="mockups/history-card">
+                <HistoryList history={detail.history} />
+              </div>
             </>
           ) : null}
         </div>
