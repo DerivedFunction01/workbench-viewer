@@ -1,14 +1,310 @@
-// STUB — Subplan 03 scaffold. Typed actions over the raw-socket bridge
-// land in Subplan 05 (with server/src/privileged.ts); this single ping
-// action only proves the server builds and typechecks end to end.
-import { type ActionsModule, defineAction, z } from "@hatch/space-sdk";
+// Typed actions over the raw-socket bridge — a THIN proxy
+// (Subplan 05, Step 2). Each action forwards exactly one
+// feed/mutation call to the companion server through the
+// privileged wbApi socket contract and returns the server's
+// payload verbatim: payload schemas are looseObjects (known
+// fields typed, everything else carried through untouched),
+// the HTTP status rides along, and a server `{error}` body —
+// or an unreachable server — comes back in the same envelope
+// shape, never as a hang or a thrown exception. The bridge
+// is boring on purpose: errors pass through with their
+// shape intact (SPEC §7 conventions: 400/403/404/409/413).
+import { type ActionsModule, type Ctx, defineAction, z } from "@hatch/space-sdk";
+import { privileged } from "@space/privileged";
+import { companionAddress, unreachableMessage } from "./config";
+
+// ---------------------------------------------------------------------------
+// Payload schemas (loose: the server's fields, verbatim + typed where known)
+// ---------------------------------------------------------------------------
+
+const projectSections = z.looseObject({
+  mockups: z.boolean(),
+  todos: z.boolean(),
+  plans: z.boolean(),
+  registry_declared: z.boolean(),
+  plans_declared: z.boolean(),
+});
+
+const projectSummary = z.looseObject({
+  slug: z.string(),
+  name: z.string(),
+  root: z.string(),
+  sections: projectSections,
+});
+
+const healthPayload = z.looseObject({
+  ok: z.boolean(),
+  version: z.string(),
+  host: z.string(),
+  port: z.number(),
+  projects_count: z.number(),
+});
+
+const projectsPayload = z.looseObject({
+  projects: z.array(projectSummary),
+  errors: z.array(z.unknown()),
+});
+
+const feedEnvelope = z.looseObject({
+  slug: z.string(),
+  name: z.string(),
+  degraded: z.boolean(),
+  available: z.boolean(),
+});
+
+// One envelope for every proxied call: the HTTP status (0 =
+// the socket never got an answer), the payload verbatim, and
+// the server's error string when it sent one.
+const proxied = <T extends z.ZodType>(payload: T) =>
+  z.object({
+    status: z.number(),
+    payload: payload.nullable(),
+    error: z.string().nullable(),
+  });
+
+const healthResult = proxied(healthPayload);
+const projectsResult = proxied(projectsPayload);
+const configResult = proxied(z.looseObject({ config: z.record(z.string(), z.unknown()) }));
+const feedResult = proxied(feedEnvelope);
+const rawResult = proxied(z.unknown());
+
+export type HealthResult = z.infer<typeof healthResult>;
+export type ProjectsResult = z.infer<typeof projectsResult>;
+export type ConfigResult = z.infer<typeof configResult>;
+export type FeedResult = z.infer<typeof feedResult>;
+export type RawResult = z.infer<typeof rawResult>;
+
+// ---------------------------------------------------------------------------
+// The proxy core
+// ---------------------------------------------------------------------------
+
+// The payload is the server's body verbatim; T is the
+// action's declared payload type (its looseObject schema is
+// the contract the server's shape is checked against at the
+// action boundary).
+interface BridgeReply<T> {
+  status: number;
+  payload: T | null;
+  error: string | null;
+}
+
+async function callServer<T>(
+  ctx: Ctx,
+  path: string,
+  method: "GET" | "POST" = "GET",
+  body?: unknown,
+): Promise<BridgeReply<T>> {
+  const address = companionAddress();
+  const res = await ctx.executePrivileged(privileged.wbApi, {
+    host: address.host,
+    port: address.port,
+    method,
+    path,
+    body: body != null ? JSON.stringify(body) : null,
+  });
+  const json = res.json;
+  const obj = json != null && typeof json === "object" ? (json as Record<string, unknown>) : null;
+  const serverError = obj && typeof obj.error === "string" ? obj.error : null;
+  if (res.status === 0) {
+    return { status: 0, payload: null, error: unreachableMessage(address) };
+  }
+  if (serverError != null) {
+    return { status: res.status, payload: null, error: serverError };
+  }
+  return { status: res.status, payload: json as T, error: null };
+}
+
+const slugArg = z.object({ slug: z.string().min(1) });
+const entryArg = z.object({ slug: z.string().min(1), entryId: z.string().min(1) });
+
+const enc = encodeURIComponent;
+
+// ---------------------------------------------------------------------------
+// Actions — one per companion-server route (SPEC §7)
+// ---------------------------------------------------------------------------
 
 export const Actions = {
-  ping: defineAction({
+  getHealth: defineAction({
     request: z.object({}),
-    response: z.object({ ok: z.boolean() }),
-    async handler() {
-      return { ok: true };
+    response: healthResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<z.infer<typeof healthPayload>>(ctx, "/health");
+    },
+  }),
+
+  getConfig: defineAction({
+    request: z.object({}),
+    response: configResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<z.infer<typeof configResult>["payload"]>(ctx, "/config");
+    },
+  }),
+
+  listProjects: defineAction({
+    request: z.object({}),
+    response: projectsResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<z.infer<typeof projectsPayload>>(ctx, "/projects");
+    },
+  }),
+
+  rescanProjects: defineAction({
+    request: z.object({}),
+    response: projectsResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<z.infer<typeof projectsPayload>>(ctx, "/projects/rescan", "POST", {});
+    },
+  }),
+
+  getMockups: defineAction({
+    request: z.object({ slug: z.string().min(1), archived: z.boolean().optional() }),
+    response: feedResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const suffix = args.archived ? "?archived=1" : "";
+      return callServer<z.infer<typeof feedEnvelope>>(
+        ctx,
+        `/projects/${enc(args.slug)}/mockups${suffix}`,
+      );
+    },
+  }),
+
+  getEntry: defineAction({
+    request: entryArg,
+    response: feedResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<z.infer<typeof feedEnvelope>>(
+        ctx,
+        `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}`,
+      );
+    },
+  }),
+
+  getEntryFile: defineAction({
+    request: z.object({
+      slug: z.string().min(1),
+      entryId: z.string().min(1),
+      path: z.string().optional(),
+      reveal: z.boolean().optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      if (args.path) params.set("path", args.path);
+      if (args.reveal) params.set("reveal", "1");
+      const query = params.toString();
+      const suffix = query ? `?${query}` : "";
+      return callServer<unknown>(
+        ctx,
+        `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/file${suffix}`,
+      );
+    },
+  }),
+
+  saveEntryFile: defineAction({
+    request: z.object({
+      slug: z.string().min(1),
+      entryId: z.string().min(1),
+      path: z.string().min(1),
+      content: z.string(),
+      baseSha256: z.string().min(1),
+      confirmSecret: z.boolean().optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer(
+        ctx,
+        `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/file`,
+        "POST",
+        {
+          path: args.path,
+          content: args.content,
+          base_sha256: args.baseSha256,
+          confirm_secret: args.confirmSecret === true,
+        },
+      );
+    },
+  }),
+
+  entryAction: defineAction({
+    request: z.object({
+      slug: z.string().min(1),
+      entryId: z.string().min(1),
+      body: z.record(z.string(), z.unknown()),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer(
+        ctx,
+        `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/action`,
+        "POST",
+        args.body,
+      );
+    },
+  }),
+
+  getPlans: defineAction({
+    request: slugArg,
+    response: feedResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<z.infer<typeof feedEnvelope>>(ctx, `/projects/${enc(args.slug)}/plans`);
+    },
+  }),
+
+  getPlan: defineAction({
+    request: z.object({ slug: z.string().min(1), path: z.string().min(1) }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/projects/${enc(args.slug)}/plan?path=${enc(args.path)}`);
+    },
+  }),
+
+  getProjectTodos: defineAction({
+    request: slugArg,
+    response: feedResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<z.infer<typeof feedEnvelope>>(ctx, `/projects/${enc(args.slug)}/todos`);
+    },
+  }),
+
+  getAllTodos: defineAction({
+    request: z.object({}),
+    response: proxied(z.looseObject({ todos: z.array(z.unknown()) })),
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<{ todos: unknown[] }>(ctx, "/todos");
+    },
+  }),
+
+  todoAction: defineAction({
+    request: z.object({
+      slug: z.string().min(1),
+      body: z.record(z.string(), z.unknown()),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer(ctx, `/projects/${enc(args.slug)}/todos`, "POST", args.body);
+    },
+  }),
+
+  getBoard: defineAction({
+    request: z.object({}),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<unknown>(ctx, "/board");
     },
   }),
 } satisfies ActionsModule;
