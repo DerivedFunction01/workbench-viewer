@@ -388,6 +388,8 @@ def messages_list(query: dict) -> dict:
     rows = msg_mod.list_messages(
         MSG_DB, project_slug=query.get("project") or None,
         state=query.get("state") or None,
+        anchor_type=query.get("anchor_type") or None,
+        anchor_ref=query.get("anchor_ref") or None,
         badge_days=CFG["messages_awaiting_badge_days"])
     return {"messages": rows, "captured_at": now_iso()}
 
@@ -405,7 +407,24 @@ def message_create(body: dict) -> dict:
             anchor_ref=body.get("anchor_ref"),
             showcase=body.get("showcase"),
             parent_id=body.get("parent_id"),
-            send=bool(body.get("send")))
+            send=bool(body.get("send")),
+            selection=body.get("selection"))
+    except msg_mod.MessageError as e:
+        raise ApiError(400, str(e))
+    return {"message": message}
+
+
+def message_update_body(message_id: int, body: dict) -> dict:
+    """POST /api/messages/<id>/body: the annotation
+    composer's draft autosave (D7 — drafts are real
+    draft-state messages; lib update_draft is the one
+    path and refuses non-drafts)."""
+    if not isinstance(body.get("body"), str):
+        raise ApiError(400, "draft body update needs a "
+                            "string \"body\"")
+    try:
+        message = msg_mod.update_draft(MSG_DB, message_id,
+                                       body["body"])
     except msg_mod.MessageError as e:
         raise ApiError(400, str(e))
     return {"message": message}
@@ -885,12 +904,16 @@ class Handler(BaseHTTPRequestHandler):
                               message_cleanup(self._body()))
         if len(parts) == 4 and parts[0] == "api" \
                 and parts[1] == "messages" \
-                and parts[3] in ("done", "send", "archive"):
+                and parts[3] in ("done", "send", "archive",
+                                 "body"):
             try:
                 message_id = int(parts[2])
             except ValueError:
                 raise ApiError(404, "no such message: "
                                     f"{parts[2]}")
+            if parts[3] == "body":
+                return self._send(200, message_update_body(
+                    message_id, self._body()))
             verb = {"done": message_done, "send": message_send,
                     "archive": message_archive}[parts[3]]
             return self._send(200, verb(message_id))

@@ -450,6 +450,34 @@ def create_message(db_path, *, author, body="",
         conn.close()
 
 
+def update_draft(db_path, message_id, body) -> dict:
+    """Replace a draft's body (the composer's autosave,
+    D7: drafts are state=draft messages from the first
+    keystroke-save, so editing one is a store mutation,
+    not a client-side fiction). Drafts only — a sent
+    message's body is its record. Bumps updated_at, so
+    the §5.3 draft TTL measures from the last edit."""
+    if not isinstance(body, str):
+        raise MessageError("draft body must be a string")
+    conn = connect(db_path)
+    try:
+        with _tx(conn):
+            row = _row(conn, message_id)
+            if row["state"] != "draft":
+                raise MessageError(
+                    f"message {message_id}: body can only "
+                    f"be edited while a draft (state is "
+                    f"{row['state']!r})")
+            conn.execute(
+                "UPDATE messages SET body = ?,"
+                " updated_at = ? WHERE id = ?",
+                (body, now_iso(), message_id))
+            _event(conn, message_id, "edited")
+            return message_dict(_row(conn, message_id))
+    finally:
+        conn.close()
+
+
 def send_message(db_path, message_id) -> dict:
     """draft -> sent."""
     conn = connect(db_path)
@@ -569,11 +597,14 @@ def get_message(db_path, message_id) -> dict:
 
 
 def list_messages(db_path, *, project_slug=None, state=None,
+                  anchor_type=None, anchor_ref=None,
                   badge_days=None, now=None) -> list:
-    """Filtered list, oldest first. Each row carries the
-    derived `awaiting_pickup` flag when badge_days is given:
-    state sent and sent_at older than the badge threshold
-    (§5.3 — a display derivation, never stored)."""
+    """Filtered list, oldest first. The anchor filters are
+    how a plan/entry view fetches exactly its annotations
+    (§12). Each row carries the derived `awaiting_pickup`
+    flag when badge_days is given: state sent and sent_at
+    older than the badge threshold (§5.3 — a display
+    derivation, never stored)."""
     clauses, params = [], []
     if project_slug is not None:
         clauses.append("(project_slug = ? OR"
@@ -584,6 +615,15 @@ def list_messages(db_path, *, project_slug=None, state=None,
             raise MessageError(f"bad state {state!r}")
         clauses.append("state = ?")
         params.append(state)
+    if anchor_type is not None:
+        if anchor_type not in ANCHOR_TYPES:
+            raise MessageError(
+                f"bad anchor_type {anchor_type!r}")
+        clauses.append("anchor_type = ?")
+        params.append(anchor_type)
+    if anchor_ref is not None:
+        clauses.append("anchor_ref = ?")
+        params.append(anchor_ref)
     where = (" WHERE " + " AND ".join(clauses)) if clauses \
         else ""
     conn = connect(db_path)

@@ -448,6 +448,30 @@ export interface HomePayload {
   captured_at?: string;
 }
 
+/** The §12 selection payload an annotation carries
+ * (lib/messages.py verbatim): quote + surrounding context
+ * for a text passage, the deterministic manifest id for
+ * an exhibit component. Raw offsets are refused at
+ * create; re-location happens at read/render time. */
+export interface TextSelection {
+  kind: "text";
+  component_id: string;
+  component_label?: string;
+  section_heading?: string;
+  quote: string;
+  prefix?: string;
+  suffix?: string;
+}
+
+export interface ComponentSelection {
+  kind: "component";
+  component_id: string;
+  component_label?: string;
+  entry_id?: string;
+}
+
+export type SelectionAnchor = TextSelection | ComponentSelection;
+
 export interface MessageItem {
   id: number;
   project_slug: string | null;
@@ -456,6 +480,7 @@ export interface MessageItem {
   author: string;
   body: string;
   showcase: { main?: unknown; docs?: unknown[] } | null;
+  selection: SelectionAnchor | null;
   state: "draft" | "sent" | "acknowledged" | "done" | "archived";
   created_at: string;
   updated_at: string;

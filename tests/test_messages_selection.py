@@ -224,5 +224,33 @@ class TestSelectionPayload(SelectionCase):
         self.assertIsNone(reply["selection"])
 
 
+class TestUpdateDraft(SelectionCase):
+    def test_body_update_bumps_updated_at(self):
+        m = msg.create_message(self.db, author="owner",
+                               body="first")
+        out = msg.update_draft(self.db, m["id"], "second")
+        self.assertEqual(out["body"], "second")
+        self.assertGreaterEqual(out["updated_at"],
+                                m["updated_at"])
+        events = [e["event"] for e in
+                  msg.events_for(self.db, m["id"])]
+        self.assertEqual(events, ["created", "edited"])
+
+    def test_sent_body_is_frozen(self):
+        m = msg.create_message(self.db, author="owner",
+                               body="sent already", send=True)
+        with self.assertRaises(msg.MessageError):
+            msg.update_draft(self.db, m["id"], "rewrite")
+        self.assertEqual(
+            msg.get_message(self.db, m["id"])["body"],
+            "sent already")
+
+    def test_non_string_body_refused(self):
+        m = msg.create_message(self.db, author="owner",
+                               body="x")
+        with self.assertRaises(msg.MessageError):
+            msg.update_draft(self.db, m["id"], 42)
+
+
 if __name__ == "__main__":
     unittest.main()
