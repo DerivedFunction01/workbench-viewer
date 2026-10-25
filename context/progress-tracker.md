@@ -315,3 +315,18 @@ change.
 - Plan syntax conformance MERGED to main 2026-10-25:
   gate green on the merged tree, 246 tests. Server
   restart picks up the parser's semantic sections.
+- Plan grouping BUILT on branch `build/plan-grouping`
+  (awaiting merge): §21 lands — the parser extracts a
+  plan's `## Subplans` declaration (fence-aware, same
+  discipline as Critical files; summaries and the
+  bundles feed carry it), the Plans list derives groups
+  at read (children nested one level under the first
+  declaring parent, counts on rows, missing declared
+  paths as muted rows, self/cycles per the Rulings),
+  and the reader renders Subplans entries as navigation
+  rows. Proof: tests/test_plan_grouping.py (feed family)
+  + viewer/tools/test-grouping.ts (derivation, 10
+  checks). Dogfood note: no plan in the workspace is a
+  genuine child of the grouping plan and finished plans
+  are never edited, so no declaration was added to any
+  real plan; grouping is proven on fixtures.
