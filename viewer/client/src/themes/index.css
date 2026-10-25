@@ -1,0 +1,112 @@
+/* GENERATED from tokens/tokens.json by viewer/tools/gen-tokens.mjs — do not edit by hand. */
+@import "tailwindcss";
+@import "./fonts.css";
+@import "./olive.css";
+@import "./teal.css";
+
+:root {
+  --wb-olive-50: #f4f5ec;
+  --wb-olive-100: #e3e7cf;
+  --wb-olive-200: #c2d199;
+  --wb-olive-300: #9db45c;
+  --wb-olive-400: #67742f;
+  --wb-olive-500: #4b5320;
+  --wb-olive-600: #40491b;
+  --wb-olive-700: #363d16;
+  --wb-olive-800: #2a2e12;
+  --wb-olive-900: #1d200c;
+  --wb-teal-50: #effaf8;
+  --wb-teal-100: #d7f5f0;
+  --wb-teal-200: #99e5da;
+  --wb-teal-300: #2dd4bf;
+  --wb-teal-400: #14b8a6;
+  --wb-teal-500: #0f766e;
+  --wb-teal-600: #0b5e57;
+  --wb-teal-700: #084f4a;
+  --wb-teal-800: #063f3b;
+  --wb-teal-900: #042f2c;
+  --wb-okabe-blue: #0072B2;
+  --wb-okabe-sky-blue: #56B4E9;
+  --wb-okabe-bluish-green: #009E73;
+  --wb-okabe-orange: #E69F00;
+  --wb-okabe-vermilion: #D55E00;
+  --wb-okabe-reddish-purple: #CC79A7;
+  --wb-okabe-yellow: #F0E442;
+  --wb-gray-olive-500: #6f7263;
+  --wb-space-4: 4px;
+  --wb-space-8: 8px;
+  --wb-space-12: 12px;
+  --wb-space-16: 16px;
+  --wb-space-24: 24px;
+  --wb-space-32: 32px;
+  --wb-radius-sm: 6px;
+  --wb-radius-md: 10px;
+  --wb-radius-lg: 12px;
+  --wb-radius-pill: 9999px;
+  --wb-font-ui: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --wb-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --wb-font-size-xs: 12px;
+  --wb-font-size-sm: 14px;
+  --wb-font-size-base: 16px;
+  --wb-font-size-lg: 18px;
+  --wb-font-size-xl: 20px;
+  --wb-font-size-2xl: 24px;
+  --wb-line-height-xs: 16px;
+  --wb-line-height-sm: 20px;
+  --wb-line-height-base: 24px;
+  --wb-line-height-lg: 28px;
+  --wb-line-height-xl: 28px;
+  --wb-line-height-2xl: 32px;
+  --wb-motion-duration-pop: 160ms;
+  --wb-motion-duration-sheet: 200ms;
+  --wb-motion-duration-panel: 160ms;
+  --wb-motion-ease: ease-out;
+  --wb-chart-1: #0072B2;
+  --wb-chart-2: #E69F00;
+  --wb-chart-3: #009E73;
+  --wb-chart-4: #D55E00;
+  --wb-chart-5: #56B4E9;
+  --wb-chart-6: #CC79A7;
+  --wb-chart-7: #F0E442;
+  scrollbar-color: var(--wb-border-default) transparent;
+  scrollbar-width: thin;
+}
+
+@theme {
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body {
+  font-family: var(--wb-font-ui);
+  background: var(--wb-surface-canvas);
+  color: var(--wb-content-primary);
+}
+
+.num {
+  font-feature-settings: "tnum";
+}
+
+.mono {
+  font-family: var(--wb-font-mono);
+  font-feature-settings: "zero";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
