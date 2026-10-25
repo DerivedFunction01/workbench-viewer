@@ -318,7 +318,11 @@ export interface DiffPayload {
   base: string | null;
   target: string | null;
   merge_base: string | null;
-  head: string;
+  head: string | null;
+  base_kind: string | null;
+  note: string | null;
+  gone: boolean;
+  no_commits: boolean;
   narrowed: boolean;
   declared_files: string[];
   files: DiffFileEntry[];
@@ -397,6 +401,7 @@ export interface WorktreeItem {
   changed_count: number | null;
   last_commit_at: string | null;
   untouched_days: number | null;
+  no_commits: boolean;
   merged: boolean;
   likely_done: boolean;
   rebase_in_progress: boolean;

@@ -604,6 +604,11 @@ export function ChangesPanel({
             <span className="num">−{payload.totals.deletions}</span>
             {payload.narrowed ? " · narrowed to the plan's declared files" : ""}
           </p>
+          {payload.note ? (
+            <div style={{ marginBottom: "var(--wb-space-8)" }}>
+              <KitBanner tone="degraded" message={payload.note} />
+            </div>
+          ) : null}
           {payload.warnings.map((warning) => (
             <div
               key={`${warning.kind}:${warning.path}`}
@@ -616,7 +621,9 @@ export function ChangesPanel({
               />
             </div>
           ))}
-          {payload.empty ? (
+          {payload.gone ? (
+            <EmptyWell>This worktree no longer exists — its directory was deleted.</EmptyWell>
+          ) : payload.empty ? (
             <EmptyWell>No changes in this worktree for this view.</EmptyWell>
           ) : (
             groups?.map((group) => (

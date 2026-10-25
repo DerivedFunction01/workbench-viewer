@@ -170,6 +170,58 @@ class TestDegradation(RepoCase):
         self.assertEqual(result["worktrees"], [])
         self.assertTrue(result["reason"])
 
+    def test_non_git_reason_is_a_label_not_stderr(self):
+        plain = self.tmp / "plain"
+        plain.mkdir()
+        result = wt.list_worktrees(plain, now=NOW)
+        self.assertEqual(result["reason"],
+                         "not a git repository")
+        self.assertNotIn("fatal", result["reason"])
+
+
+class TestZeroCommits(unittest.TestCase):
+    """A repo whose branch has no commits yet (unborn
+    HEAD) is a first-class state: head null + the
+    no_commits marker, never degraded, never raw git
+    error text as a reason."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="wb-wt0-"))
+        self.repo = self.tmp / "repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-b", "main")
+        (self.repo / "a.txt").write_text("a\n")
+        (self.repo / "b.txt").write_text("b\n")
+
+    def test_zero_commit_main_is_a_state(self):
+        result = wt.list_worktrees(self.repo, now=NOW)
+        self.assertTrue(result["available"])
+        (entry,) = result["worktrees"]
+        self.assertTrue(entry["is_main"])
+        self.assertTrue(entry["no_commits"])
+        self.assertIsNone(entry["head"])
+        self.assertIsNone(entry["head_short"])
+        self.assertIsNone(entry["last_commit_at"])
+        self.assertIsNone(entry["untouched_days"])
+        self.assertEqual(entry["ahead"], 0)
+        self.assertEqual(entry["behind"], 0)
+        self.assertFalse(entry["degraded"])
+        self.assertIsNone(entry["reason"])
+        self.assertFalse(entry["likely_done"])
+        # The untracked files are still counted as dirt.
+        self.assertTrue(entry["dirty"])
+        self.assertEqual(entry["changed_count"], 2)
+
+    def test_first_commit_clears_the_marker(self):
+        (self.repo / "a.txt").write_text("a\n")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "first", date=FRESH)
+        result = wt.list_worktrees(self.repo, now=NOW)
+        (entry,) = result["worktrees"]
+        self.assertFalse(entry["no_commits"])
+        self.assertIsNotNone(entry["head"])
+        self.assertFalse(entry["degraded"])
+
 
 if __name__ == "__main__":
     unittest.main()

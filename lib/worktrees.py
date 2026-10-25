@@ -36,18 +36,34 @@ class WorktreeError(Exception):
     past list_worktrees for a single worktree)."""
 
 
+# Reasons that can reach a payload come from this small
+# vocabulary ONLY — raw git stderr never renders (a
+# vanished reference is a state, not error text).
+def _label(stderr: str) -> str:
+    text = (stderr or "").lower()
+    if "not a git repository" in text:
+        return "not a git repository"
+    if "ambiguous argument 'head'" in text \
+            or "unknown revision" in text \
+            or "bad revision" in text \
+            or "needed a single revision" in text:
+        return "no commits yet"
+    return "git command failed"
+
+
 def _git(cwd, *args, timeout=5) -> str:
     try:
         out = subprocess.run(
             ["git", "-C", str(cwd), *args],
             capture_output=True, text=True, timeout=timeout,
             env=_GIT_ENV)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        raise WorktreeError(f"git {args[0]} failed: {e}")
+    except subprocess.TimeoutExpired:
+        raise WorktreeError("git timed out")
+    except OSError:
+        raise WorktreeError("git unavailable")
     if out.returncode != 0:
-        reason = (out.stderr or out.stdout).strip()
         raise WorktreeError(
-            f"git {' '.join(args[:2])}: {reason[:160]}")
+            _label(out.stderr or out.stdout))
     return out.stdout
 
 
@@ -136,11 +152,19 @@ def _derive_one(root, raw, *, main_branch, links, stale_days,
                 now) -> dict:
     path = raw["path"]
     branch = raw["branch"]
+    # An unborn HEAD (a repo with no commits yet) reads
+    # back as the zero hash in porcelain — a first-class
+    # state: head is null and the entry carries the
+    # marker, never a degradation.
+    no_commits = not raw["head"] \
+        or set(raw["head"]) == {"0"}
     entry = {
         "path": path,
         "branch": branch,
-        "head": raw["head"],
-        "head_short": (raw["head"] or "")[:7] or None,
+        "head": None if no_commits else raw["head"],
+        "head_short": None if no_commits
+        else raw["head"][:7],
+        "no_commits": no_commits,
         "is_main": Path(path) == Path(root),
         "base": None, "ahead": None, "behind": None,
         "dirty": None, "changed_count": None,
@@ -156,6 +180,10 @@ def _derive_one(root, raw, *, main_branch, links, stale_days,
         },
     }
     if raw["bare"]:
+        # Porcelain carries no HEAD line for a bare
+        # entry, so the zero-commit test above cannot
+        # speak for it.
+        entry["no_commits"] = False
         entry["degraded"] = True
         entry["reason"] = "bare worktree"
         return entry
@@ -178,7 +206,13 @@ def _derive_one(root, raw, *, main_branch, links, stale_days,
         base_ref, base_name = _base_ref(path, branch,
                                         main_branch)
         entry["base"] = base_name
-        if base_ref is not None:
+        if no_commits:
+            # Nothing to count against and no last
+            # commit — the rev-list / log calls below
+            # are the ones that used to fail here.
+            entry["ahead"] = 0
+            entry["behind"] = 0
+        elif base_ref is not None:
             counts = _git(path, "rev-list", "--left-right",
                           "--count",
                           f"{base_ref}...HEAD").split()
@@ -191,12 +225,13 @@ def _derive_one(root, raw, *, main_branch, links, stale_days,
         else:
             entry["ahead"] = 0
             entry["behind"] = 0
-        last = _git(path, "log", "-1", "--format=%cI",
-                    "HEAD").strip()
-        if last:
-            entry["last_commit_at"] = last
-            delta = now - parse_iso(last)
-            entry["untouched_days"] = delta.days
+        if not no_commits:
+            last = _git(path, "log", "-1", "--format=%cI",
+                        "HEAD").strip()
+            if last:
+                entry["last_commit_at"] = last
+                delta = now - parse_iso(last)
+                entry["untouched_days"] = delta.days
     except WorktreeError as e:
         entry["degraded"] = True
         entry["reason"] = str(e)
