@@ -127,7 +127,7 @@ export interface PlansFeed extends FeedEnvelope {
 }
 
 /** A plan's structured document (lib/plans/parser.py via
- * GET /projects/<slug>/plan?path=). */
+ * GET /api/projects/<slug>/plan?path=). */
 export interface PlanBlock {
   type: "markdown" | "code" | "mermaid";
   text?: string;

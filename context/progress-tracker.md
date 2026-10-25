@@ -335,3 +335,30 @@ change.
   Checkpoint republish follows; live Plans data carries
   no declarations yet, so the list renders unchanged
   until a plan declares subplans.
+- API unification (release N) BUILDING on branch
+  `build/api-unification`: Step 1 created the
+  `api-unification` bundle and the Step 8
+  alias-removal todo `t-01M5TNR7V99D3P2ENBA85N0W2F`
+  (status `todo`; it stays open through release N and
+  is executed in release N+1).
+- API unification release N closeout (build side,
+  branch `build/api-unification`, tip `071bc0c`):
+  Steps 1-5 + 7 landed in five commits (66a71a5,
+  eef3144, ee9e39d, 4e2c855, 071bc0c). The server
+  surface is one /api namespace: 27 canonical
+  method/path patterns, with exactly 15 legacy
+  patterns served through LEGACY_ROUTE_ALIASES
+  (internal dispatch, never redirects) and guarded
+  by tests/test_server_route_unification.py (frozen
+  inventory, matcher, HTTP equivalence,
+  served-without-alias tripwire, controlled-caller
+  source scan). Full gate green on the branch:
+  261 tests, all 4 legs. The healthcheck probes
+  /api/health with the bounded release-N 404
+  fallback to /health. PENDING (Step 6, release
+  sequence): merge, companion restart, alias audit
+  of the published artifact, checkpoint publish,
+  canonical audit. Alias-removal todo
+  t-01M5TNR7V99D3P2ENBA85N0W2F remains OPEN in
+  `todo` status for release N+1 (Step 8); no alias,
+  fallback, or inventory entry was removed.
