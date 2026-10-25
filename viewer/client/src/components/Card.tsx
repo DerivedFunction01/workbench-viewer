@@ -6,13 +6,16 @@ export type CardProps = {
   title?: ReactNode;
   /** Right end of the title row — kit Buttons only. */
   actions?: ReactNode;
+  /** Anchor id (`<section-or-exhibit>/<component>`, §14) — renders `data-anchor` on the root. */
+  anchor?: string;
   className?: string;
   children?: ReactNode;
 };
 
-export function Card({ title, actions, className, children }: CardProps) {
+export function Card({ title, actions, anchor, className, children }: CardProps) {
   return (
     <section
+      data-anchor={anchor}
       className={className}
       style={{
         backgroundColor: "var(--wb-card-bg)",

@@ -20,6 +20,8 @@ export type StateControlsProps = {
   onChange: (key: string, value: StateValue) => void;
   title?: string;
   disabled?: boolean;
+  /** Anchor id (`<section-or-exhibit>/<component>`, §14) — renders `data-anchor` on the container. */
+  anchor?: string;
   className?: string;
 };
 
@@ -122,6 +124,7 @@ export function StateControls({
   onChange,
   title = "State",
   disabled = false,
+  anchor,
   className,
 }: StateControlsProps) {
   const baseId = useId();
@@ -277,6 +280,7 @@ export function StateControls({
 
   return (
     <section
+      data-anchor={anchor}
       aria-label={title}
       className={className}
       style={{

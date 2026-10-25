@@ -63,6 +63,24 @@ frozen layout sketch.
   (`--wb-row-height`, `--wb-card-padding`,
   `--wb-panel-padding`, layout gaps). No component takes
   a density prop.
+- **Anchorability (SPEC §14):** the MAJOR components
+  (Card, Frame, Lane, Sheet, DataTable, StateControls)
+  take an optional `anchor?: string` prop. When provided,
+  the component's root element renders
+  `data-anchor={anchor}`; when absent, the attribute is
+  omitted entirely. No other behavior or appearance
+  changes. The anchor id's shape is
+  `<section-or-exhibit>/<component>` in kebab slugs
+  (e.g. `shell/project-rail`, `summary/bars-by-year`).
+  Ids are DETERMINISTIC: minted from the component's
+  spec name at build time — never random, never
+  positional counters — so a rebuild reproduces the
+  same ids. An id is never reused for a different
+  component, and renaming a component = a new anchor
+  (the old one's annotations degrade via the §12 orphan
+  flow). Granularity stops at major components:
+  TriageRow rows, Buttons, Chips, and Badges carry no
+  `anchor` prop in v1 (§14.1).
 
 Token vocabulary used below (all exist in the generated
 themes): surfaces `--wb-surface-canvas/-1/-2/-3/-sunken`;
@@ -390,6 +408,7 @@ Props:
 type CardProps = {
   title?: ReactNode;    // renders the card-title row (14px semibold)
   actions?: ReactNode;  // right end of the title row (kit buttons)
+  anchor?: string;      // §14 anchor id — data-anchor on the root, omitted when absent
   className?: string;
   children?: ReactNode;
 };
@@ -426,6 +445,7 @@ type FrameProps = {
   headerActions?: ReactNode;
   footer?: ReactNode;
   archived?: boolean;       // archived ⇒ whole frame at 60% saturation, chip intact
+  anchor?: string;          // §14 anchor id — data-anchor on the root, omitted when absent
   className?: string;
   children?: ReactNode;     // the mock, inside the well
 };
@@ -458,6 +478,7 @@ type LaneProps = {
   count: number;
   accent?: boolean;        // Review lane: 2px accent left edge
   countWarning?: boolean;  // Doing > 7: soft warning tone on the count
+  anchor?: string;         // §14 anchor id — data-anchor on the root, omitted when absent
   className?: string;
   children?: ReactNode;    // cards, inside the sunken well
 };
@@ -503,6 +524,7 @@ type SheetProps = {
   open: boolean;
   title: string;
   onClose: () => void;
+  anchor?: string;       // §14 anchor id — data-anchor on the root, omitted when absent
   className?: string;
   children?: ReactNode;  // body; disposition Buttons go in footer
   footer?: ReactNode;
@@ -615,6 +637,7 @@ type DataTableProps<T> = {
   onRowActivate?: (key: string) => void;
   empty?: ReactNode;            // rendered in place of rows (an EmptyState)
   ariaLabel: string;
+  anchor?: string;              // §14 anchor id — data-anchor on the root, omitted when absent
   className?: string;
 };
 ```
@@ -723,6 +746,7 @@ type StateControlsProps = {
   onChange: (key: string, value: boolean | string | number) => void;
   title?: string;       // panel heading, default "State"
   disabled?: boolean;
+  anchor?: string;      // §14 anchor id — data-anchor on the container, omitted when absent
   className?: string;
 };
 ```
@@ -778,7 +802,10 @@ Lane incl. warning count, Sheet behind a Button,
 Tooltip on an icon Button, EmptyState, DataTable with a
 selected row, DegradedBanner in both tones, TriageRow,
 StateControls against a valid fixture schema exercising
-all four field types + an invalid fixture schema).
+all four field types + an invalid fixture schema). One
+Card instance carries `anchor="specimen/card"` so the
+§14 `data-anchor` emission pattern is visible in the
+harness itself.
 Sections never import it; it exists so the kit's matrix
 is reviewable in one render (Subplan 04 Steps 2–3 verify)
 and is justifiable past the ~300-line guideline on

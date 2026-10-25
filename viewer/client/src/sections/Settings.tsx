@@ -48,7 +48,7 @@ export function SettingsSection({
   onChange: (next: Appearance) => void;
 }) {
   return (
-    <section>
+    <section data-anchor="settings/appearance-panel">
       <h1 style={sectionTitleStyle}>Settings</h1>
       <h2
         style={{
