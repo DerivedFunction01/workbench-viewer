@@ -38,12 +38,14 @@ sys.path.insert(0, str(REPO_ROOT))  # for lib/
 sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 
 import config as cfgmod  # noqa: E402
+from lib import bundles as bundle_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
 from lib import staleness  # noqa: E402
 from lib import sweep as sweep_mod  # noqa: E402
 from lib import validators as val_mod  # noqa: E402
+from lib.plans import bundles as bundle_parser  # noqa: E402
 from lib.plans import parser as plan_parser  # noqa: E402
 from lib.util import now_iso  # noqa: E402
 
@@ -165,17 +167,53 @@ def mockups_feed(project, *, archived: bool) -> dict:
 
 
 def todos_feed(project) -> dict:
+    """Todos read from bundle todo FILES (live-work spec
+    §3.7: file todos supersede the registry DB). The DB is
+    read ONLY as the §3.7 fallback — a project with DB
+    todos and no file todos shows its DB todos until they
+    are imported; the moment file todos exist they are the
+    source and the DB rows are not merged in. Invalid
+    front-matter todos stay in the list, flagged, and their
+    parser errors ride on the feed — never a silent skip."""
     m = project.manifest
     base = {"slug": project.slug, "name": project.name,
             "degraded": False}
-    if m.registry is None or not m.registry.is_file():
-        return {**base, "available": False, "todos": []}
-    try:
-        return {**base, "available": True,
-                "todos": reg.list_todos(m.registry)}
-    except Exception as e:
-        return degraded({**base, "available": True,
-                         "todos": []}, e)
+    file_todos, errors = [], []
+    if m.plans is not None and m.plans.is_dir():
+        try:
+            for bundle in bundle_parser.list_bundles(m.plans):
+                errors.extend(bundle["errors"])
+                file_todos.extend(bundle["todos"])
+        except Exception as e:
+            return degraded({**base, "available": True,
+                             "source": "files", "todos": [],
+                             "errors": errors}, e)
+    if file_todos:
+        return {**base, "available": True, "source": "files",
+                "todos": file_todos, "errors": errors}
+    if m.registry is not None and m.registry.is_file():
+        try:
+            db_todos = reg.list_todos(m.registry)
+        except Exception as e:
+            return degraded({**base, "available": True,
+                             "source": "db-fallback",
+                             "todos": [], "errors": errors}, e)
+        if db_todos:
+            return {**base, "available": True,
+                    "source": "db-fallback",
+                    "todos": [{**t, "source": "db",
+                               "bundle": None, "feature": None,
+                               "worktree": None, "valid": True,
+                               "errors": []}
+                              for t in db_todos],
+                    "errors": errors}
+        return {**base, "available": True, "source": "files",
+                "todos": [], "errors": errors}
+    if m.plans is not None and m.plans.is_dir():
+        return {**base, "available": True, "source": "files",
+                "todos": [], "errors": errors}
+    return {**base, "available": False, "source": "files",
+            "todos": [], "errors": errors}
 
 
 def plans_feed(project) -> dict:
@@ -183,18 +221,21 @@ def plans_feed(project) -> dict:
     base = {"slug": project.slug, "name": project.name,
             "degraded": False}
     if m.plans is None or not m.plans.is_dir():
-        return {**base, "available": False, "plans": []}
+        return {**base, "available": False, "plans": [],
+                "bundles": []}
     try:
         return {**base, "available": True,
-                "plans": plan_parser.list_plans(m.plans)}
+                "plans": plan_parser.list_plans(m.plans),
+                "bundles": bundle_parser.list_bundles(m.plans)}
     except Exception as e:
         return degraded({**base, "available": True,
-                         "plans": []}, e)
+                         "plans": [], "bundles": []}, e)
 
 
 def board_feed() -> dict:
     result = get_sweep()
-    lanes = {"todo": [], "doing": [], "done": []}
+    lanes = {"todo": [], "doing": [], "blocked": [],
+             "done": []}
     plan_cards = {"todo": [], "doing": [], "done": []}
     review_queue = []
     errors = []
@@ -203,14 +244,25 @@ def board_feed() -> dict:
         if tf["degraded"]:
             errors.append({"slug": project.slug,
                            "reason": tf["reason"]})
+        for err in tf.get("errors", []):
+            errors.append({"slug": project.slug, **err})
         for todo in tf["todos"]:
+            if not todo.get("valid", True) \
+                    or todo.get("status") not in lanes:
+                continue  # invalid todos surface as errors
             lanes[todo["status"]].append(
                 {**todo, "project": project.slug,
                  "project_name": project.name})
         pf = plans_feed(project)
-        for plan in pf["plans"]:
+        for bundle in pf.get("bundles", []):
+            plan = bundle.get("plan")
+            if plan is None:
+                continue  # plan-less bundle: no plan card
             plan_cards[plan["status_bucket"]].append(
-                {**plan, "project": project.slug,
+                {**plan, "bundle": bundle["id"],
+                 "bundle_kind": bundle["kind"],
+                 "feature": bundle.get("feature"),
+                 "project": project.slug,
                  "project_name": project.name})
         mf = mockups_feed(project, archived=False)
         if mf["degraded"]:
@@ -322,39 +374,27 @@ def entry_action(project, entry_id, body: dict) -> dict:
 
 
 def todo_action(project, body: dict) -> dict:
-    db = _require_registry(project)
+    """The server's one todo mutation: a status move on a
+    bundle todo FILE, through the same lib writer `wb todo
+    set` calls (lib.bundles.set_todo_status — one mutation
+    path; the server holds no file-writing logic of its
+    own). The retired registry-DB todo verbs are gone:
+    file todos are the store (§3.7)."""
+    m = project.manifest
+    if m.plans is None or not m.plans.is_dir():
+        raise ApiError(409, "project declares no plans dir "
+                            "— it has no bundle todos")
     verb = body.get("verb")
+    if verb != "set-status":
+        raise ApiError(400, f"unknown verb: {verb!r}")
+    if not body.get("id"):
+        raise ApiError(400, "set-status needs a todo id")
     try:
-        if verb == "add":
-            todo = reg.add_todo(
-                db, body.get("id"), body.get("title"),
-                actor="viewer", notes=body.get("notes"),
-                link_kind=body.get("link_kind"),
-                link_ref=body.get("link_ref"))
-        elif verb == "set-status":
-            todo = reg.set_todo_status(
-                db, body.get("id"), body.get("status"),
-                actor="viewer",
-                expect_version=body.get("expect_version"))
-        elif verb == "set":
-            todo = reg.set_todo_fields(
-                db, body.get("id"), body.get("fields") or {},
-                actor="viewer",
-                expect_version=body.get("expect_version"))
-        else:
-            raise ApiError(400, f"unknown verb: {verb!r}")
-    except ApiError:
-        raise
-    except reg.VersionConflict as e:
-        raise ApiError(409, str(e))
-    except reg.RegistryError as e:
+        todo = bundle_mod.set_todo_status(
+            m.plans, body["id"], body.get("status"),
+            note=body.get("note"))
+    except bundle_mod.BundleError as e:
         raise ApiError(400, str(e))
-    try:
-        export_mod.regenerate(db, project=project.slug)
-    except Exception as e:
-        raise ApiError(500, f"mutation landed but export "
-                            f"regeneration failed: {e}",
-                       mutated=True)
     return {"todo": todo}
 
 
@@ -464,6 +504,9 @@ class Handler(BaseHTTPRequestHandler):
                 if feed["degraded"]:
                     errors.append({"slug": project.slug,
                                    "reason": feed["reason"]})
+                for err in feed.get("errors", []):
+                    errors.append({"slug": project.slug,
+                                   **err})
                 for todo in feed["todos"]:
                     items.append({**todo,
                                   "project": project.slug,
