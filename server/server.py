@@ -41,7 +41,9 @@ sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 import config as cfgmod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
+from lib import home as home_mod  # noqa: E402
 from lib import messages as msg_mod  # noqa: E402
+from lib import worktrees as wt_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
 from lib import staleness  # noqa: E402
 from lib import sweep as sweep_mod  # noqa: E402
@@ -335,6 +337,27 @@ def message_cleanup(body: dict) -> dict:
             "captured_at": now_iso()}
 
 
+def home_feed() -> dict:
+    """GET /api/home (repo-home §4): one row per swept
+    project, from lib/home derivations."""
+    result = get_sweep()
+    feed = home_mod.home_feed(
+        result.projects,
+        stale_days=CFG["worktree_stale_days"])
+    feed["sweep_errors"] = result.errors
+    return feed
+
+
+def worktrees_feed(project) -> dict:
+    """GET /api/projects/<slug>/worktrees (repo-home §6):
+    the project's worktrees, derived read-only."""
+    result = wt_mod.list_worktrees(
+        project.root, plans_dir=project.manifest.plans,
+        stale_days=CFG["worktree_stale_days"])
+    return {"slug": project.slug, "name": project.name,
+            "captured_at": now_iso(), **result}
+
+
 def effective_settings() -> dict:
     """GET /api/settings/effective: the seam's resolved
     values, read-only (Settings → Workspace, spec §3).
@@ -591,6 +614,13 @@ class Handler(BaseHTTPRequestHandler):
                 "config_file": str(cfgmod.config_path()),
             })
         # -- repo-home additions (additive /api namespace) --
+        if parts == ["api", "home"]:
+            return self._send(200, home_feed())
+        if len(parts) == 4 and parts[0] == "api" \
+                and parts[1] == "projects" \
+                and parts[3] == "worktrees":
+            project = self._project_or_404(parts[2])
+            return self._send(200, worktrees_feed(project))
         if parts == ["api", "messages"]:
             try:
                 return self._send(200, messages_list(query))
