@@ -8,7 +8,11 @@
 // Presentation only — every value here is a lib
 // derivation (lib/worktrees.py, lib/active.py) carried on
 // the feed; nothing is computed in the client beyond the
-// grouping itself (lib/grouping.ts).
+// grouping itself (lib/grouping.ts). One opt-in exception:
+// the Overview drill-in passes `showChanges`, and the
+// expanded child then mounts the B2 Changes panel for its
+// own worktree (the panel owns its queries, like every
+// section-level component; Home does not opt in).
 
 import { useState } from "react";
 import { Button } from "../components/Button";
@@ -16,6 +20,7 @@ import type { ActiveResolution, WorktreeItem } from "../lib/api";
 import { formatDate, formatRelative } from "../lib/format";
 import { activeSourceLabel, planBucketLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";
+import { ChangesPanel } from "./plans/ChangesPanel";
 import { metaStyle } from "./shared";
 
 const pillBase: React.CSSProperties = {
@@ -167,8 +172,20 @@ export function WorktreeMeta({ worktree }: { worktree: WorktreeItem }) {
 
 /** One linked-worktree child row (grouped under its repo,
  * §19). Expandable to the full derivation: path, base,
- * attribution, and its own active plan (§17). */
-export function WorktreeChild({ slug, worktree }: { slug: string; worktree: WorktreeItem }) {
+ * attribution, and its own active plan (§17). With
+ * `showChanges` (the Overview drill-in) the expansion also
+ * mounts the worktree's Changes panel (§18) — the panel
+ * takes the worktree from this row, branch falling back to
+ * path exactly as the B2 picker derives it. */
+export function WorktreeChild({
+  slug,
+  worktree,
+  showChanges = false,
+}: {
+  slug: string;
+  worktree: WorktreeItem;
+  showChanges?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <li
@@ -197,45 +214,52 @@ export function WorktreeChild({ slug, worktree }: { slug: string; worktree: Work
         <ActivePlanLine slug={slug} active={worktree.active} />
       </div>
       {open ? (
-        <dl
-          style={{
-            display: "grid",
-            gridTemplateColumns: "120px 1fr",
-            gap: "var(--wb-space-4) var(--wb-space-16)",
-            margin: "var(--wb-space-8) 0 0 var(--wb-space-24)",
-            fontSize: "var(--wb-font-size-sm)",
-          }}
-        >
-          <dt style={metaStyle}>Path</dt>
-          <dd className="mono" style={{ margin: 0 }}>
-            {worktree.path}
-          </dd>
-          <dt style={metaStyle}>Base</dt>
-          <dd style={{ margin: 0 }}>{worktree.base ?? "—"}</dd>
-          <dt style={metaStyle}>Attribution</dt>
-          <dd style={{ margin: 0 }}>
-            {worktree.attribution.label ?? "—"}
-            {worktree.attribution.plan
-              ? ` · plan ${worktree.attribution.plan}`
-              : ` · ${worktree.attribution.source}`}
-          </dd>
-          {worktree.active && worktree.active.also_in_progress.length > 0 ? (
-            <>
-              <dt style={metaStyle}>Also in progress</dt>
-              <dd style={{ margin: 0 }}>
-                {worktree.active.also_in_progress
-                  .map((a) => a.plan?.title ?? a.bundle.id)
-                  .join(" · ")}
-              </dd>
-            </>
+        <>
+          <dl
+            style={{
+              display: "grid",
+              gridTemplateColumns: "120px 1fr",
+              gap: "var(--wb-space-4) var(--wb-space-16)",
+              margin: "var(--wb-space-8) 0 0 var(--wb-space-24)",
+              fontSize: "var(--wb-font-size-sm)",
+            }}
+          >
+            <dt style={metaStyle}>Path</dt>
+            <dd className="mono" style={{ margin: 0 }}>
+              {worktree.path}
+            </dd>
+            <dt style={metaStyle}>Base</dt>
+            <dd style={{ margin: 0 }}>{worktree.base ?? "—"}</dd>
+            <dt style={metaStyle}>Attribution</dt>
+            <dd style={{ margin: 0 }}>
+              {worktree.attribution.label ?? "—"}
+              {worktree.attribution.plan
+                ? ` · plan ${worktree.attribution.plan}`
+                : ` · ${worktree.attribution.source}`}
+            </dd>
+            {worktree.active && worktree.active.also_in_progress.length > 0 ? (
+              <>
+                <dt style={metaStyle}>Also in progress</dt>
+                <dd style={{ margin: 0 }}>
+                  {worktree.active.also_in_progress
+                    .map((a) => a.plan?.title ?? a.bundle.id)
+                    .join(" · ")}
+                </dd>
+              </>
+            ) : null}
+            {worktree.active?.note ? (
+              <>
+                <dt style={metaStyle}>Note</dt>
+                <dd style={{ margin: 0, color: "var(--wb-danger)" }}>{worktree.active.note}</dd>
+              </>
+            ) : null}
+          </dl>
+          {showChanges ? (
+            <div style={{ margin: "var(--wb-space-16) 0 var(--wb-space-8) var(--wb-space-24)" }}>
+              <ChangesPanel slug={slug} worktree={worktree.branch ?? worktree.path} />
+            </div>
           ) : null}
-          {worktree.active?.note ? (
-            <>
-              <dt style={metaStyle}>Note</dt>
-              <dd style={{ margin: 0, color: "var(--wb-danger)" }}>{worktree.active.note}</dd>
-            </>
-          ) : null}
-        </dl>
+        </>
       ) : null}
     </li>
   );
@@ -244,7 +268,15 @@ export function WorktreeChild({ slug, worktree }: { slug: string; worktree: Work
 /** The nested children of a repo node (§19): the linked
  * worktrees, indented under the main checkout. Renders
  * nothing when there are none — no empty group shell. */
-export function WorktreeChildren({ slug, worktrees }: { slug: string; worktrees: WorktreeItem[] }) {
+export function WorktreeChildren({
+  slug,
+  worktrees,
+  showChanges = false,
+}: {
+  slug: string;
+  worktrees: WorktreeItem[];
+  showChanges?: boolean;
+}) {
   const children = worktrees.filter((w) => !w.is_main);
   if (children.length === 0) return null;
   return (
@@ -257,7 +289,12 @@ export function WorktreeChildren({ slug, worktrees }: { slug: string; worktrees:
       }}
     >
       {children.map((worktree) => (
-        <WorktreeChild key={worktree.path} slug={slug} worktree={worktree} />
+        <WorktreeChild
+          key={worktree.path}
+          slug={slug}
+          worktree={worktree}
+          showChanges={showChanges}
+        />
       ))}
     </ul>
   );
