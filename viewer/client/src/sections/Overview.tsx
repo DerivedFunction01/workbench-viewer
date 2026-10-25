@@ -7,9 +7,16 @@
 // worktrees nest under it — no shell when there are
 // none), and the todos/board strip renders the viewer's
 // own derivations by reference (links into the sections),
-// never re-implemented.
+// never re-implemented. Each worktree's drill-in — the
+// main checkout's toggle here, a linked worktree's
+// expansion in the grouped children — mounts the B2
+// Changes panel for that worktree (§18); the plan
+// reader's Changes tab stays bundle-anchored, a different
+// anchor over the same panel.
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import {
   type ActiveResolution,
@@ -24,6 +31,7 @@ import { formatDate, formatRelative } from "../lib/format";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";
 import { AnchoredComment } from "./inbox/AnchoredComment";
+import { ChangesPanel } from "./plans/ChangesPanel";
 import {
   EmptyWell,
   ErrorWell,
@@ -152,6 +160,7 @@ function WorktreesCard({
   payload: WorktreesPayload | null;
   fallback: HomeRow | null;
 }) {
+  const [mainChangesOpen, setMainChangesOpen] = useState(false);
   const worktrees = payload?.worktrees ?? fallback?.worktrees ?? [];
   const available = payload ? payload.available : fallback != null;
   const main = worktrees.find((w) => w.is_main) ?? null;
@@ -185,11 +194,30 @@ function WorktreesCard({
               <div className="mono" style={{ ...metaStyle, marginTop: "var(--wb-space-4)" }}>
                 {main.path}
               </div>
+              {/* The main checkout's drill-in: its Changes
+                  panel (§18), behind the same kind of toggle
+                  the linked children expand with. */}
+              <div style={{ marginTop: "var(--wb-space-8)" }}>
+                <Button
+                  variant="ghost"
+                  ariaLabel={
+                    mainChangesOpen ? "Hide main checkout changes" : "Show main checkout changes"
+                  }
+                  onClick={() => setMainChangesOpen((v) => !v)}
+                >
+                  <span aria-hidden="true">{mainChangesOpen ? "▾" : "▸"}</span> Changes
+                </Button>
+                {mainChangesOpen ? (
+                  <div style={{ marginTop: "var(--wb-space-12)" }}>
+                    <ChangesPanel slug={slug} worktree={main.branch ?? main.path} />
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
           {/* §19: linked worktrees nest under the main
               checkout; nothing renders when there are none. */}
-          <WorktreeChildren slug={slug} worktrees={worktrees} />
+          <WorktreeChildren slug={slug} worktrees={worktrees} showChanges />
         </>
       )}
     </Card>

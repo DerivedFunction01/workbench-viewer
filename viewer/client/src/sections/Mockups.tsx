@@ -19,6 +19,7 @@ import { Toggle } from "../components/Toggle";
 import { TriageRow } from "../components/TriageRow";
 import { api } from "../lib/api";
 import { kindLabel, ruledStatusLabel } from "../lib/labels";
+import { AnchoredComment } from "./inbox/AnchoredComment";
 import {
   DEFAULT_FILTERS,
   EntryBadges,
@@ -118,6 +119,19 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
             queryClient.invalidateQueries({ queryKey: ["mockups", slug] });
           }}
         />
+        {/* D7's second compose surface: a comment box
+            anchored to the open entry, under its detail
+            sheet (the review Disposition comment inside the
+            sheet is the registry review log — a different
+            record; this one is a viewer message). */}
+        <div style={{ marginTop: "var(--wb-space-16)" }}>
+          <AnchoredComment
+            slug={slug}
+            projectName={projectName}
+            anchorType="entry"
+            anchorRef={selectedId}
+          />
+        </div>
       </section>
     );
   }
