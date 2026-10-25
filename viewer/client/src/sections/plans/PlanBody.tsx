@@ -78,7 +78,7 @@ export function MarkdownBlock({ text, sectionHeading }: { text: string; sectionH
   }, [prepared]);
   return (
     // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized immediately above — the one place plan HTML enters the DOM
-    <div style={proseStyle} dangerouslySetInnerHTML={{ __html: html }} />
+    <div className="wb-prose" style={proseStyle} dangerouslySetInnerHTML={{ __html: html }} />
   );
 }
 

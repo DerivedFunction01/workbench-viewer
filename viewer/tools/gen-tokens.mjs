@@ -237,6 +237,12 @@ const indexCss =
   "\nbody {\n  font-family: var(--wb-font-ui);\n  background: var(--wb-surface-canvas);\n  color: var(--wb-content-primary);\n}\n" +
   '\n.num {\n  font-feature-settings: "tnum";\n}\n' +
   '\n.mono {\n  font-family: var(--wb-font-mono);\n  font-feature-settings: "zero";\n}\n' +
+  // Task lists (plan syntax standard): marked already emits
+  // disabled checkbox inputs for - [ ] / - [x] items; the
+  // prose scope only drops the redundant bullet and styles
+  // the box from tokens.
+  '\n.wb-prose li:has(> input[type="checkbox"]) {\n  list-style: none;\n}\n' +
+  '\n.wb-prose li > input[type="checkbox"] {\n  accent-color: var(--wb-accent);\n  margin-right: var(--wb-space-8);\n  vertical-align: -0.12em;\n}\n' +
   "\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n" +
   densityCss;
 
