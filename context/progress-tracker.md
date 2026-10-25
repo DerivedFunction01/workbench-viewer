@@ -42,9 +42,22 @@ change.
   and provably non-mutating, validator registry with planted
   violations, manifest subset + sweep mechanics.
 
+- Step 3: plan parser DONE — 11 tests green (suite total
+  56): lossless partition proven over the whole real corpus
+  (30+ files, header + section raws reconstruct the source
+  exactly), header fields, both step shapes (numbered
+  `files:`/`verify:`/`done when:` items — incl. subplan
+  09's two step groups, 10 steps; `### Step N —` headings
+  in the 2026-10-23 plans), numbered non-step lists never
+  misparsed (bootstrap plan's open questions), status
+  buckets for the board, non-conforming plans flagged and
+  returned whole. Honest note: the live corpus has NO
+  mermaid fence yet — that path is proven on a
+  corpus-shaped fixture; a real fence will parse unchanged.
+
 ## In Progress
 
-- Step 3: plan parser against the real corpus.
+- Step 4: server + ops (systemd, watchdog).
 
 ## Held (the owner's direction, 2026-10-25 — not a failure)
 
