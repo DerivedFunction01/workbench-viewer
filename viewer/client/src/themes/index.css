@@ -1,6 +1,7 @@
 /* GENERATED from tokens/tokens.json by viewer/tools/gen-tokens.mjs — do not edit by hand. */
 @import "tailwindcss";
 @import "./fonts.css";
+@import "./katex.css";
 @import "./olive.css";
 @import "./teal.css";
 
@@ -102,6 +103,16 @@ body {
 .mono {
   font-family: var(--wb-font-mono);
   font-feature-settings: "zero";
+}
+
+.wb-prose li:has(> input[type="checkbox"]) {
+  list-style: none;
+}
+
+.wb-prose li > input[type="checkbox"] {
+  accent-color: var(--wb-accent);
+  margin-right: var(--wb-space-8);
+  vertical-align: -0.12em;
 }
 
 @media (prefers-reduced-motion: reduce) {
