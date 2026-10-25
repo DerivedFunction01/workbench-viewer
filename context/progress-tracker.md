@@ -362,3 +362,9 @@ change.
   t-01M5TNR7V99D3P2ENBA85N0W2F remains OPEN in
   `todo` status for release N+1 (Step 8); no alias,
   fallback, or inventory entry was removed.
+- API unification MERGED to main 2026-10-25 (merge
+  `71b4a40`, release N): gate green on the merged tree,
+  272 tests (257 + the route-unification suite). Only
+  the tracker conflicted; both sides' entries kept.
+  Release sequence continues: restart, alias audit,
+  checkpoint publish, canonical audit.
