@@ -42,11 +42,32 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 const SECTION_LABELS: Record<string, string> = {
+  overview: "Overview",
   mockups: "Mockups",
   plans: "Plans",
   todos: "Todos",
   board: "Board",
   settings: "Settings",
+  inbox: "Inbox",
+};
+
+const MESSAGE_STATE_LABELS: Record<string, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  acknowledged: "Acknowledged",
+  done: "Done",
+  archived: "Archived",
+};
+
+/** §17.2 provenance: how a worktree's active plan was
+ * resolved. `declared` is a ruling; the rest are derived
+ * signals, and recency names its own weakness. */
+const ACTIVE_SOURCE_LABELS: Record<string, string> = {
+  declared: "Declared",
+  branch: "By branch",
+  unique: "Only one in progress",
+  recency: "By recency",
+  none: "No active plan",
 };
 
 function humanize(raw: string): string {
@@ -66,6 +87,10 @@ export const todoStatusLabel = (raw: string | null | undefined) => from(TODO_STA
 export const planBucketLabel = (raw: string | null | undefined) => from(PLAN_BUCKET_LABELS, raw);
 export const kindLabel = (raw: string | null | undefined) => from(KIND_LABELS, raw);
 export const sectionLabel = (raw: string | null | undefined) => from(SECTION_LABELS, raw);
+export const messageStateLabel = (raw: string | null | undefined) =>
+  from(MESSAGE_STATE_LABELS, raw);
+export const activeSourceLabel = (raw: string | null | undefined) =>
+  from(ACTIVE_SOURCE_LABELS, raw);
 
 /** Human label for a project-section availability state. */
 export function availabilityLabel(available: boolean, degraded: boolean): string {

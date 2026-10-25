@@ -5,16 +5,28 @@
 // the Settings route ONLY (repo-home spec §3, the owner's
 // ruling): no toggles, no gear menus in this chrome.
 //
-// Routing is hash-based (lib/routing): #/ is project select,
-// #/p/<slug>/<section>[/<item>] the per-project sections,
-// #/board the cross-project board, #/settings Settings.
+// Routing is hash-based (lib/routing): #/ is the workspace
+// home (repo-home §4), #/p/<slug>/<section>[/<item>] the
+// per-project sections (Overview first, repo-home §2),
+// #/board the cross-project board, #/inbox the message
+// inbox, #/settings Settings. The rail groups swept
+// projects by the repo -> worktree relation (§19): a
+// project that is another repo's linked worktree nests
+// under that repo instead of listing as a flat sibling.
 // Every section's queries are scoped by the selected
 // project; switching project re-scopes them all.
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { api, type BoardPayload, type MockupsFeed, type ProjectSummary } from "./lib/api";
+import {
+  api,
+  type BoardPayload,
+  type HomePayload,
+  type MockupsFeed,
+  type ProjectSummary,
+} from "./lib/api";
 import { formatUptime } from "./lib/format";
+import { groupProjects } from "./lib/grouping";
 import { sectionLabel } from "./lib/labels";
 import type { Appearance } from "./lib/preferences";
 import { applyAppearance, loadAppearance, saveAppearance } from "./lib/preferences";
@@ -28,7 +40,9 @@ import {
   settingsHref,
 } from "./lib/routing";
 import { BoardSection } from "./sections/Board";
+import { HomeSection } from "./sections/Home";
 import { MockupsSection } from "./sections/Mockups";
+import { OverviewSection } from "./sections/Overview";
 import { PlansSection } from "./sections/Plans";
 import { SettingsSection } from "./sections/Settings";
 import { TodosSection } from "./sections/Todos";
@@ -105,6 +119,15 @@ export function App() {
     queryKey: ["board"],
     queryFn: () => api.getBoard({}),
   });
+  const homeQuery = useQuery({
+    queryKey: ["home"],
+    queryFn: () => api.getHome({}),
+    refetchInterval: 30000,
+  });
+  const homeRows = useMemo(
+    () => (homeQuery.data?.payload as unknown as HomePayload | null)?.projects ?? null,
+    [homeQuery.data],
+  );
   const configQuery = useQuery({
     queryKey: ["config"],
     queryFn: () => api.getConfig({}),
@@ -116,6 +139,7 @@ export function App() {
     [projectsQuery.data],
   );
   const health = healthQuery.data?.payload ?? null;
+  const projectGroups = useMemo(() => groupProjects(projects, homeRows), [projects, homeRows]);
   const serverOk = healthQuery.data?.status === 200 && health?.ok === true;
   const board = boardQuery.data?.payload as unknown as BoardPayload | null;
 
@@ -140,13 +164,14 @@ export function App() {
 
   const breadcrumb = (() => {
     if (route.view === "settings") return "Settings";
+    if (route.view === "inbox") return "Inbox";
     if (route.view === "board-all") return "Board · all projects";
     if (route.view === "section") {
       const name = selected?.name ?? route.slug;
       const section = sectionLabel(route.section);
       return route.item ? `${name} / ${section} / ${route.item}` : `${name} / ${section}`;
     }
-    return "Projects";
+    return "Workspace";
   })();
 
   const navBadge = (section: SectionId): number | null => {
@@ -201,20 +226,13 @@ export function App() {
             </p>
           ) : (
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {projects.map((project) => {
+              {projectGroups.map(({ project, children }) => {
                 const status = projectStatus(project);
                 const active = routeSlugValue === project.slug;
                 return (
                   <li key={`${project.slug}:${project.root}`}>
                     <a
-                      href={sectionHref(
-                        project.slug,
-                        project.sections.mockups
-                          ? "mockups"
-                          : project.sections.plans
-                            ? "plans"
-                            : "todos",
-                      )}
+                      href={sectionHref(project.slug, "overview")}
                       style={railLinkStyle(active)}
                       aria-current={active ? "page" : undefined}
                     >
@@ -233,6 +251,42 @@ export function App() {
                         }}
                       />
                     </a>
+                    {/* §19 grouping: swept projects that are
+                        this repo's linked worktrees nest
+                        under it instead of listing flat. */}
+                    {children.length > 0 ? (
+                      <ul
+                        style={{
+                          listStyle: "none",
+                          margin: "0 0 var(--wb-space-8) var(--wb-space-12)",
+                          padding: "0 0 0 var(--wb-space-8)",
+                          borderLeft: "1px solid var(--wb-border-default)",
+                        }}
+                      >
+                        {children.map((child) => {
+                          const childActive = routeSlugValue === child.slug;
+                          return (
+                            <li key={`${child.slug}:${child.root}`}>
+                              <a
+                                href={sectionHref(child.slug, "overview")}
+                                style={{
+                                  ...railLinkStyle(childActive),
+                                  minHeight: "32px",
+                                }}
+                                aria-current={childActive ? "page" : undefined}
+                              >
+                                <span
+                                  className="mono"
+                                  style={{ fontSize: "var(--wb-font-size-xs)" }}
+                                >
+                                  {child.root.split("/").pop()}
+                                </span>
+                              </a>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
                   </li>
                 );
               })}
@@ -256,26 +310,28 @@ export function App() {
           </div>
           {selected ? (
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {(["mockups", "plans", "todos", "board"] as SectionId[]).map((section) => {
-                const active = route.view === "section" && route.section === section;
-                const badge = navBadge(section);
-                return (
-                  <li key={section}>
-                    <a
-                      href={sectionHref(selected.slug, section)}
-                      style={railLinkStyle(active)}
-                      aria-current={active ? "page" : undefined}
-                    >
-                      <span>{sectionLabel(section)}</span>
-                      {badge != null && badge > 0 ? (
-                        <span style={badgeStyle} className="num">
-                          {badge}
-                        </span>
-                      ) : null}
-                    </a>
-                  </li>
-                );
-              })}
+              {(["overview", "mockups", "plans", "todos", "board"] as SectionId[]).map(
+                (section) => {
+                  const active = route.view === "section" && route.section === section;
+                  const badge = navBadge(section);
+                  return (
+                    <li key={section}>
+                      <a
+                        href={sectionHref(selected.slug, section)}
+                        style={railLinkStyle(active)}
+                        aria-current={active ? "page" : undefined}
+                      >
+                        <span>{sectionLabel(section)}</span>
+                        {badge != null && badge > 0 ? (
+                          <span style={badgeStyle} className="num">
+                            {badge}
+                          </span>
+                        ) : null}
+                      </a>
+                    </li>
+                  );
+                },
+              )}
             </ul>
           ) : (
             <a href={boardAllHref()} style={railLinkStyle(route.view === "board-all")}>
@@ -369,6 +425,8 @@ export function App() {
                   Back to projects
                 </a>
               </p>
+            ) : route.section === "overview" ? (
+              <OverviewSection slug={route.slug} projectName={selected?.name ?? route.slug} />
             ) : route.section === "mockups" ? (
               <MockupsSection slug={route.slug} projectName={selected?.name ?? route.slug} />
             ) : route.section === "plans" ? (
@@ -383,72 +441,10 @@ export function App() {
               <BoardSection slug={route.slug} projectName={selected?.name ?? route.slug} />
             )
           ) : (
-            <HomeView projects={projects} loading={projectsQuery.isPending} />
+            <HomeSection />
           )}
         </main>
       </div>
     </div>
-  );
-}
-
-function HomeView({ projects, loading }: { projects: ProjectSummary[]; loading: boolean }) {
-  return (
-    <section>
-      <h1
-        style={{
-          fontSize: "var(--wb-font-size-xl)",
-          lineHeight: "var(--wb-line-height-xl)",
-          fontWeight: 600,
-          letterSpacing: "-0.011em",
-          margin: "0 0 var(--wb-space-16)",
-        }}
-      >
-        Projects
-      </h1>
-      {loading ? (
-        <p style={{ color: "var(--wb-content-muted)" }}>Loading projects…</p>
-      ) : projects.length === 0 ? (
-        <p style={{ color: "var(--wb-content-secondary)" }}>
-          No projects in the sweep — a project joins by carrying a workbench.yaml manifest.
-        </p>
-      ) : (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {projects.map((project) => (
-            <li
-              key={`${project.slug}:${project.root}`}
-              style={{ borderBottom: "1px solid var(--wb-border-default)" }}
-            >
-              <a
-                href={sectionHref(
-                  project.slug,
-                  project.sections.mockups ? "mockups" : project.sections.plans ? "plans" : "todos",
-                )}
-                style={{
-                  display: "flex",
-                  gap: "var(--wb-space-12)",
-                  alignItems: "baseline",
-                  padding: "var(--wb-space-12) 0",
-                  color: "var(--wb-content-primary)",
-                  textDecoration: "none",
-                }}
-              >
-                <span style={{ fontWeight: 600 }}>{project.name}</span>
-                <span className="mono" style={{ color: "var(--wb-content-muted)" }}>
-                  {project.slug}
-                </span>
-                <span style={{ color: "var(--wb-content-secondary)" }}>
-                  {project.sections.mockups ? "Mockups " : ""}
-                  {project.sections.plans ? "Plans " : ""}
-                  {project.sections.todos ? "Todos" : ""}
-                  {!project.sections.mockups && !project.sections.plans && !project.sections.todos
-                    ? "Manifest only — no sections set up"
-                    : ""}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
