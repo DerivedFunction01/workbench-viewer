@@ -223,6 +223,10 @@ const indexCss =
   HEADER +
   '@import "tailwindcss";\n' +
   '@import "./fonts.css";\n' +
+  // katex.css is vendored by hand (see its header), not
+  // generated — the import is emitted here so the themes
+  // bundle carries the math styles beside the fonts.
+  '@import "./katex.css";\n' +
   palettes.map((p) => '@import "./' + p + '.css";').join("\n") +
   "\n\n:root {\n" +
   declarations([...primitiveDecls, ...chartDecls]) +

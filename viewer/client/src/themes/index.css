@@ -1,6 +1,7 @@
 /* GENERATED from tokens/tokens.json by viewer/tools/gen-tokens.mjs — do not edit by hand. */
 @import "tailwindcss";
 @import "./fonts.css";
+@import "./katex.css";
 @import "./olive.css";
 @import "./teal.css";
 

@@ -8,12 +8,17 @@
 // hole (founding Step 6). Tables inside a section's
 // markdown gain their structural anchor (plans/anchors.ts)
 // before sanitizing; DOMPurify keeps data-* attributes.
+// Math ($...$ / $$...$$, plan syntax standard) follows the
+// mermaid arrangement: extracted before marked runs
+// (plans/math.ts), rendered through the LAZY KaTeX chunk,
+// and a span that fails keeps its source text.
 
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useId, useMemo, useState } from "react";
 import type { PlanBlock, PlanStep } from "../../lib/api";
 import { anchor } from "./anchors";
+import { extractMath, mathPlaceholderRe, renderMath } from "./math";
 
 const proseStyle: React.CSSProperties = {
   fontSize: "var(--wb-font-size-base)",
@@ -34,15 +39,43 @@ const codeStyle: React.CSSProperties = {
 };
 
 export function MarkdownBlock({ text, sectionHeading }: { text: string; sectionHeading: string }) {
-  const html = useMemo(() => {
-    const raw = marked.parse(text, { async: false }) as string;
+  const prepared = useMemo(() => {
+    const extracted = extractMath(text);
+    const raw = marked.parse(extracted.text, { async: false }) as string;
     let tableIndex = 0;
     const anchored = raw.replace(/<table>/g, () => {
       tableIndex += 1;
       return `<table data-anchor="${anchor.table(sectionHeading, tableIndex)}">`;
     });
-    return DOMPurify.sanitize(anchored);
+    return { html: DOMPurify.sanitize(anchored), spans: extracted.spans };
   }, [text, sectionHeading]);
+  const [html, setHtml] = useState(prepared.html);
+  useEffect(() => {
+    setHtml(prepared.html);
+    if (prepared.spans.length === 0) return;
+    let live = true;
+    (async () => {
+      let out = prepared.html;
+      for (let i = 0; i < prepared.spans.length; i++) {
+        const span = prepared.spans[i] as (typeof prepared.spans)[number];
+        try {
+          const fragment = DOMPurify.sanitize(await renderMath(span.tex, span.display));
+          // If sanitizing ever stripped the rendered math,
+          // keep the placeholder (its text is the source) —
+          // a visible formula beats a hole.
+          if (!fragment.includes('class="katex')) continue;
+          out = out.replace(mathPlaceholderRe(i), () => fragment);
+        } catch {
+          // Unparseable math keeps its source text, the
+          // degradation the syntax standard specifies.
+        }
+      }
+      if (live) setHtml(out);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [prepared]);
   return (
     // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized immediately above — the one place plan HTML enters the DOM
     <div style={proseStyle} dangerouslySetInnerHTML={{ __html: html }} />
