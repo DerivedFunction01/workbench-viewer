@@ -39,6 +39,7 @@ sys.path.insert(0, str(REPO_ROOT))  # for lib/
 sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 
 import config as cfgmod  # noqa: E402
+from lib import active as active_mod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
@@ -485,10 +486,19 @@ def home_feed() -> dict:
 
 def worktrees_feed(project) -> dict:
     """GET /api/projects/<slug>/worktrees (repo-home §6):
-    the project's worktrees, derived read-only."""
+    the project's worktrees, derived read-only, each with
+    its active-plan resolution attached (§17 — resolved in
+    lib from that worktree's own .plans/)."""
     result = wt_mod.list_worktrees(
         project.root, plans_dir=project.manifest.plans,
         stale_days=CFG["worktree_stale_days"])
+    if result["available"]:
+        actives = active_mod.active_by_worktree(
+            project.root, project.manifest.plans,
+            result["worktrees"])
+        by_path = {a["path"]: a["active"] for a in actives}
+        for w in result["worktrees"]:
+            w["active"] = by_path.get(w["path"])
     return {"slug": project.slug, "name": project.name,
             "captured_at": now_iso(), **result}
 

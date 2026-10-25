@@ -25,6 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from lib import active as active_mod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
@@ -475,6 +476,42 @@ def cmd_todo_import_db(args):
     return 0
 
 
+def cmd_activate(args):
+    """Active-plan declaration (repo-home spec §17.2 step
+    1): set/clear/show `.plans/active.yaml` in the resolved
+    project's plans dir. Run inside a worktree, this is
+    THAT worktree's declaration — activeness is
+    per-worktree and the plans dir resolves from the cwd's
+    own workbench.yaml."""
+    ctx = PlansCtx(args)
+    if args.clear:
+        _print(active_mod.clear_active(ctx.plans_dir))
+        return 0
+    if args.bundle:
+        result = active_mod.set_active(
+            ctx.plans_dir, args.bundle, plan=args.plan,
+            since=args.since)
+        _print(result)
+        return 0
+    branch = None
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["git", "-C", str(ctx.root), "rev-parse",
+             "--abbrev-ref", "HEAD"], capture_output=True,
+            text=True, timeout=5)
+        name = out.stdout.strip()
+        branch = name if name and name != "HEAD" else None
+    except Exception:
+        branch = None
+    resolution = active_mod.resolve_active(
+        ctx.plans_dir, branch=branch)
+    resolution["branch"] = branch
+    resolution["plans_dir"] = str(ctx.plans_dir)
+    _print(resolution)
+    return 0
+
+
 def cmd_print_schedule(args):
     print("# Staleness check for one project — run by hand or")
     print("# hand this definition to the platform scheduler.")
@@ -647,6 +684,23 @@ def build_parser():
                     help="bundle date prefix (default: today)")
     it.set_defaults(fn=cmd_todo_import_db)
 
+    sp = sub.add_parser(
+        "activate",
+        help="active-plan declaration for this worktree "
+             "(repo-home spec §17): set, clear, or show")
+    sp.add_argument("bundle", nargs="?",
+                    help="bundle id or slug to declare "
+                         "active (omit to show the current "
+                         "resolution)")
+    sp.add_argument("--plan",
+                    help="plan path within the bundle "
+                         "(default: the bundle's plan)")
+    sp.add_argument("--since",
+                    help="declaration date (default: today)")
+    sp.add_argument("--clear", action="store_true",
+                    help="remove the declaration")
+    sp.set_defaults(fn=cmd_activate)
+
     sub.add_parser("print-schedule").set_defaults(
         fn=cmd_print_schedule)
     return p
@@ -660,6 +714,9 @@ def main(argv=None) -> int:
         print(f"wb: refused: {e}", file=sys.stderr)
         return 2
     except bundle_mod.BundleError as e:
+        print(f"wb: refused: {e}", file=sys.stderr)
+        return 2
+    except active_mod.ActiveError as e:
         print(f"wb: refused: {e}", file=sys.stderr)
         return 2
     except files_mod.FileError_ as e:

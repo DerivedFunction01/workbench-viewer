@@ -2,16 +2,24 @@
 
 One row per swept project, assembled from the derivations
 that already exist — plans via the house parser, todos via
-the registry, triage/stale via export + staleness, git via
-lib/worktrees — each section contained per project: a
-locked registry or a broken repo degrades only its own
-fields (`degraded` + `reasons`), never the feed.
+the bundle parser, triage/stale via export + staleness,
+git via lib/worktrees, active plans via lib/active (§17)
+— each section contained per project: a locked registry
+or a broken repo degrades only its own fields (`degraded`
++ `reasons`), never the feed.
 
-Todo counts read the registry todos table, which is what
-exists today. SEAM (live-work-tracking spec §3.7): when
-Subplan 07 lands bundle file todos, the todo derivation
-switches to the bundle parser behind this same row shape —
-the counts contract here does not change.
+Todo counts read BUNDLE todo files (live-work-tracking
+spec §3.7: file todos supersede the registry DB), behind
+this same row shape. The registry table is read ONLY as
+the §3.7 fallback — a project with DB todos and no file
+todos shows its DB counts until imported; the moment
+file todos exist they are the source. (This closes the
+seam this module carried while Subplan 07 was landing.)
+
+Each worktree entry carries its own active-plan
+resolution (§17: per-worktree, from that worktree's own
+.plans/), and the row's `showcase` is the main worktree's
+resolution — the Overview's pinned primary.
 
 Sort (§4): projects with an in-progress plan first, then
 most recent activity, then name. Activity = the latest of
@@ -21,10 +29,12 @@ commit.
 
 from datetime import datetime, timezone
 
+from . import active as active_mod
 from . import export as export_mod
 from . import registry as reg
 from . import staleness
 from . import worktrees as wt_mod
+from .plans import bundles as bundle_parser
 from .plans import parser as plan_parser
 from .util import now_iso, parse_iso
 
@@ -78,10 +88,38 @@ def _plans_block(project):
 
 
 def _todos_block(project):
+    """Counts from bundle todo FILES (§3.7), with the
+    registry DB as the fallback for a project that has DB
+    todos and no file todos yet. Same precedence as the
+    server's todos feed — one read model, two surfaces."""
     m = project.manifest
+    if m.plans is not None and m.plans.is_dir():
+        file_todos = []
+        for b in bundle_parser.list_bundles(m.plans):
+            file_todos.extend(b["todos"])
+        if file_todos:
+            counts = {}
+            activity = None
+            total = 0
+            for t in file_todos:
+                if not t["valid"] or not t["status"]:
+                    continue
+                counts[t["status"]] = counts.get(
+                    t["status"], 0) + 1
+                total += 1
+                if t.get("updated"):
+                    ts = parse_iso(t["updated"])
+                    if ts.tzinfo is None:
+                        ts = ts.replace(
+                            tzinfo=timezone.utc)
+                    if activity is None or ts > activity:
+                        activity = ts
+            return {"available": True, "counts": counts,
+                    "total": total,
+                    "source": "files"}, activity
     if m.registry is None or not m.registry.is_file():
         return {"available": False, "counts": {},
-                "total": 0}, None
+                "total": 0, "source": "files"}, None
     todos = reg.list_todos(m.registry)
     counts = {}
     activity = None
@@ -92,7 +130,8 @@ def _todos_block(project):
             if activity is None or ts > activity:
                 activity = ts
     return {"available": True, "counts": counts,
-            "total": len(todos)}, activity
+            "total": len(todos),
+            "source": "db-fallback"}, activity
 
 
 def _review_block(project):
@@ -155,15 +194,48 @@ def project_row(project, *, stale_days=14, now=None) -> dict:
         row["degraded"] = True
         row["reasons"].append(f"git: {str(e)[:160]}")
     row["git"] = git
+    # Active-plan resolution per worktree (§17), contained
+    # like every other block: a broken .plans/ in one
+    # worktree degrades only that worktree's `active`.
+    try:
+        actives = active_mod.active_by_worktree(
+            project.root, project.manifest.plans, worktrees)
+        by_path = {a["path"]: a["active"] for a in actives}
+        for w in worktrees:
+            w["active"] = by_path.get(w["path"])
+    except Exception as e:
+        row["degraded"] = True
+        row["reasons"].append(f"active: {str(e)[:160]}")
+        for w in worktrees:
+            w["active"] = None
     row["worktrees"] = worktrees
     row["has_extra_worktrees"] = any(
         not w["is_main"] for w in worktrees)
+    main_wt = next((w for w in worktrees if w["is_main"]),
+                   None)
+    if main_wt is not None:
+        row["showcase"] = main_wt["active"]
+    elif project.manifest.plans is not None:
+        # No git worktree list (not a repo): the checkout
+        # itself is the default worktree (§17.1) — resolve
+        # its .plans/ directly so the showcase still pins.
+        try:
+            row["showcase"] = active_mod.resolve_active(
+                project.manifest.plans, branch=None)
+        except Exception as e:
+            row["degraded"] = True
+            row["reasons"].append(
+                f"active: {str(e)[:160]}")
+            row["showcase"] = None
+    else:
+        row["showcase"] = None
 
     contain(lambda: _plans_block(project), "plans",
             {"available": False, "counts": {},
              "in_progress": None, "total": 0})
     contain(lambda: _todos_block(project), "todos",
-            {"available": False, "counts": {}, "total": 0})
+            {"available": False, "counts": {}, "total": 0,
+             "source": "files"})
     try:
         row["review"] = _review_block(project)
     except Exception as e:
