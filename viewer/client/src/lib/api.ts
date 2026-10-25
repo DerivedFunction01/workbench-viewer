@@ -94,6 +94,7 @@ export interface PlanSummary {
   status_bucket: string;
   conforming: boolean;
   step_count: number;
+  open_questions_count: number;
   mermaid_count: number;
   archived: boolean;
   modified: number;
@@ -138,6 +139,15 @@ export interface PlanSection {
   blocks: PlanBlock[];
   is_rulings: boolean;
   is_steps: boolean;
+  is_open_questions: boolean;
+  is_critical_files: boolean;
+}
+
+/** One task-list item of a plan's `## Open questions`
+ * section (plan syntax standard). */
+export interface PlanOpenQuestion {
+  text: string;
+  checked: boolean;
 }
 
 export interface PlanStep {
@@ -161,6 +171,9 @@ export interface PlanDoc {
   sections: PlanSection[];
   steps: PlanStep[];
   step_count: number;
+  open_questions: PlanOpenQuestion[];
+  open_questions_count: number;
+  critical_files: string[];
   mermaid_count: number;
   markdown: string;
   archived?: boolean;

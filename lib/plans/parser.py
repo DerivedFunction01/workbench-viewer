@@ -14,7 +14,11 @@ subplans, the 2026-10-23 PowerBI plans, the 2026-10-22
 bootstrap plan):
   - `# Title`, then header fields `Key: value` (values wrap),
     notably Status / Created / Parent.
-  - `## Rulings`, `## Steps`, ... sections.
+  - `## Rulings`, `## Steps`, ... sections. The plan syntax
+    standard's semantic sections are read structurally:
+    `## Open questions` task-list items (with checked state)
+    and the `## Critical files` path list join the payload;
+    their absence is empty, never an error.
   - Steps, two shapes: `N. **Title.**` items with `files:` /
     `verify:` / `done when:` labels, or `### Step N — Title`
     headings — both under a steps-ish heading (`## Steps`,
@@ -34,6 +38,9 @@ _LABEL_RE = re.compile(
     r"^\s*(files|verify|done when)\s*:\s?(.*)$", re.IGNORECASE)
 _STEPS_INTRO_RE = re.compile(r"^Steps( \([^)]*\))?:\s*$")
 _FENCE_RE = re.compile(r"^```(\w*)\s*$")
+_TASK_ITEM_RE = re.compile(r"^\s*- \[( |x|X)\]\s+(.*)$")
+_BULLET_RE = re.compile(r"^\s*-\s+(.*)$")
+_BACKTICK_RE = re.compile(r"`([^`]+)`")
 
 DONE_WORDS = ("superseded", "complete", "completed", "done",
               "finished", "implemented")
@@ -195,6 +202,58 @@ def _is_steps_heading(heading: str) -> bool:
     return bool(heading) and "step" in heading.lower()
 
 
+def _unfenced(lines):
+    """The lines outside fenced blocks: quoted examples in
+    a section (a fenced sample task list, say) are not the
+    section's own structure and must not be read as such."""
+    in_fence = False
+    for line in lines:
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            yield line
+
+
+def _extract_open_questions(body_lines):
+    """Task-list items of an `## Open questions` section
+    (plan syntax standard): one {text, checked} per item.
+    Indented continuation lines — the recommendation rides
+    on one — fold into the item's text; a section with no
+    task items yields [], never an error."""
+    items = []
+    current = None
+    for line in _unfenced(body_lines):
+        m = _TASK_ITEM_RE.match(line)
+        if m:
+            current = {"text": m.group(2).strip(),
+                       "checked": m.group(1).lower() == "x"}
+            items.append(current)
+        elif current is not None and line.strip():
+            current["text"] += "\n" + line.strip()
+    return items
+
+
+def _extract_critical_files(body_lines):
+    """The path list of a `## Critical files` section: one
+    path per bullet — the backticked span when the bullet
+    carries one, else the text up to the em-dash note."""
+    paths = []
+    for line in _unfenced(body_lines):
+        m = _BULLET_RE.match(line)
+        if not m:
+            continue
+        item = m.group(1).strip()
+        bt = _BACKTICK_RE.search(item)
+        if bt:
+            paths.append(bt.group(1).strip())
+        else:
+            path = item.split(" — ")[0].strip()
+            if path:
+                paths.append(path)
+    return paths
+
+
 def parse_plan(text: str, *, path: str = "") -> dict:
     lines = text.split("\n")
     # Partition: header (everything before the first section
@@ -232,6 +291,8 @@ def parse_plan(text: str, *, path: str = "") -> dict:
             status_raw = value.strip()
             break
     steps = []
+    open_questions = []
+    critical_files = []
     out_sections = []
     for sec in sections:
         body_lines = sec["lines"][1:]
@@ -241,6 +302,16 @@ def parse_plan(text: str, *, path: str = "") -> dict:
                 for ln in body_lines):
             sec_steps = _extract_steps(body_lines)
             steps.extend(sec_steps)
+        is_open_questions = \
+            sec["heading"].lower() == "open questions"
+        is_critical_files = \
+            sec["heading"].lower() == "critical files"
+        if is_open_questions:
+            open_questions.extend(
+                _extract_open_questions(body_lines))
+        if is_critical_files:
+            critical_files.extend(
+                _extract_critical_files(body_lines))
         out_sections.append({
             "heading": sec["heading"],
             "level": sec["level"],
@@ -248,6 +319,8 @@ def parse_plan(text: str, *, path: str = "") -> dict:
             "blocks": _split_fences(body_lines),
             "is_rulings": sec["heading"].lower() == "rulings",
             "is_steps": bool(sec_steps),
+            "is_open_questions": is_open_questions,
+            "is_critical_files": is_critical_files,
         })
     conforming = status_raw is not None
     return {
@@ -261,6 +334,9 @@ def parse_plan(text: str, *, path: str = "") -> dict:
         "sections": out_sections,
         "steps": steps,
         "step_count": len(steps),
+        "open_questions": open_questions,
+        "open_questions_count": len(open_questions),
+        "critical_files": critical_files,
         "mermaid_count": sum(
             1 for s in out_sections for b in s["blocks"]
             if b["type"] == "mermaid"),
@@ -287,6 +363,7 @@ def _summary(doc: dict, rel: str, archived: bool,
                                        archived=archived),
         "conforming": doc["conforming"],
         "step_count": doc["step_count"],
+        "open_questions_count": doc["open_questions_count"],
         "mermaid_count": doc["mermaid_count"],
         "archived": archived,
         "modified": mtime,
