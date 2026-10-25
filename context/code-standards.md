@@ -29,16 +29,23 @@
 
 ## TypeScript (viewer/)
 
-- HELD: the viewer's concrete frontend standards land with
-  the approved fundamentals (see `context/ui-context.md` and
-  the OPEN decision in `architecture.md`). Until then, the
-  binding rules are the platform ones: follow the artifact
-  runtime's conventions, strict typing, `import type` for
-  type-only imports, actions typed end to end.
+Decided with the approved fundamentals (SPEC §11; the held
+record was closed by build Subplan 01, 2026-10-25):
+
+- Follow the artifact runtime's conventions. Strict typing
+  throughout (`strict` TypeScript config); `import type`
+  for type-only imports; actions typed end to end.
+- Token-only styling: components use the `--wb-*` tokens
+  generated from `tokens/tokens.json` — no hardcoded color,
+  spacing, or radius values; no CSS-in-JS; no component
+  library (the kit is hand-built from tokens, SPEC §11.4).
+- All dependencies are bundled at build time; nothing is
+  fetched from a CDN at runtime. Fonts are bundled woff2
+  (Inter for UI, IBM Plex Mono for code contexts).
 - The client never hardcodes the server host/port — they come
   from artifact settings (defaults in one place).
-- All rendering dependencies are bundled at build time;
-  nothing is fetched from a CDN at runtime.
+- Lint + format is Biome: one pinned version, config
+  in-repo at `viewer/biome.json` (SPEC §13 resolution 5).
 
 ## API / server
 
@@ -64,8 +71,8 @@
 - `lib/` — harness core (sweep, manifest, registry, todos,
   validators, staleness, export; `lib/plans/` the parser)
 - `server/` — HTTP layer + config seam + healthcheck
-- `viewer/` — artifact source (internal layout follows the
-  approved fundamentals — OPEN, see architecture.md)
+- `viewer/` — artifact source (internal layout frozen in
+  architecture.md's Target directory layout section)
 - `ops/` — systemd template, installer, watchdog
 - `tests/` — unittest suites mirroring lib/ and server/
 - `state/` — runtime only (gitignored)

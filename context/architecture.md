@@ -7,7 +7,7 @@
 | Core     | Python 3.11, stdlib only                | `lib/` — sweep, registry, todos, plan parser, validators, staleness |
 | CLI      | Python (argparse), thin caller          | `wb` — every verb is a lib/ call |
 | Server   | Python stdlib `http.server`, loopback   | Feeds + guarded writes; holds **no SQL** |
-| Artifact | TypeScript space (client + actions + privileged raw-socket bridge) | The one viewer UI — concrete frontend dependencies OPEN (see below) |
+| Artifact | TypeScript space: React 19 + Tailwind CSS v4 (client) + actions + privileged raw-socket bridge | The one viewer UI — frontend fundamentals DECIDED (SPEC §11; frozen layout below) |
 | Storage  | SQLite (stdlib `sqlite3`), one DB per project | Registry + todos, in the project's own repo |
 | Supervision | systemd unit + watchdog + healthcheck cron | Always-on server |
 
@@ -26,20 +26,29 @@
   the runtime tree by `viewer.sh`, published by the builder).
   A client of the server over a raw `node:net` socket (the
   hosting daemon's egress proxy breaks loopback fetch — the
-  git repo viewer's documented trap). Its internal layout is
-  NOT decided here — it follows the approved fundamentals
-  (below).
-- **OPEN — frontend fundamentals (the owner, 2026-10-25):** the
-  viewer's theme/tokens/fonts, styling approach, concrete
-  frontend dependencies (framework libraries, markdown
-  renderer, Mermaid packaging), and `viewer/` internal layout
-  are being designed separately and require the owner's approval
-  before any viewer build. The plan-level constraints that DO
+  git repo viewer's documented trap). Its internal layout
+  is frozen below (Target directory layout) — the approved
+  fundamentals (SPEC §11) as amended.
+- **Frontend fundamentals — DECIDED (the owner, 2026-10-25;
+  SPEC §11):** the viewer's theme/tokens/fonts, styling
+  approach, concrete frontend dependencies, and `viewer/`
+  internal layout are approved and recorded in SPEC §11
+  (design record:
+  `../.plans/2026-10-25-workbench-viewer-fundamentals.md`;
+  styling reference: `context/ui-context.md`). Theme system
+  = modes (dark/light) × palettes (olive DEFAULT; teal is
+  palette #2 — SPEC §13 resolution 4); tokens sourced from
+  `tokens/tokens.json`; themes-folder CSS organization with
+  the single-file fallback (§11.2); Inter + IBM Plex Mono
+  bundled; React 19 + Tailwind CSS v4, `@tanstack/react-query`,
+  `marked` + DOMPurify (degraded-plan rendering only),
+  `mermaid` ^11 lazy, `highlight.js` lazy; Biome lint/format
+  (SPEC §13 resolution 5). The plan-level constraints that
   bind: the artifact is one self-contained bundle (nothing
   fetched from a CDN at runtime) and reaches the server only
-  through the raw-socket bridge. Steps 5–6 are held until the
-  approved fundamentals land; `context/ui-context.md` is a
-  placeholder until then.
+  through the raw-socket bridge. Founding Steps 5–6 are
+  unblocked; they map to build Subplans 06–07 of the viewer
+  build program (`.plans/2026-10-25-viewer-build-program.md`).
 - `ops/` — systemd unit template, installer, watchdog,
   healthcheck.
 - Project repos (external) — own their data: `workbench.yaml`
@@ -47,6 +56,139 @@
   (untracked). This repo never writes project code, only
   project workbench data, and only through lib/ mutations or
   the guarded save.
+
+## Target directory layout (FROZEN — build Subplan 01, 2026-10-25)
+
+This tree is the single layout reference for the viewer
+build program; later subplans cite it, not the fundamentals
+file. Backend = AS BUILT (no churn). Frontend = fundamentals
+§9 as amended by SPEC §11.2.
+
+```
+workbench-viewer/
+  AGENTS.md                  entry (Six-File adaptation)
+  README.md                  the harness contract
+  SPEC.md                    this repo's spec (tracked,
+                             APPROVED — §13 resolution 6)
+  workbench.yaml             project zero's own manifest
+  config.example.json        settings-seam example (actual
+                             config.json is untracked)
+  viewer.env.example         env-override example (actual
+                             viewer.env is untracked)
+  viewer.sh                  artifact sync (status|pull|deploy)
+  init_venv.py               venv builder (uv, Python 3.11)
+  requirements.txt
+  run.py                     server entry (binds per config)
+  wb                         the CLI: thin caller over lib/
+  context/                   project-overview / architecture /
+                             ui-context / code-standards /
+                             ai-workflow-rules / progress-tracker
+  tokens/
+    tokens.json              DTCG source of truth for all
+                             --wb-* tokens (SPEC §11.2)
+  lib/                       Python, stdlib only — AS BUILT
+    __init__.py
+    registry.py              entries/history/todos schema +
+                             the ONE mutation path (CAS,
+                             ruling discipline, export fold)
+    manifest.py              workbench.yaml restricted-subset
+                             parsing/validation
+    sweep.py                 roots → manifests → projects
+    staleness.py             derived staleness (read-only)
+    validators.py            uniformity validators registry
+    files.py                 entry files: peek + guarded save
+    export.py                registry.json export / rebuild
+    util.py                  shared helpers (UTC timestamps)
+    plans/
+      __init__.py
+      parser.py              house-format → structured doc
+  server/                    Python stdlib, loopback — AS BUILT
+    config.py                the settings seam (file+env)
+    server.py                routing, feeds, guarded writes,
+                             mutation endpoints (no SQL)
+    healthcheck.py           /health probe (watchdog's check)
+  ops/                       AS BUILT
+    workbench-viewer-server.service.template
+    install-unit.sh
+    watchdog.sh
+  viewer/                    the artifact source (canonical
+                             here; synced by viewer.sh)
+    SYNC.md                  the viewer.sh sync contract
+    space.json               runtime + slug
+    package.json             bun manifest (deps pinned)
+    biome.json               lint + format (pinned Biome)
+    tsconfig.json  tsconfig.*.json
+    COMPONENTS.md            component contracts (Subplan 04)
+    tools/
+      gen-tokens.mjs         tokens.json → themes/ generator
+    client/
+      build.mjs              the artifact build
+      src/
+        main.tsx
+        App.tsx              shell: rail, top bar, routing
+        themes/              generated from tokens/tokens.json,
+                             checked in; generator in build
+          index.css          entry — @imports one file per
+                             palette (fallback: one generated
+                             theme.css — SPEC §11.2)
+          fonts.css          bundled @font-face (Inter +
+                             IBM Plex Mono woff2, local only)
+          <palette>.css      one per palette, scoped to its
+                             root selector, modes inside
+        sections/
+          Mockups.tsx        storyboard grid + contact sheet
+          MockupDetail.tsx   drill-in: state panel, approval,
+                             disposition bar, review log
+          Plans.tsx          list rail + reading pane
+          Todos.tsx
+          Board.tsx          lanes + cards
+        components/          the kit — one file per concept
+          Chip.tsx  Badge.tsx  Button.tsx  Card.tsx
+          Lane.tsx  Frame.tsx  StateControls.tsx
+          EmptyState.tsx  Sheet.tsx  Tooltip.tsx …
+        lib/
+          api.ts             socket client (raw-socket bridge)
+          format.ts          dates, numbers, hashes
+          labels.ts          THE label map
+    server/
+      src/
+        actions.ts           typed actions over the bridge
+        privileged.ts        raw node:net socket bridge to
+                             127.0.0.1:8792
+  tests/                     unittest suites mirroring lib/
+                             and server/
+  tools/
+    check.sh                 the ONE repo gate (biome + tsc +
+                             build + unittest; Subplan 03)
+```
+
+Runtime / untracked (never in the tree above): `config.json`,
+`viewer.env`, `state/` (lock, logs, edit backups, health
+file), `workbench/` project-zero data (`registry.db`,
+`registry.json`, `entries/`, `archive/`), `.venv/`,
+`.plans/` (plan files are not tracked in this repo — the
+build program lives there), the rendered
+`workbench-viewer-server.service`, `__pycache__/`.
+
+**Deviations from fundamentals §9, named:**
+
+- **The §9 `lib/` split is NOT adopted.** §9 imagined
+  `lib/db.py` / `mutations.py` / `review.py` /
+  `state_schema.py` / a `validators/` package /
+  `plans/structure.py` / `todos.py`. The built lib is
+  `registry.py`-centred (schema + mutations + todos in
+  `registry.py`; single-module `validators.py`,
+  `manifest.py`, `files.py`) and works — it stays as built.
+- **`theme.css` → `themes/` folder** (the owner's amendment,
+  SPEC §11.2): §9's single generated `theme.css` is replaced
+  by the `themes/` folder above, with the single-file form
+  kept as the documented fallback.
+- **As-built reconciliations:** §9's `config/viewer.example.json`
+  is the root `config.example.json`; §9's `server/run.py` is
+  the root `run.py` (server/ holds config/server/healthcheck);
+  §9's `deploy` script + `var/` are the built `viewer.sh` +
+  `state/`. §9's `viewer/server/src/` nesting is kept as
+  frozen above.
 
 ## Discovery: sweep + manifest (spec'd before code)
 
