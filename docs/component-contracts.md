@@ -201,6 +201,46 @@ a Button/link at the section level instead).
 Never: a ruled status in a Badge; a bare dot; text in the
 raw bright hue (always the `-text` strong tone).
 
+## AnnotationBadge — message lifecycle (outline)
+
+Purpose: the annotation/message lifecycle ONLY (spec
+§12) — a message's state is neither a registry ruling
+nor a review derivation, so it is its own badge family,
+in the Badge's outline form. Display only: `state` in,
+nothing out; never interactive.
+
+Props:
+
+```ts
+type AnnotationState = "draft" | "sent" | "acknowledged"
+  | "done" | "archived";
+type AnnotationBadgeProps = { state: AnnotationState };
+```
+
+Glyphs + words are fixed by the component (ratified
+with the annotation mockup): sent → "Sent", acknowledged
+◐ "Acknowledged", done ✓ "Done" — tone tokens
+`--wb-status-sent` / `-acknowledged` / `-done` (+ their
+`-text` variants), the Okabe–Ito lifecycle hues, constant
+across palettes. Draft and archived render NO badge: the
+state word alone in `--wb-content-muted` (the mockup
+shows no badge for them).
+
+Appearance matrix:
+
+| State | Fill | Border | Text | Glyph |
+|---|---|---|---|---|
+| sent / acknowledged / done | transparent | 1px solid `--wb-status-K` | `--wb-status-K-text` | `--wb-status-K` |
+| draft / archived | none | none | `--wb-content-muted` | none |
+
+The component also owns the two annotation mark styles
+(`selectionMarkStyle` / `annotationMarkStyle`, exported
+for the sections' `<mark>` rendering): radius 3, padding
+1px 2px, inset bottom bar; fills/bars are the
+`--wb-highlight-*` tokens (live selection = the active
+palette's accent derivation; saved annotation = Okabe
+orange, palette-constant).
+
 ## Button
 
 Purpose: the kit's only button. Variants primary /
