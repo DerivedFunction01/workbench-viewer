@@ -56,6 +56,17 @@ DEFAULTS = {
     "lock_file": "server.lock",
     "health_file": "health.json",
     "edit_backups_dir": "edit-backups",
+    # Repo-home (spec §5/§6): the viewer-tied message store.
+    # messages_db resolves against state_dir unless absolute.
+    "messages_db": "messages.db",
+    "messages_draft_ttl_days": 7,
+    "messages_done_archive_days": 30,
+    "messages_archive_ttl_days": 90,
+    "messages_awaiting_badge_days": 14,
+    "messages_per_project_cap": 1000,
+    # Repo-home §6: a worktree untouched this many days (or
+    # merged into its base) derives the "likely done" flag.
+    "worktree_stale_days": 14,
 }
 
 
@@ -120,3 +131,23 @@ def state_file(cfg: dict, key: str) -> Path:
 
 def sweep_roots(cfg: dict) -> list:
     return [Path(r) for r in cfg["sweep_roots"]]
+
+
+def messages_db_path(cfg: dict) -> Path:
+    """The viewer-tied message store (repo-home spec D9):
+    state_dir/messages_db unless the key is absolute."""
+    p = Path(cfg["messages_db"])
+    return p if p.is_absolute() else state_dir(cfg) / p
+
+
+def messages_policy(cfg: dict) -> dict:
+    """Cleanup policy for lib/messages.cleanup, assembled
+    from the seam so lib/ never reads config itself."""
+    return {
+        "draft_ttl_days": cfg["messages_draft_ttl_days"],
+        "done_archive_days": cfg["messages_done_archive_days"],
+        "archive_ttl_days": cfg["messages_archive_ttl_days"],
+        "awaiting_badge_days":
+            cfg["messages_awaiting_badge_days"],
+        "per_project_cap": cfg["messages_per_project_cap"],
+    }
