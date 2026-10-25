@@ -283,10 +283,14 @@ Purpose: one choice from a small enum, rendered as a
 segmented track. The shared primitive under ModeControl,
 PaletteSelect (few-option form), DensityToggle, filter
 segmenteds, and StateControls `select` fields.
-Semantics: container `role="radiogroup"`, segments
-`role="radio"` + `aria-checked`, ROVING tabindex (only
-the selected segment is tabbable; ←/→ move + select,
-Home/End jump) — the WAI-APG radio pattern.
+Semantics: NATIVE radio inputs (visually hidden, labels
+styled as segments) in a `<fieldset>` whose `<legend>`
+is the control's label — the
+radio group gives the WAI-APG pattern natively: one Tab
+stop per group, ←/→ move + select, the checked segment
+carries the segment styling via `peer-checked`, and the
+focus ring renders on the segment via
+`peer-focus-visible`.
 
 Props:
 
