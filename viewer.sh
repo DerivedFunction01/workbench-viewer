@@ -9,9 +9,9 @@
 #   viewer.sh deploy [--force] repo -> runtime: drift guard, backup,
 #                              copy
 #
-# Runtime dir defaults to ../ts-spaces/workbench-viewer and
-# can be overridden with VIEWER_RUNTIME_DIR (restore tests use a
-# scratch dir).
+# Runtime dir defaults to the workbench-viewer folder under the
+# workspace's ts-spaces dir and can be overridden with
+# VIEWER_RUNTIME_DIR (restore tests use a scratch dir).
 #
 # The sync set is the viewer/ tree's source files only: node_modules,
 # dist, *.db*, .bun-cache and other runtime/build artefacts are NEVER

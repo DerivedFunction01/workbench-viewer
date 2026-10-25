@@ -34,7 +34,7 @@ publish. So deploy is two steps by design:
 1. `viewer.sh deploy` — drift guard, backup, copy the sync
    set into the runtime tree (transport only).
 2. **Publish** — the builder pass over the runtime tree
-   (invoked by `viewer/deploy.sh` through the hatchlet CLI
+   (invoked by `viewer/deploy.sh` through the builder CLI
    when available), which rebuilds and publishes from the
    source now in place. Until this step runs, deployed
    source is inert.
