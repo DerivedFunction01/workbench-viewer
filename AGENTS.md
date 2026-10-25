@@ -18,8 +18,7 @@ decision, in this order:
 2. `context/architecture.md` — system structure, the sweep +
    manifest design, storage model, invariants
 3. `context/ui-context.md` — the viewer's design context
-   (PLACEHOLDER: fundamentals pending the owner's approval —
-   see the file)
+   (the approved fundamentals, SPEC §11)
 4. `context/code-standards.md` — implementation rules
 5. `context/ai-workflow-rules.md` — workflow, scoping, gates,
    protected files

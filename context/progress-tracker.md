@@ -5,14 +5,21 @@ change.
 
 ## Current Phase
 
-- Implementation of the founding plan, in progress
-  (started 2026-10-25).
+- The viewer build program is the ACTIVE plan
+  (`.plans/2026-10-25-viewer-build-program.md`, approved
+  2026-10-25): founding Steps 1–4, 7, 8-units are DONE;
+  this program builds the viewer itself in Subplans 01–09.
+  Subplan 01 (foundations: docs + layout freeze) is DONE;
+  Group G1 (Subplans 02 + 03) is next.
 
 ## Current Goal
 
-- Land the harness step by step: scaffold → lib/ + `wb` →
-  plan parser → server → viewer (Mockups, then Plans /
-  Todos / Board) → adoptions → deploy.
+- Build the viewer to the approved SPEC: tokens + themes
+  (02) and tooling + gate (03) → component kit (04) and
+  shell + bridge (05) → the four sections (06–07) →
+  integration + publish gate (08) → data + declutter (09).
+  Founding Steps 5–6 (the viewer builds) map to build
+  Subplans 06–07.
 
 ## Completed
 
@@ -100,48 +107,87 @@ change.
   Implementation record added to the founding plan
   (2026-10-25).
 
+- SPEC.md APPROVED + TRACKED (the owner, 2026-10-25): the SPEC
+  as a whole approved with the §13 resolutions (name
+  FINAL, cross-links link-only, staleness check not
+  scheduled in v1, palette #2 = TEAL, Biome adopted, SPEC
+  tracked); the §11 fundamentals approved WITH amendments
+  (multiple palette themes — olive is the DEFAULT palette,
+  not the only one; themes-folder CSS organization with
+  the single-file fallback); §14 (unified schema + uniform
+  interactivity) ruled. SPEC.md is committed as its own
+  commit (build Subplan 01, Step 1).
+
+- Build Subplan 01 (foundations) DONE: `ui-context.md`
+  rewritten from the approved fundamentals (no placeholder
+  language remains); the OPEN frontend record in
+  `architecture.md` and the HELD TypeScript paragraph in
+  `code-standards.md` closed as DECIDED, pointing at SPEC
+  §11; the target directory layout FROZEN in
+  `architecture.md` (backend as built — the fundamentals
+  §9 lib split explicitly NOT adopted; frontend per §9 as
+  amended, the `theme.css` → `themes/` deviation named).
+  Founding Steps 5–6 are UNHELD and map to build Subplans
+  06–07.
+
 ## In Progress
 
-- Nothing running. Awaiting the approved-fundamentals
-  handoff (via main chat) to unblock Steps 5–6.
+- Nothing running. Build program Group G1 is next:
+  Subplan 02 (tokens + themes) and Subplan 03 (tooling +
+  the one gate) — independent, may run in parallel.
 
-## Held (the owner's direction, 2026-10-25 — not a failure)
+## Held (gated, not blocked)
 
-- Steps 5–6 (both viewer builds) and all design-bearing
-  content: the viewer's fundamentals (theme, tokens, fonts,
-  styling, concrete frontend dependencies, `viewer/` layout)
-  are designed separately and must be approved by the owner
-  before they are set into the build. Step 8's artifact
-  publish is likewise held while 5–6 are held.
+- The fundamentals hold on founding Steps 5–6 is LIFTED
+  (fundamentals approved 2026-10-25; the builds proceed as
+  build Subplans 06–07).
+- Artifact PUBLISH (build Subplan 08) and the DECLUTTER
+  (build Subplan 09) each need the owner's verbatim word at
+  their gate — not ruled yet. The declutter additionally
+  waits on subplan 09 Part A data (no registry entries
+  exist in any project yet, so no standalone artifact can
+  be retired).
 
 ## Next Up
 
-- Step 8: systemd units + watchdog cron (publish held with
-  Steps 5–6; declutter blocked on subplan 09 Part A data).
-- When the owner approves the fundamentals: Steps 5–6 (viewer
-  builds), then Step 8's publish.
-- Step 7: adoptions (project zero, then v2 manifest).
-- Step 8: systemd units; publish held with Steps 5–6;
-  declutter blocked on subplan 09 Part A data (reported,
-  not forced).
+- Build Subplan 02: tokens + themes (`tokens/tokens.json`,
+  the generator, the `themes/` folder + @import-inline
+  build proof, teal palette #2 values + contrast
+  verification).
+- Build Subplan 03: tooling + the one gate (bun package in
+  `viewer/`, Biome pinned + configured, tsconfigs, one
+  gate command). Subplans 02 + 03 are Group G1 —
+  independent, parallel-safe.
+- Then Group G2: Subplan 04 (component contracts + kit) +
+  Subplan 05 (shell + socket bridge); Group G3: Subplans
+  06–07 (the four sections = founding Steps 5–6);
+  Subplan 08 integration + conformance (publish on the owner's
+  verbatim at its gate); Subplan 09 data (Part A triage) +
+  declutter.
 
 ## Open Questions
 
-- Final repo/artifact name: working name `workbench-viewer`
-  (plan OQ1 — the owner's to rename).
+- Repo/artifact name: RESOLVED — `workbench-viewer` is
+  FINAL (SPEC §13 resolution 1).
 - Todos store: registry DB tables (plan rec, adopted).
 - Board sources: todos + plan cards + review queue, exactly
   three (plan rec, adopted).
-- Cross-links to the git repo viewer artifact: link-only,
-  deferred (plan OQ3).
+- Cross-links to the git repo viewer artifact: RESOLVED —
+  link-only (SPEC §13 resolution 2).
 
 ## Architecture Decisions
 
-- **Frontend fundamentals OPEN** (the owner's steering,
-  2026-10-25): theme/tokens/fonts, styling, concrete
-  frontend dependencies, and `viewer/` layout await his
-  approval; nothing design-bearing is finalized in this repo
-  until then.
+- **Frontend fundamentals DECIDED** (the owner, 2026-10-25;
+  SPEC §11; closed in this repo by build Subplan 01):
+  modes (dark/light) × palettes (olive DEFAULT, teal is
+  palette #2), tokens sourced from `tokens/tokens.json`,
+  themes-folder CSS organization with the single-file
+  fallback, Inter + IBM Plex Mono bundled, React 19 +
+  Tailwind CSS v4 + the §11.5 dependency set, Biome
+  lint/format; the `viewer/` layout is frozen in
+  architecture.md's Target directory layout section. (This
+  record was OPEN during the held period; the fundamentals
+  were designed separately and approved with amendments.)
 - Server port **8792** (8791 is the git repo viewer's),
   recorded in `config.example.json` / server config defaults.
 - Manifest parsed as a **restricted YAML subset** (flat
