@@ -124,7 +124,7 @@ class ServerCase(unittest.TestCase):
                     "server exited early: "
                     + cls.proc.stderr.read().decode()[-2000:])
             try:
-                status, _ = cls.req_raw("GET", "/health")
+                status, _ = cls.req_raw("GET", "/api/health")
                 if status == 200:
                     return
             except OSError:
@@ -164,19 +164,19 @@ class ServerCase(unittest.TestCase):
 
 class TestFeeds(ServerCase):
     def test_health_and_config(self):
-        status, health = self.req("GET", "/health")
+        status, health = self.req("GET", "/api/health")
         self.assertEqual(status, 200)
         self.assertTrue(health["ok"])
         self.assertEqual(health["projects_count"], 2)
         self.assertEqual(health["port"], self.port)
         self.assertTrue(health["config_hash"])
-        status, cfg = self.req("GET", "/config")
+        status, cfg = self.req("GET", "/api/config")
         self.assertEqual(status, 200)
         self.assertEqual(cfg["config"]["port"], self.port)
         self.assertFalse(cfg["config"]["file_editing_enabled"])
 
     def test_projects_and_rescan(self):
-        status, summary = self.req("GET", "/projects")
+        status, summary = self.req("GET", "/api/projects")
         self.assertEqual(status, 200)
         slugs = {p["slug"] for p in summary["projects"]}
         self.assertEqual(slugs, {"alpha", "beta"})
@@ -184,13 +184,13 @@ class TestFeeds(ServerCase):
                  if p["slug"] == "alpha"][0]
         self.assertTrue(alpha["sections"]["mockups"])
         self.assertTrue(alpha["sections"]["plans"])
-        status, _ = self.req("POST", "/projects/rescan")
+        status, _ = self.req("POST", "/api/projects/rescan")
         self.assertEqual(status, 200)
 
     def test_mockups_feed_two_projects(self):
         for slug in ("alpha", "beta"):
             status, feed = self.req(
-                "GET", f"/projects/{slug}/mockups")
+                "GET", f"/api/projects/{slug}/mockups")
             self.assertEqual(status, 200)
             self.assertTrue(feed["available"])
             self.assertFalse(feed["degraded"])
@@ -202,7 +202,7 @@ class TestFeeds(ServerCase):
 
     def test_entry_detail(self):
         status, detail = self.req(
-            "GET", "/projects/alpha/entries/tile-a")
+            "GET", "/api/projects/alpha/entries/tile-a")
         self.assertEqual(status, 200)
         self.assertEqual(detail["entry"]["id"], "tile-a")
         self.assertIn("derived", detail)
@@ -211,13 +211,13 @@ class TestFeeds(ServerCase):
         self.assertEqual([f["path"] for f in detail["files"]],
                          ["mock.html"])
         status, _ = self.req(
-            "GET", "/projects/alpha/entries/nope")
+            "GET", "/api/projects/alpha/entries/nope")
         self.assertEqual(status, 404)
-        status, _ = self.req("GET", "/projects/nope/mockups")
+        status, _ = self.req("GET", "/api/projects/nope/mockups")
         self.assertEqual(status, 404)
 
     def test_plans_feed_and_doc(self):
-        status, feed = self.req("GET", "/projects/alpha/plans")
+        status, feed = self.req("GET", "/api/projects/alpha/plans")
         self.assertEqual(status, 200)
         self.assertEqual(len(feed["plans"]), 1)
         self.assertEqual(feed["plans"][0]["step_count"], 2)
@@ -230,22 +230,22 @@ class TestFeeds(ServerCase):
         planned = bundles["2026-10-25-fixture-planned"]
         self.assertIsNotNone(planned["plan"])
         status, doc = self.req(
-            "GET", "/projects/alpha/plan"
+            "GET", "/api/projects/alpha/plan"
                    "?path=2026-10-25-fixture-planned/plan.md")
         self.assertEqual(status, 200)
         self.assertEqual(doc["title"], "Fixture Planned")
         status, doc = self.req(
-            "GET", "/projects/alpha/plan"
+            "GET", "/api/projects/alpha/plan"
                    "?path=2026-10-25-fixture-plan.md")
         self.assertEqual(status, 200)
         self.assertEqual(doc["step_count"], 2)
         self.assertEqual(doc["status_bucket"], "todo")
         status, _ = self.req(
-            "GET", "/projects/alpha/plan?path=../workbench.yaml")
+            "GET", "/api/projects/alpha/plan?path=../workbench.yaml")
         self.assertEqual(status, 404)
 
     def test_todos_and_board(self):
-        status, feed = self.req("GET", "/todos")
+        status, feed = self.req("GET", "/api/todos")
         self.assertEqual(status, 200)
         projects = {t["project"] for t in feed["todos"]}
         self.assertEqual(projects, {"alpha", "beta"})
@@ -255,7 +255,7 @@ class TestFeeds(ServerCase):
         self.assertEqual(titles.count("Do the thing"), 2)
         self.assertTrue(all(t["bundle"] == "2026-10-25-fixture-work"
                             for t in feed["todos"]))
-        status, board = self.req("GET", "/board")
+        status, board = self.req("GET", "/api/board")
         self.assertEqual(status, 200)
         todo_titles = [t["title"]
                        for t in board["todos"]["todo"]]
@@ -281,13 +281,13 @@ class TestContainment(ServerCase):
             conn.execute(
                 "UPDATE todos SET title = title WHERE 0")
             status, feed = self.req(
-                "GET", "/projects/beta/mockups")
+                "GET", "/api/projects/beta/mockups")
             self.assertEqual(status, 200)
             self.assertTrue(feed["degraded"])
             self.assertTrue(feed["reason"])
             # the other project is untouched by beta's lock
             status, feed = self.req(
-                "GET", "/projects/alpha/mockups")
+                "GET", "/api/projects/alpha/mockups")
             self.assertEqual(status, 200)
             self.assertFalse(feed["degraded"])
             self.assertEqual(len(feed["entries"]), 1)
@@ -301,7 +301,7 @@ class TestContainment(ServerCase):
         orphan.mkdir(parents=True)
         try:
             status, feed = self.req(
-                "GET", "/projects/alpha/mockups")
+                "GET", "/api/projects/alpha/mockups")
             self.assertEqual(status, 200)
             self.assertEqual(feed["reconcile"]["status"],
                              "problems")
@@ -315,18 +315,18 @@ class TestContainment(ServerCase):
 class TestActions(ServerCase):
     def test_canonical_requires_ruling_via_action(self):
         status, payload = self.req(
-            "POST", "/projects/alpha/entries/tile-a/action",
+            "POST", "/api/projects/alpha/entries/tile-a/action",
             {"verb": "set-status", "status": "canonical"})
         self.assertEqual(status, 400)
         self.assertIn("ruling", payload["error"])
         status, detail = self.req(
-            "GET", "/projects/alpha/entries/tile-a")
+            "GET", "/api/projects/alpha/entries/tile-a")
         self.assertEqual(detail["entry"]["status"],
                          "unexplored")
 
     def test_canonical_with_ruling_and_export_regenerated(self):
         status, detail = self.req(
-            "POST", "/projects/alpha/entries/tile-a/action",
+            "POST", "/api/projects/alpha/entries/tile-a/action",
             {"verb": "set-status", "status": "canonical",
              "ruling": "the owner, 2026-10-25: fixture ruling"})
         self.assertEqual(status, 200)
@@ -339,7 +339,7 @@ class TestActions(ServerCase):
 
     def test_review_and_todo_actions(self):
         status, detail = self.req(
-            "POST", "/projects/beta/entries/tile-a/action",
+            "POST", "/api/projects/beta/entries/tile-a/action",
             {"verb": "review", "disposition": "approve",
              "comment": "looks right"})
         self.assertEqual(status, 200)
@@ -349,12 +349,12 @@ class TestActions(ServerCase):
         self.assertTrue(detail["approval"]["approved"])
         # the board drag path: one set-status mutation on a
         # bundle todo file, through the lib writer
-        status, feed = self.req("GET", "/projects/beta/todos")
+        status, feed = self.req("GET", "/api/projects/beta/todos")
         self.assertEqual(status, 200)
         todo = [t for t in feed["todos"]
                 if t["title"] == "Do the thing"][0]
         status, payload = self.req(
-            "POST", "/projects/beta/todos",
+            "POST", "/api/projects/beta/todos",
             {"verb": "set-status", "id": todo["id"],
              "status": "doing"})
         self.assertEqual(status, 200)
@@ -362,23 +362,23 @@ class TestActions(ServerCase):
         on_disk = (self.beta / ".plans" / todo["path"])
         self.assertIn("status: doing",
                       on_disk.read_text(encoding="utf-8"))
-        status, feed = self.req("GET", "/projects/beta/todos")
+        status, feed = self.req("GET", "/api/projects/beta/todos")
         moved = [t for t in feed["todos"]
                  if t["id"] == todo["id"]][0]
         self.assertEqual(moved["status"], "doing")
         # the retired DB verb and unknown ids are refused
         status, payload = self.req(
-            "POST", "/projects/beta/todos",
+            "POST", "/api/projects/beta/todos",
             {"verb": "add", "id": "second-thing",
              "title": "Second thing"})
         self.assertEqual(status, 400)
         status, payload = self.req(
-            "POST", "/projects/beta/todos",
+            "POST", "/api/projects/beta/todos",
             {"verb": "set-status", "id": "t-nope",
              "status": "done"})
         self.assertEqual(status, 400)
         status, payload = self.req(
-            "POST", "/projects/beta/todos",
+            "POST", "/api/projects/beta/todos",
             {"verb": "bogus"})
         self.assertEqual(status, 400)
 
@@ -387,12 +387,12 @@ class TestActions(ServerCase):
                 / "mock.html")
         before = main.read_bytes()
         status, peek = self.req(
-            "GET", "/projects/alpha/entries/tile-a/file"
+            "GET", "/api/projects/alpha/entries/tile-a/file"
                    "?path=mock.html")
         self.assertEqual(status, 200)
         self.assertFalse(peek["editable"])
         status, payload = self.req(
-            "POST", "/projects/alpha/entries/tile-a/file",
+            "POST", "/api/projects/alpha/entries/tile-a/file",
             {"path": "mock.html", "content": "changed",
              "base_sha256": peek["sha256"]})
         self.assertEqual(status, 403)
@@ -407,7 +407,7 @@ class TestEditingEnabled(ServerCase):
                 / "mock.html")
         before = main.read_bytes()
         status, payload = self.req(
-            "POST", "/projects/alpha/entries/tile-a/file",
+            "POST", "/api/projects/alpha/entries/tile-a/file",
             {"path": "mock.html", "content": "changed",
              "base_sha256": "0" * 64})
         self.assertEqual(status, 409)
@@ -416,12 +416,12 @@ class TestEditingEnabled(ServerCase):
 
     def test_save_round_trip(self):
         status, peek = self.req(
-            "GET", "/projects/alpha/entries/tile-a/file"
+            "GET", "/api/projects/alpha/entries/tile-a/file"
                    "?path=mock.html")
         self.assertEqual(status, 200)
         self.assertTrue(peek["editable"])
         status, payload = self.req(
-            "POST", "/projects/alpha/entries/tile-a/file",
+            "POST", "/api/projects/alpha/entries/tile-a/file",
             {"path": "mock.html",
              "content": peek["content"] + "<!-- v2 -->\n",
              "base_sha256": peek["sha256"]})

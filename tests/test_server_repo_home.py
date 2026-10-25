@@ -69,7 +69,7 @@ class RepoHomeServerCase(unittest.TestCase):
                     "server exited early: "
                     + cls.proc.stderr.read().decode()[-2000:])
             try:
-                status, _ = cls.req_raw("GET", "/health")
+                status, _ = cls.req_raw("GET", "/api/health")
                 if status == 200:
                     return
             except OSError:
