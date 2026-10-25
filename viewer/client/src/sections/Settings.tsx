@@ -1,9 +1,12 @@
-// Settings — the app-level route (#/settings). This build
-// renders the Appearance panel ONLY (repo-home spec §3):
-// mode, palette, density — the ONLY appearance controls in
-// the app; the shell chrome carries a Settings nav entry and
-// nothing else. Workspace / Messages panels are later
-// phases and are not built or stubbed here.
+// Settings — the app-level route (#/settings), the ONE
+// home for settings (repo-home spec §3): Appearance
+// (mode, palette, density — the ONLY appearance controls
+// in the app; the shell chrome carries a Settings nav
+// entry and nothing else), Workspace (the server's
+// effective configuration, read-only), and Messages
+// (cleanup policy in force + guarded manual controls) —
+// the Workspace/Messages panels live in
+// settings/SettingsPanels.tsx.
 //
 // The controls are the kit's (Subplan 04), consumed against
 // their contracted props: ModeControl / PaletteSelect /
@@ -16,6 +19,7 @@ import { ModeControl } from "../components/ModeControl";
 import { PaletteSelect } from "../components/PaletteSelect";
 import type { Appearance, Density, Mode } from "../lib/preferences";
 import { PALETTE_OPTIONS } from "../lib/preferences";
+import { SettingsPanels } from "./settings/SettingsPanels";
 import { sectionTitleStyle } from "./shared";
 
 const rowStyle: React.CSSProperties = {
@@ -93,6 +97,7 @@ export function SettingsSection({
           onChange={(density: Density) => onChange({ ...appearance, density })}
         />
       </div>
+      <SettingsPanels />
     </section>
   );
 }
