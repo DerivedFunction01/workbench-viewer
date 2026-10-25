@@ -23,4 +23,9 @@ export const anchor = {
   diagram: (heading: string, index: number) => `plans/diagram-${slugify(heading)}-${index}`,
   todoTable: "todos/todo-table",
   boardLanes: "board/board-lanes",
+  changesPanel: "changes/panel",
+  changesWorktrees: "changes/worktree-picker",
+  changesFile: (path: string) => `changes/file-${slugify(path)}`,
+  changesUntracked: "changes/untracked",
+  changesIgnored: "changes/ignored-changed",
 };

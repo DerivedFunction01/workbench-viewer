@@ -40,6 +40,7 @@ sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 
 import config as cfgmod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
+from lib import diffs as diff_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import home as home_mod  # noqa: E402
@@ -410,6 +411,39 @@ def worktrees_feed(project) -> dict:
             "captured_at": now_iso(), **result}
 
 
+def diff_feed(project, query: dict) -> dict:
+    """GET /api/projects/<slug>/diff (repo-home §18.5,
+    B2): the anchored diff, structured by lib/diffs — this
+    layer only translates query params. `?peek=<path>`
+    answers the §18.4 peek for one untracked/ignored file
+    in the anchored worktree instead. Unanchored or
+    unknown requests are honest 4xx (DiffError carries
+    the status)."""
+    plans_dir = project.manifest.plans
+    try:
+        if query.get("peek"):
+            peek = diff_mod.peek_file(
+                project.root,
+                worktree=query.get("worktree") or None,
+                path=query["peek"])
+            return {"slug": project.slug,
+                    "name": project.name,
+                    "captured_at": now_iso(), "peek": peek}
+        result = diff_mod.get_diff(
+            project.root,
+            worktree=query.get("worktree") or None,
+            mode=query.get("mode") or "working",
+            base=query.get("base") or None,
+            target=query.get("target") or None,
+            bundle=query.get("bundle") or None,
+            plans_dir=plans_dir,
+            all_files=query.get("all") == "1")
+    except diff_mod.DiffError as e:
+        raise ApiError(e.status, e.message)
+    return {"slug": project.slug, "name": project.name,
+            "captured_at": now_iso(), **result}
+
+
 def effective_settings() -> dict:
     """GET /api/settings/effective: the seam's resolved
     values, read-only (Settings → Workspace, spec §3).
@@ -661,6 +695,11 @@ class Handler(BaseHTTPRequestHandler):
                 and parts[3] == "worktrees":
             project = self._project_or_404(parts[2])
             return self._send(200, worktrees_feed(project))
+        if len(parts) == 4 and parts[0] == "api" \
+                and parts[1] == "projects" \
+                and parts[3] == "diff":
+            project = self._project_or_404(parts[2])
+            return self._send(200, diff_feed(project, query))
         if parts == ["api", "messages"]:
             try:
                 return self._send(200, messages_list(query))

@@ -300,6 +300,48 @@ export const Actions = {
     },
   }),
 
+  getWorktrees: defineAction({
+    request: slugArg,
+    // The worktrees payload ({slug, name, captured_at,
+    // available, worktrees}) is not a feed envelope — it
+    // passes through verbatim like getPlan.
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/projects/${enc(args.slug)}/worktrees`);
+    },
+  }),
+
+  getDiff: defineAction({
+    request: z.object({
+      slug: z.string().min(1),
+      worktree: z.string().optional(),
+      mode: z.string().optional(),
+      base: z.string().optional(),
+      target: z.string().optional(),
+      bundle: z.string().optional(),
+      all: z.boolean().optional(),
+      peek: z.string().optional(),
+    }),
+    // The diff payload is its own shape (§18.5), not a
+    // feed envelope — verbatim, like getPlan.
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      if (args.worktree) params.set("worktree", args.worktree);
+      if (args.mode) params.set("mode", args.mode);
+      if (args.base) params.set("base", args.base);
+      if (args.target) params.set("target", args.target);
+      if (args.bundle) params.set("bundle", args.bundle);
+      if (args.all) params.set("all", "1");
+      if (args.peek) params.set("peek", args.peek);
+      const query = params.toString();
+      const suffix = query ? `?${query}` : "";
+      return callServer<unknown>(ctx, `/api/projects/${enc(args.slug)}/diff${suffix}`);
+    },
+  }),
+
   getBoard: defineAction({
     request: z.object({}),
     response: rawResult,
