@@ -218,3 +218,11 @@ change.
   home derivations (`lib/worktrees.py`, `lib/home.py`) —
   gate green at 128 tests. The repo-home UI phase (Home /
   Overview / Inbox / Settings panels) is still pending.
+- Repo-home B2 DIFFS landed on main 2026-10-25 (branch
+  `build/repo-home-b2`, tip `04fba92`, merged `930f929`):
+  the §18 diff engine (`lib/diffs.py` — one (repo, base,
+  target, paths) mechanism, all modes, untracked + ignored
+  groups, peek policy reused), `GET /api/projects/<slug>/diff`,
+  and the Changes UI (plan Changes tab + worktree panel on
+  the Plans landing; the panel moves into Overview when the
+  repo-home UI phase lands) — gate green at 154 tests.
