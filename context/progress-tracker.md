@@ -330,3 +330,8 @@ change.
   genuine child of the grouping plan and finished plans
   are never edited, so no declaration was added to any
   real plan; grouping is proven on fixtures.
+- Plan grouping MERGED to main 2026-10-25 (merge
+  `61dc0ac`): gate green on the merged tree, 257 tests.
+  Checkpoint republish follows; live Plans data carries
+  no declarations yet, so the list renders unchanged
+  until a plan declares subplans.
