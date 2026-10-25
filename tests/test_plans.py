@@ -1,0 +1,177 @@
+"""Step 3 gate tests: the plan parser against the REAL corpus
+(the founding plan, subplan 09, the v2 master plan, the
+older PowerBI/bootstrap shapes, the non-plans), plus the
+mermaid path on a corpus-shaped fixture (the live corpus
+contains no mermaid fence yet — recorded honestly in the
+progress tracker).
+
+The core invariant: parsing is LOSSLESS — header_raw +
+section raws reconstruct the source exactly, for every plan
+file in both .plans trees, so no step block (or anything
+else) can be silently dropped.
+"""
+
+import unittest
+from pathlib import Path
+
+from lib.plans import parser
+
+WS = Path(__file__).resolve().parent.parent.parent
+FOUNDING = WS / ".plans" / "2026-10-25-workbench-viewer-repo.md"
+SUBPLAN09 = (WS / "example-project" / ".plans"
+             / "2026-10-25-living-workbench-storyboard.md")
+MASTER = (WS / "example-project" / ".plans"
+          / "2026-10-25-rebuild-program.md")
+BOOTSTRAP = WS / ".plans" / "2026-10-22-machine-bootstrap-reproducibility.md"
+BACKSTAGE = WS / ".plans" / "2026-10-23-powerbi-backstage-implementation-plan.md"
+STATUS_DOC = WS / ".plans" / "current-status-2026-10-25.md"
+TRACKER_DOC = WS / ".plans" / "mockup-status-tracker.md"
+V2_PLANS = WS / "example-project" / ".plans"
+
+
+def parse(path):
+    return parser.parse_plan(path.read_text(encoding="utf-8"),
+                             path=path.name)
+
+
+class TestNamedPlans(unittest.TestCase):
+    def test_founding_plan(self):
+        doc = parse(FOUNDING)
+        self.assertTrue(doc["conforming"])
+        self.assertEqual(doc["status_raw"], "in progress")
+        self.assertEqual(doc["status_bucket"], "doing")
+        self.assertEqual(doc["step_count"], 8)
+        titles = [s["title"] for s in doc["steps"]]
+        self.assertIn("Repo scaffold + the six context files.",
+                      titles[0])
+        for step in doc["steps"]:
+            self.assertTrue(step["files"],
+                            f"step {step['n']} lost its files:")
+            self.assertTrue(step["verify"],
+                            f"step {step['n']} lost its verify:")
+            self.assertTrue(step["done_when"],
+                            f"step {step['n']} lost done when:")
+
+    def test_subplan09_both_step_groups(self):
+        doc = parse(SUBPLAN09)
+        self.assertTrue(doc["conforming"])
+        # Part A (4, under 'Steps (when not skipped):')
+        # + Part B (6, under a bare 'Steps:')
+        self.assertEqual(doc["step_count"], 10)
+        ns = [s["n"] for s in doc["steps"]]
+        self.assertEqual(ns, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        for step in doc["steps"]:
+            self.assertTrue(step["files"])
+            self.assertTrue(step["verify"])
+
+    def test_master_plan_no_steps_but_lossless(self):
+        doc = parse(MASTER)
+        self.assertTrue(doc["conforming"])
+        self.assertEqual(doc["fields"]["Status"], "draft")
+        self.assertEqual(doc["step_count"], 0)  # it has none
+        self.assertGreaterEqual(len(doc["sections"]), 5)
+        rulings = [s for s in doc["sections"] if s["is_rulings"]]
+        self.assertEqual(len(rulings), 1)
+
+    def test_bootstrap_plan_implementation_steps(self):
+        doc = parse(BOOTSTRAP)
+        self.assertEqual(doc["step_count"], 6)
+        self.assertIn("Close the no-git gaps.",
+                      doc["steps"][0]["title"])
+        # its open questions are numbered too — and must NOT
+        # have been parsed as steps (6, not 6+4)
+        self.assertNotIn("Where does the kit live",
+                         " ".join(s["title"]
+                                  for s in doc["steps"]))
+
+    def test_powerbi_heading_steps(self):
+        doc = parse(BACKSTAGE)
+        self.assertEqual(doc["step_count"], 10)
+        self.assertEqual(doc["steps"][0]["n"], 0)
+        self.assertIn("Baseline & gate snapshot",
+                      doc["steps"][0]["title"])
+        self.assertTrue(doc["steps"][0]["body"])
+
+
+class TestDegradation(unittest.TestCase):
+    def test_status_doc_is_nonconforming_but_whole(self):
+        text = STATUS_DOC.read_text(encoding="utf-8")
+        doc = parse(STATUS_DOC)
+        self.assertFalse(doc["conforming"])
+        self.assertEqual(doc["markdown"], text)
+        self.assertEqual(doc["status_bucket"], "todo")
+
+    def test_tracker_doc_is_nonconforming(self):
+        doc = parse(TRACKER_DOC)
+        self.assertFalse(doc["conforming"])
+        self.assertTrue(doc["title"])
+
+
+class TestCorpusLossless(unittest.TestCase):
+    def test_every_corpus_plan_reconstructs(self):
+        files = []
+        for base in (WS / ".plans", V2_PLANS):
+            files += sorted(base.glob("*.md"))
+            finished = base / "finished"
+            if finished.is_dir():
+                files += sorted(finished.glob("*.md"))
+        self.assertGreater(len(files), 30)
+        for f in files:
+            text = f.read_text(encoding="utf-8")
+            doc = parser.parse_plan(text, path=f.name)
+            self.assertEqual(
+                parser.reconstruct(doc).rstrip("\n"),
+                text.rstrip("\n"),
+                f"parser dropped content in {f}")
+            # every extracted step string is verbatim source
+            for step in doc["steps"]:
+                self.assertIn(step["raw"], text,
+                              f"step raw not verbatim in {f}")
+
+
+class TestMermaid(unittest.TestCase):
+    def test_mermaid_fence_yields_source_intact(self):
+        base = FOUNDING.read_text(encoding="utf-8")
+        diagram = ("## Diagram\n\n```mermaid\n"
+                   "graph TD\n  A[Sweep] --> B[Registry]\n"
+                   "  B --> C[Viewer]\n```\n")
+        doc = parser.parse_plan(base + "\n" + diagram)
+        self.assertEqual(doc["mermaid_count"], 1)
+        block = [b for s in doc["sections"]
+                 for b in s["blocks"] if b["type"] == "mermaid"]
+        self.assertEqual(len(block), 1)
+        self.assertIn("graph TD", block[0]["source"])
+        self.assertIn("A[Sweep] --> B[Registry]",
+                      block[0]["source"])
+        self.assertEqual(
+            parser.reconstruct(doc).rstrip("\n"),
+            (base + "\n" + diagram).rstrip("\n"))
+
+
+class TestListing(unittest.TestCase):
+    def test_list_v2_plans(self):
+        summaries = parser.list_plans(V2_PLANS)
+        names = [s["path"] for s in summaries]
+        self.assertIn("2026-10-25-rebuild-program.md", names)
+        # the spec-extraction working dir is not plans
+        self.assertFalse(any("spec-extraction/" in n
+                             for n in names))
+        founding = parser.list_plans(WS / ".plans")
+        by_name = {s["path"]: s for s in founding}
+        self.assertEqual(
+            by_name["2026-10-25-workbench-viewer-repo.md"]
+            ["status_bucket"], "doing")
+        self.assertTrue(
+            any(s["archived"] for s in founding),
+            "finished/ plans should list as archived")
+
+    def test_load_plan_confined(self):
+        doc = parser.load_plan(V2_PLANS,
+                               "2026-10-25-rebuild-program.md")
+        self.assertEqual(doc["title"][:12], "Master plan:")
+        with self.assertRaises(ValueError):
+            parser.load_plan(V2_PLANS, "../SPEC.md")
+
+
+if __name__ == "__main__":
+    unittest.main()
