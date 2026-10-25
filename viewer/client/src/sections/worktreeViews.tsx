@@ -142,6 +142,7 @@ export function WorktreeMeta({ worktree }: { worktree: WorktreeItem }) {
           {worktree.head_short}
         </span>
       ) : null}
+      {worktree.no_commits ? <span style={metaStyle}>no commits yet</span> : null}
       {worktree.dirty == null ? null : worktree.dirty ? (
         <span style={metaStyle}>
           <span className="num">{worktree.changed_count ?? 0}</span> changed
