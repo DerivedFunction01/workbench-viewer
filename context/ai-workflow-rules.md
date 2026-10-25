@@ -3,7 +3,7 @@
 ## Approach
 
 Build incrementally against the founding plan
-(`../.plans/2026-10-25-workbench-viewer-repo.md`) and
+(`2026-10-25-workbench-viewer-repo.md`) and
 these context files. One plan step at a time; each step's
 verify list is its gate — run it, keep the evidence, and only
 then move on. Implement against the specs in `architecture.md`
@@ -49,10 +49,10 @@ Do not modify unless explicitly instructed:
 - Any project's `registry.db` / `registry.json` by hand —
   data changes go through `wb` or the viewer's lib/ mutations
   only.
-- `../example-project/SPEC.md` and its
+- The `example-project` repo's `SPEC.md` and its
   `.plans/spec-extraction/` (another effort owns those).
-- `../example-project-legacy` (prototype — read-only
-  reference) and `../another-project` (excluded by design).
+- The `example-project-legacy` repo (prototype — read-only
+  reference) and the `another-project` repo (excluded by design).
 - In example-project, the ONLY file this harness's work
   may add is `workbench.yaml` (its adoption manifest); v2
   commits are the owner's separately.

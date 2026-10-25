@@ -24,7 +24,7 @@ change.
 ## Completed
 
 - Step 0: the founding plan —
-  `../.plans/2026-10-25-workbench-viewer-repo.md`
+  `2026-10-25-workbench-viewer-repo.md`
   (drafted and refined 2026-10-25; the owner: "Implement the
   plan").
 - Step 1 (in this commit): repo scaffold + the six context
@@ -85,7 +85,7 @@ change.
   final name, SPEC.md approval, artifact retirement;
   Mockups honestly empty — the build produced no mockups
   while Steps 5–6 are held). v2 adopted by manifest only
-  (`../example-project/workbench.yaml`, the one
+  (`workbench.yaml` in the `example-project` repo, the one
   authorized file; NO v2 commits, registry NOT initialized —
   it arrives with subplan 09 Part A). Live verify on the
   real config: sweep discovers exactly 2 projects (another-project

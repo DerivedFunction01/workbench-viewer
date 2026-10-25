@@ -3,7 +3,7 @@
 The viewer's design fundamentals, as approved by the owner
 (2026-10-25, with amendments). Normative sources: SPEC §11
 (the fundamentals as spec) and the design record
-`../.plans/2026-10-25-workbench-viewer-fundamentals.md`
+`2026-10-25-workbench-viewer-fundamentals.md`
 (full token tables, contrast ratios, rationale). Every value
 below traces to one of those two. Component contracts
 (props / variants / states per component) land in build

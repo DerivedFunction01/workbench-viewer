@@ -34,7 +34,7 @@
   approach, concrete frontend dependencies, and `viewer/`
   internal layout are approved and recorded in SPEC §11
   (design record:
-  `../.plans/2026-10-25-workbench-viewer-fundamentals.md`;
+  `2026-10-25-workbench-viewer-fundamentals.md`;
   styling reference: `context/ui-context.md`). Theme system
   = modes (dark/light) × palettes (olive DEFAULT; teal is
   palette #2 — SPEC §13 resolution 4); tokens sourced from
@@ -189,6 +189,14 @@ build program lives there), the rendered
   §9's `deploy` script + `var/` are the built `viewer.sh` +
   `state/`. §9's `viewer/server/src/` nesting is kept as
   frozen above.
+
+**Export / portability rule:** no hardcoded paths or
+machine assumptions in code; everything path-like derives
+from the existing config seam (the config file plus the
+`WB_*` env overrides — `WB_VIEWER_*` in this repo).
+Export-with-zero-code-edits is the proof: the repo must run
+on another machine from a fresh clone with only config
+changes. Tracked docs use relative paths only.
 
 ## Discovery: sweep + manifest (spec'd before code)
 

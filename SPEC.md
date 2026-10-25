@@ -20,7 +20,7 @@ project's spec (see §9), never this one.
 
 Sources this draft is drawn from (all 2026-10-25, the owner's
 rulings): the founding plan
-(`../.plans/2026-10-25-workbench-viewer-repo.md`),
+(`2026-10-25-workbench-viewer-repo.md`),
 the workbench data model in example-project subplan 09
 Part B (inherited, generalized multi-project), this repo's
 `context/architecture.md`, `context/project-overview.md`,
@@ -624,7 +624,8 @@ by accident.
 
 Wired in on the owner's approval (2026-10-25) from the
 fundamentals proposal
-(`../.plans/2026-10-25-workbench-viewer-fundamentals.md`),
+(`2026-10-25-workbench-viewer-fundamentals.md`, the design
+record document),
 which is the normative detail source for full token tables,
 contrast ratios, and rationale; this section records the
 fundamentals as spec. Two amendments are the owner's, made at

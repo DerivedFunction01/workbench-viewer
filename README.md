@@ -4,7 +4,7 @@ One harness for every project repo in this workspace: a
 companion server (always on, loopback) plus a single artifact
 with four sections — **Mockups, Plans, Todos, Board** — fed by
 each project's own data. Built from
-`../.plans/2026-10-25-workbench-viewer-repo.md`; the
+`2026-10-25-workbench-viewer-repo.md`; the
 mockup data model is example-project's subplan 09, Part B.
 
 ## Adopting the harness (a project repo's whole cost)

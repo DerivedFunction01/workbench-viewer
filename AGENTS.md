@@ -27,7 +27,8 @@ decision, in this order:
    meaningful implementation change)
 
 The founding plan is
-`../.plans/2026-10-25-workbench-viewer-repo.md`; the
+`2026-10-25-workbench-viewer-repo.md` (in the workspace
+`.plans/` folder); the
 workbench data model it inherits is specified in example-project-legacy
 v2's subplan 09 (Part B). If implementation changes the
 architecture, scope, or standards in the context files, update
@@ -76,6 +77,7 @@ the relevant file before continuing.
 - Server: `.venv/bin/python run.py` (binds per `config.json`;
   default 127.0.0.1:8792). Health: `GET /health`.
 - Viewer artifact sync: `./viewer.sh status|pull|deploy`
-  (repo `viewer/` is canonical; runtime is
-  `../ts-spaces/workbench-viewer/`; publishing is a
+  (repo `viewer/` is canonical; the runtime is the
+  `workbench-viewer` runtime space in the sibling ts-spaces
+  tree, resolved via the config seam; publishing is a
   separate builder pass — see `viewer/SYNC.md`).
