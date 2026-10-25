@@ -16,7 +16,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { DegradedBanner as KitBanner } from "../components/DegradedBanner";
 import { SegmentedControl } from "../components/SegmentedControl";
-import { api, type BundleItem, type PlanDoc, type TextSelection, type TodoItem } from "../lib/api";
+import {
+  api,
+  type BundleItem,
+  type PlanDoc,
+  type PlanSummary,
+  type TextSelection,
+  type TodoItem,
+} from "../lib/api";
 import { formatDate, formatRelative } from "../lib/format";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";
@@ -249,6 +256,52 @@ function FinishedTodos({ bundle }: { bundle: BundleItem }) {
   );
 }
 
+/** The reader's `## Subplans` section (§21): every
+ * declared entry as a navigation row — title + status
+ * when the path resolves against the project's plans,
+ * a muted missing row naming the path when it does
+ * not. Grouped or not, the links work; a self or cycle
+ * reference is a plain row like any other. A path
+ * declared twice renders once. */
+function SubplanRows({
+  slug,
+  declared,
+  planIndex,
+}: {
+  slug: string;
+  declared: string[];
+  planIndex: Map<string, PlanSummary>;
+}) {
+  const distinct = [...new Set(declared)];
+  return (
+    <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+      {distinct.map((declaredPath) => {
+        const target = planIndex.get(declaredPath);
+        if (!target) {
+          return (
+            <li key={declaredPath}>
+              <div style={{ ...listRowStyle, color: "var(--wb-content-muted)" }}>
+                <span className="mono" style={{ flex: 1 }}>
+                  {declaredPath}
+                </span>
+                <span style={metaStyle}>missing</span>
+              </div>
+            </li>
+          );
+        }
+        return (
+          <li key={declaredPath}>
+            <a href={sectionHref(slug, "plans", target.path)} style={listRowStyle}>
+              <span style={{ flex: 1 }}>{target.title || target.path}</span>
+              <span style={metaStyle}>{planBucketLabel(target.status_bucket)}</span>
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function SourceView({ source }: { source: string }) {
   const [html, setHtml] = useState<string | null>(null);
   useEffect(() => {
@@ -329,11 +382,15 @@ function PlanReader({
   projectName,
   path,
   bundle,
+  planIndex,
 }: {
   slug: string;
   projectName: string;
   path: string;
   bundle: BundleItem | null;
+  /** Every plan in the project by path — the reader's
+   * `## Subplans` resolution set (§21). */
+  planIndex: Map<string, PlanSummary>;
 }) {
   const [view, setView] = useState<"formatted" | "changes" | "source">("formatted");
   const query = useQuery({
@@ -638,6 +695,8 @@ function PlanReader({
                           </div>
                         );
                       })
+                    ) : section.is_subplans && doc.subplans.length > 0 ? (
+                      <SubplanRows slug={slug} declared={doc.subplans} planIndex={planIndex} />
                     ) : section.is_rulings ? (
                       <div
                         style={{
@@ -725,13 +784,23 @@ export function PlansSection({
   const readerBundle = item
     ? (feed.bundles.find((bundle) => bundle.plan?.path === item) ?? null)
     : null;
+  const planIndex = new Map<string, PlanSummary>();
+  for (const bundle of feed.bundles) {
+    if (bundle.plan) planIndex.set(bundle.plan.path, bundle.plan);
+  }
 
   return (
     <section>
       <h1 style={sectionTitleStyle}>Plans</h1>
       <DegradedBanner feed={feed} />
       {item ? (
-        <PlanReader slug={slug} projectName={projectName} path={item} bundle={readerBundle} />
+        <PlanReader
+          slug={slug}
+          projectName={projectName}
+          path={item}
+          bundle={readerBundle}
+          planIndex={planIndex}
+        />
       ) : (
         <div data-anchor={anchor.planList}>
           {feed.bundles.length === 0 ? (
