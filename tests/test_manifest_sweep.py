@@ -1,12 +1,43 @@
 """Step 2 gate tests: manifest parsing (restricted YAML
 subset) + the discovery sweep mechanics."""
 
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 from lib.manifest import ManifestError, load_manifest
 from lib.sweep import sweep
+from lib.worktrees import list_worktrees
+
+
+def git(cwd, *args):
+    env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
+    out = subprocess.run(
+        ["git", "-C", str(cwd), "-c", "user.name=T",
+         "-c", "user.email=t@t", *args],
+        capture_output=True, text=True, env=env)
+    if out.returncode != 0:
+        raise AssertionError(
+            f"git {' '.join(args)}: {out.stderr}")
+    return out.stdout.strip()
+
+
+def make_repo(root: Path, name="Repo", slug="repo"):
+    """A git repo carrying a committed manifest. The
+    manifest is TRACKED, so a linked worktree checks out the
+    same file under the same slug — the live duplicate-slug
+    shape."""
+    root.mkdir(parents=True, exist_ok=True)
+    git(root, "init", "-b", "main")
+    (root / "workbench.yaml").write_text(
+        f"name: {name}\nslug: {slug}\n"
+        "registry: workbench/registry.db\nplans: .plans\n")
+    (root / "README.md").write_text("x\n")
+    git(root, "add", ".")
+    git(root, "commit", "-m", "base")
+    return root
 
 
 def write_project(root: Path, name="Proj", extra=""):
@@ -121,6 +152,77 @@ class TestSweep(unittest.TestCase):
             self.assertTrue(sections["plans"])
             self.assertFalse(sections["mockups"])
             self.assertTrue(sections["registry_declared"])
+
+
+class TestSweepWorktreeDedupe(unittest.TestCase):
+    """Repo identity, not directory identity: a linked
+    worktree carrying the same tracked manifest must not
+    register as a second project under the same slug."""
+
+    def test_repo_plus_linked_worktree_is_one_project(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            repo = make_repo(ws / "repo")
+            wt = ws / "repo-wt"
+            git(repo, "worktree", "add", "-b", "build/x",
+                str(wt))
+            result = sweep([ws])
+            self.assertEqual(result.errors, [])
+            self.assertEqual([p.slug for p in result.projects],
+                             ["repo"])
+            self.assertEqual(result.projects[0].root,
+                             repo.resolve())
+            # the worktree stays visible through the main
+            # checkout's worktree derivations
+            derived = list_worktrees(result.projects[0].root)
+            self.assertTrue(derived["available"])
+            by_path = {w["path"]: w
+                       for w in derived["worktrees"]}
+            self.assertIn(str(wt), by_path)
+            self.assertTrue(
+                by_path[str(repo.resolve())]["is_main"])
+            self.assertFalse(by_path[str(wt)]["is_main"])
+
+    def test_worktree_seen_first_still_registers_main(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            repo = make_repo(ws / "z-area" / "repo")
+            linked = ws / "a-area" / "linked"
+            git(repo, "worktree", "add", "-b", "build/x",
+                str(linked))
+            # roots ordered so the worktree is walked first
+            result = sweep([ws / "a-area", ws / "z-area"])
+            self.assertEqual([p.slug for p in result.projects],
+                             ["repo"])
+            self.assertEqual(result.projects[0].root,
+                             repo.resolve())
+
+    def test_worktree_only_registers_main_checkout(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            repo = make_repo(ws / "z-area" / "repo")
+            linked = ws / "a-area" / "linked"
+            git(repo, "worktree", "add", "-b", "build/x",
+                str(linked))
+            # the main checkout is under no sweep root: the
+            # identity still registers once, rooted at main
+            result = sweep([ws / "a-area"])
+            self.assertEqual(result.errors, [])
+            self.assertEqual([p.slug for p in result.projects],
+                             ["repo"])
+            self.assertEqual(result.projects[0].root,
+                             repo.resolve())
+
+    def test_two_unrelated_repos_register_as_two(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            make_repo(ws / "one", name="One", slug="one")
+            make_repo(ws / "two", name="Two", slug="two")
+            result = sweep([ws])
+            self.assertEqual(
+                sorted(p.slug for p in result.projects),
+                ["one", "two"])
+            self.assertEqual(result.errors, [])
 
 
 if __name__ == "__main__":
