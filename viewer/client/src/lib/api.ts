@@ -95,6 +95,10 @@ export interface PlanSummary {
   conforming: boolean;
   step_count: number;
   open_questions_count: number;
+  /** Declared subplan paths (`.plans/`-relative, §21);
+   * carried by bundle summaries. */
+  subplans?: string[];
+  subplans_count: number;
   mermaid_count: number;
   archived: boolean;
   modified: number;
@@ -140,6 +144,7 @@ export interface PlanSection {
   is_rulings: boolean;
   is_steps: boolean;
   is_open_questions: boolean;
+  is_subplans: boolean;
   is_critical_files: boolean;
 }
 
@@ -173,6 +178,9 @@ export interface PlanDoc {
   step_count: number;
   open_questions: PlanOpenQuestion[];
   open_questions_count: number;
+  /** Declared subplan paths from `## Subplans` (§21),
+   * in declaration order. */
+  subplans: string[];
   critical_files: string[];
   mermaid_count: number;
   markdown: string;
