@@ -32,9 +32,19 @@ change.
   separately and need his approval; the frontend dependency
   decision is recorded OPEN in `architecture.md`.
 
+- Step 2: harness core (lib/ + wb) DONE — 45 unittest cases
+  green under the repo venv: registry discipline (CAS,
+  ruling-required transitions, atomic mutations, append-only
+  history), full CLI lifecycle walk for two fixture projects
+  with no cross-talk, export→rebuild round-trip identical
+  (fixed clock), uniformity gate refusing canonical/approve,
+  approval bound to the state snapshot, staleness explainable
+  and provably non-mutating, validator registry with planted
+  violations, manifest subset + sweep mechanics.
+
 ## In Progress
 
-- Step 2: harness core (lib/ + wb) with fixture tests.
+- Step 3: plan parser against the real corpus.
 
 ## Held (the owner's direction, 2026-10-25 — not a failure)
 

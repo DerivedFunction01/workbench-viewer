@@ -1,0 +1,552 @@
+#!/usr/bin/env python3
+"""wb — the workbench harness CLI.
+
+A thin caller over lib/: every verb is a lib/ mutation or
+read; wb holds no logic of its own and no SQL. The companion
+server calls the same lib/ functions — there is exactly one
+mutation path in the system. Every mutation verb regenerates
+the project's registry.json export (a pure fold; safe to
+repeat).
+
+Project selection (first match wins):
+  --db PATH         a registry DB directly (fixtures, repair)
+  --root PATH       a project root holding workbench.yaml
+  --project SLUG    resolved by sweeping the workspace
+  (none)            walk up from the cwd for workbench.yaml
+
+Run under the repo venv:  .venv/bin/python wb --help
+"""
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib import export as export_mod  # noqa: E402
+from lib import files as files_mod  # noqa: E402
+from lib import registry as reg  # noqa: E402
+from lib import staleness as stale_mod  # noqa: E402
+from lib import validators as val_mod  # noqa: E402
+from lib.manifest import load_manifest  # noqa: E402
+from lib.sweep import sweep  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parent
+
+
+class Ctx:
+    """Resolved project context for one invocation."""
+
+    def __init__(self, args):
+        self.db_path = None
+        self.layout = None
+        self.project_meta = None
+        if args.db:
+            self.db_path = Path(args.db)
+            parent = self.db_path.parent
+            self.layout = (parent / "entries",
+                           parent / "archive")
+            self.project_meta = {"slug": parent.parent.name,
+                                 "name": parent.parent.name}
+            return
+        manifest = None
+        if args.root:
+            manifest = load_manifest(
+                Path(args.root) / "workbench.yaml")
+        if manifest is None and not args.project:
+            here = Path.cwd()
+            for candidate in (here, *here.parents):
+                if (candidate / "workbench.yaml").is_file():
+                    manifest = load_manifest(
+                        candidate / "workbench.yaml")
+                    break
+        if manifest is None:
+            env_roots = os.environ.get("WB_VIEWER_SWEEP_ROOTS")
+            roots = [Path(r) for r in
+                     env_roots.split(os.pathsep) if r] \
+                if env_roots else [REPO_ROOT.parent]
+            result = sweep(roots)
+            if args.project:
+                project = result.by_slug(args.project)
+                if project is None:
+                    raise SystemExit(
+                        f"wb: project {args.project!r} not "
+                        f"found by the sweep of {roots}")
+                manifest = project.manifest
+            elif result.projects:
+                raise SystemExit(
+                    "wb: no project selected — use --project,"
+                    " --root, --db, or run inside a project")
+            else:
+                raise SystemExit(
+                    "wb: no projects found by the sweep")
+        self.manifest = manifest
+        self.project_meta = {"slug": manifest.slug,
+                             "name": manifest.name}
+        if manifest.registry is None:
+            raise SystemExit(
+                f"wb: project {manifest.slug} declares no "
+                f"registry — Mockups/Todos are absent for it")
+        self.db_path = manifest.registry
+        self.layout = (manifest.mockups, manifest.archive)
+
+    def regenerate(self):
+        if self.db_path and self.db_path.is_file():
+            export_mod.regenerate(
+                self.db_path, project=self.project_meta)
+
+
+def _print(obj):
+    if isinstance(obj, (dict, list)):
+        print(json.dumps(obj, indent=2, sort_keys=True,
+                         ensure_ascii=False))
+    else:
+        print(obj)
+
+
+def _latest_reviews(ctx):
+    entries = reg.list_entries(ctx.db_path, archived=None)
+    return {e["id"]: reg.latest_review(ctx.db_path, e["id"])
+            for e in entries}
+
+
+# ----------------------------------------------------------------
+# Verbs
+# ----------------------------------------------------------------
+
+def cmd_projects(args):
+    roots = [Path(r) for r in args.root] \
+        if args.root else [REPO_ROOT.parent]
+    result = sweep(roots)
+    _print(result.summary())
+    return 0
+
+
+def cmd_init(args):
+    ctx = Ctx(args)
+    reg.init_registry(ctx.db_path)
+    ctx.regenerate()
+    print(f"wb: registry ready at {ctx.db_path}")
+    return 0
+
+
+def cmd_add(args):
+    ctx = Ctx(args)
+    schema = None
+    if args.state_schema:
+        schema = json.loads(Path(args.state_schema)
+                            .read_text())
+    entry = reg.add_entry(
+        ctx.db_path, ctx.layout, args.slug, title=args.title,
+        kind=args.kind, actor="cli", status=args.status,
+        ruling=args.ruling, source_kind=args.source_kind,
+        source_ref=args.source_ref, main_file=args.main_file,
+        state_schema=schema)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_list(args):
+    ctx = Ctx(args)
+    archived = None
+    if args.archived:
+        archived = True
+    elif not args.all:
+        archived = False
+    entries = reg.list_entries(ctx.db_path, archived=archived)
+    thresholds = stale_mod.load_thresholds(ctx.db_path)
+    latest = _latest_reviews(ctx)
+    rows = []
+    for e in entries:
+        derived = stale_mod.entry_staleness(
+            e, thresholds=thresholds)
+        row = {"id": e["id"], "title": e["title"],
+               "kind": e["kind"], "status": e["status"],
+               "archived": e["archived"],
+               "stale": derived["stale"],
+               "stale_reasons": derived["reasons"]}
+        if args.stale and not derived["stale"]:
+            continue
+        if args.status and e["status"] != args.status:
+            continue
+        rows.append(row)
+    for r in rows:
+        badge = " [STALE: " + "; ".join(r["stale_reasons"]) + "]" \
+            if r["stale"] else ""
+        arch = " (archived)" if r["archived"] else ""
+        print(f"{r['id']:<28} {r['status']:<12} "
+              f"{r['kind']:<18} {r['title']}{arch}{badge}")
+    if not rows:
+        print("wb: no entries")
+    return 0
+
+
+def cmd_show(args):
+    ctx = Ctx(args)
+    entry = reg.get_entry(ctx.db_path, args.id)
+    entry["derived"] = stale_mod.entry_staleness(
+        entry, thresholds=stale_mod.load_thresholds(ctx.db_path))
+    entry["approval"] = stale_mod.approval_coverage(
+        entry, reg.latest_review(ctx.db_path, args.id))
+    entry["history"] = reg.history_for(ctx.db_path, args.id)
+    _print(entry)
+    return 0
+
+
+def cmd_set(args):
+    ctx = Ctx(args)
+    fields = {}
+    for pair in args.pairs:
+        if "=" not in pair:
+            raise SystemExit(f"wb set: expected field=value, "
+                             f"got {pair!r}")
+        key, _, value = pair.partition("=")
+        fields[key] = value
+    entry = reg.set_fields(ctx.db_path, args.id, fields,
+                           actor="cli",
+                           expect_version=args.expect_version)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_set_status(args):
+    ctx = Ctx(args)
+    entry = reg.set_status(
+        ctx.db_path, args.id, args.status, actor="cli",
+        ruling=args.ruling, gate=args.gate,
+        expect_version=args.expect_version, layout=ctx.layout)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_supersede(args):
+    ctx = Ctx(args)
+    entry = reg.supersede(ctx.db_path, args.old, args.new,
+                          actor="cli", ruling=args.ruling)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_verify(args):
+    ctx = Ctx(args)
+    entry = reg.verify_entry(ctx.db_path, args.id, actor="cli",
+                             accept_drift=args.accept_drift)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_archive(args):
+    ctx = Ctx(args)
+    entry = reg.archive_entry(ctx.db_path, ctx.layout, args.id,
+                              actor="cli", resume=args.resume)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_unarchive(args):
+    ctx = Ctx(args)
+    entry = reg.unarchive_entry(ctx.db_path, ctx.layout,
+                                args.id, actor="cli")
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_stale(args):
+    ctx = Ctx(args)
+    entries = reg.list_entries(ctx.db_path, archived=False)
+    report = stale_mod.project_report(
+        entries, _latest_reviews(ctx),
+        thresholds=stale_mod.load_thresholds(ctx.db_path))
+    _print(report)
+    summary = (f"stale-check: {report['summary']['stale']} of "
+               f"{report['summary']['total']} entries flagged")
+    reg.record_stale_check(ctx.db_path, summary)
+    ctx.regenerate()
+    print(summary)
+    return 0
+
+
+def cmd_validate(args):
+    ctx = Ctx(args)
+    findings = val_mod.validate_project(ctx.db_path, ctx.layout)
+    for f in findings:
+        print(f"[{f['validator']}] {f['entry']}: {f['message']}")
+    if findings:
+        print(f"wb validate: {len(findings)} finding(s)")
+        return 1
+    print("wb validate: clean")
+    return 0
+
+
+def cmd_export(args):
+    ctx = Ctx(args)
+    out = export_mod.regenerate(ctx.db_path,
+                                project=ctx.project_meta)
+    print(f"wb: export regenerated at {out}")
+    return 0
+
+
+def cmd_rebuild(args):
+    ctx = Ctx(args)
+    export_path = ctx.db_path.with_name("registry.json")
+    if args.from_file:
+        export_path = Path(args.from_file)
+    data = export_mod.rebuild(ctx.db_path, export_path)
+    print(f"wb: rebuilt {ctx.db_path} from {export_path} "
+          f"({len(data.get('entries', []))} entries)")
+    return 0
+
+
+def cmd_set_state_schema(args):
+    ctx = Ctx(args)
+    schema = json.loads(Path(args.file).read_text())
+    entry = reg.set_state_schema(ctx.db_path, args.id, schema,
+                                 actor="cli")
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_set_state(args):
+    ctx = Ctx(args)
+    state = json.loads(args.json)
+    entry = reg.set_state(ctx.db_path, args.id, state,
+                          actor="cli",
+                          expect_version=args.expect_version)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_review(args):
+    ctx = Ctx(args)
+    entry = reg.review_entry(ctx.db_path, args.id,
+                             args.disposition, actor="cli",
+                             comment=args.comment,
+                             layout=ctx.layout)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_todo_add(args):
+    ctx = Ctx(args)
+    todo = reg.add_todo(ctx.db_path, args.id, args.title,
+                        actor="cli", notes=args.notes,
+                        link_kind=args.link_kind,
+                        link_ref=args.link_ref)
+    ctx.regenerate()
+    _print(todo)
+    return 0
+
+
+def cmd_todo_list(args):
+    ctx = Ctx(args)
+    todos = reg.list_todos(ctx.db_path, status=args.status)
+    for t in todos:
+        link = f" -> {t['link_kind']}:{t['link_ref']}" \
+            if t["link_kind"] else ""
+        print(f"{t['id']:<28} {t['status']:<7} "
+              f"{t['title']}{link}")
+    if not todos:
+        print("wb: no todos")
+    return 0
+
+
+def cmd_todo_set_status(args):
+    ctx = Ctx(args)
+    todo = reg.set_todo_status(ctx.db_path, args.id, args.status,
+                               actor="cli",
+                               expect_version=args.expect_version)
+    ctx.regenerate()
+    _print(todo)
+    return 0
+
+
+def cmd_todo_set(args):
+    ctx = Ctx(args)
+    fields = {}
+    for pair in args.pairs:
+        if "=" not in pair:
+            raise SystemExit(f"wb todo-set: expected "
+                             f"field=value, got {pair!r}")
+        key, _, value = pair.partition("=")
+        fields[key] = value
+    todo = reg.set_todo_fields(ctx.db_path, args.id, fields,
+                               actor="cli",
+                               expect_version=args.expect_version)
+    ctx.regenerate()
+    _print(todo)
+    return 0
+
+
+def cmd_print_schedule(args):
+    print("# Staleness check for one project — run by hand or")
+    print("# hand this definition to the platform scheduler.")
+    print("# (Scheduling itself is a platform concern; the")
+    print("# harness builds the tool, not the schedule.)")
+    print()
+    print("[systemd timer]")
+    print("OnCalendar=daily")
+    print(f"ExecStart={REPO_ROOT}/.venv/bin/python "
+          f"{REPO_ROOT}/wb --project <slug> stale")
+    print()
+    print("[cron]")
+    print(f"17 6 * * * {REPO_ROOT}/.venv/bin/python "
+          f"{REPO_ROOT}/wb --project <slug> stale")
+    return 0
+
+
+def build_parser():
+    p = argparse.ArgumentParser(
+        prog="wb", description="Workbench harness CLI "
+        "(thin caller over lib/ — one mutation path).")
+    p.add_argument("--project", help="project slug (sweep)")
+    p.add_argument("--root", help="project root with "
+                                  "workbench.yaml")
+    p.add_argument("--db", help="registry DB path (direct)")
+    sub = p.add_subparsers(dest="verb", required=True)
+
+    sp = sub.add_parser("projects")
+    sp.add_argument("--root", action="append",
+                    help="sweep root (repeatable)")
+    sp.set_defaults(fn=cmd_projects)
+
+    sub.add_parser("init").set_defaults(fn=cmd_init)
+
+    sp = sub.add_parser("add")
+    sp.add_argument("slug")
+    sp.add_argument("--title")
+    sp.add_argument("--kind", default="mockup")
+    sp.add_argument("--status", default="unexplored")
+    sp.add_argument("--ruling")
+    sp.add_argument("--source-kind", default="entry-dir")
+    sp.add_argument("--source-ref")
+    sp.add_argument("--main-file", default="mock.html")
+    sp.add_argument("--state-schema",
+                    help="path to a JSON state-schema file")
+    sp.set_defaults(fn=cmd_add)
+
+    sp = sub.add_parser("list")
+    sp.add_argument("--status")
+    sp.add_argument("--stale", action="store_true")
+    sp.add_argument("--archived", action="store_true")
+    sp.add_argument("--all", action="store_true")
+    sp.set_defaults(fn=cmd_list)
+
+    sp = sub.add_parser("show")
+    sp.add_argument("id")
+    sp.set_defaults(fn=cmd_show)
+
+    sp = sub.add_parser("set")
+    sp.add_argument("id")
+    sp.add_argument("pairs", nargs="+")
+    sp.add_argument("--expect-version", type=int)
+    sp.set_defaults(fn=cmd_set)
+
+    sp = sub.add_parser("set-status")
+    sp.add_argument("id")
+    sp.add_argument("status")
+    sp.add_argument("--ruling")
+    sp.add_argument("--gate")
+    sp.add_argument("--expect-version", type=int)
+    sp.set_defaults(fn=cmd_set_status)
+
+    sp = sub.add_parser("supersede")
+    sp.add_argument("old")
+    sp.add_argument("new")
+    sp.add_argument("--ruling")
+    sp.set_defaults(fn=cmd_supersede)
+
+    sp = sub.add_parser("verify")
+    sp.add_argument("id")
+    sp.add_argument("--accept-drift", action="store_true")
+    sp.set_defaults(fn=cmd_verify)
+
+    sp = sub.add_parser("archive")
+    sp.add_argument("id")
+    sp.add_argument("--resume", action="store_true")
+    sp.set_defaults(fn=cmd_archive)
+
+    sp = sub.add_parser("unarchive")
+    sp.add_argument("id")
+    sp.set_defaults(fn=cmd_unarchive)
+
+    sub.add_parser("stale").set_defaults(fn=cmd_stale)
+    sub.add_parser("validate").set_defaults(fn=cmd_validate)
+    sub.add_parser("export").set_defaults(fn=cmd_export)
+
+    sp = sub.add_parser("rebuild")
+    sp.add_argument("--from-file")
+    sp.set_defaults(fn=cmd_rebuild)
+
+    sp = sub.add_parser("set-state-schema")
+    sp.add_argument("id")
+    sp.add_argument("file")
+    sp.set_defaults(fn=cmd_set_state_schema)
+
+    sp = sub.add_parser("set-state")
+    sp.add_argument("id")
+    sp.add_argument("json")
+    sp.add_argument("--expect-version", type=int)
+    sp.set_defaults(fn=cmd_set_state)
+
+    sp = sub.add_parser("review")
+    sp.add_argument("id")
+    sp.add_argument("disposition",
+                    choices=list(reg.REVIEW_DISPOSITIONS))
+    sp.add_argument("--comment")
+    sp.set_defaults(fn=cmd_review)
+
+    sp = sub.add_parser("todo-add")
+    sp.add_argument("id")
+    sp.add_argument("title")
+    sp.add_argument("--notes")
+    sp.add_argument("--link-kind")
+    sp.add_argument("--link-ref")
+    sp.set_defaults(fn=cmd_todo_add)
+
+    sp = sub.add_parser("todo-list")
+    sp.add_argument("--status")
+    sp.set_defaults(fn=cmd_todo_list)
+
+    sp = sub.add_parser("todo-set-status")
+    sp.add_argument("id")
+    sp.add_argument("status")
+    sp.add_argument("--expect-version", type=int)
+    sp.set_defaults(fn=cmd_todo_set_status)
+
+    sp = sub.add_parser("todo-set")
+    sp.add_argument("id")
+    sp.add_argument("pairs", nargs="+")
+    sp.add_argument("--expect-version", type=int)
+    sp.set_defaults(fn=cmd_todo_set)
+
+    sub.add_parser("print-schedule").set_defaults(
+        fn=cmd_print_schedule)
+    return p
+
+
+def main(argv=None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        return args.fn(args)
+    except reg.RegistryError as e:
+        print(f"wb: refused: {e}", file=sys.stderr)
+        return 2
+    except files_mod.FileError_ as e:
+        print(f"wb: refused: {e}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
