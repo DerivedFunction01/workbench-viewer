@@ -40,6 +40,7 @@ sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 
 import config as cfgmod  # noqa: E402
 from lib import active as active_mod  # noqa: E402
+from lib import annotations as ann_mod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
 from lib import diffs as diff_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
@@ -377,12 +378,32 @@ def start_message_maintenance():
         notify_thread.start()
 
 
+def with_anchor_context(message: dict) -> dict:
+    """Attach the derived anchor_context (§12/§13) to an
+    annotation message: lib re-location against the
+    target's CURRENT state, computed at read, never
+    stored. The project resolves from the sweep by the
+    message's project_slug; an unresolvable project still
+    yields a context (target_missing) — the annotation
+    itself is never dropped."""
+    if message.get("selection"):
+        slug = message.get("project_slug")
+        project = find_project(slug) if slug else None
+        message["anchor_context"] = \
+            ann_mod.resolve_context(project, message)
+    return message
+
+
 def messages_list(query: dict) -> dict:
     if query.get("pickup") == "1":
         # Agent pickup (spec D3): the fetch acknowledges.
+        # The pickup payload IS the agent's work order, so
+        # each annotation rides with its anchor_context
+        # (§13: what it points at, re-located now).
         picked = msg_mod.fetch_unacked(
             MSG_DB, query.get("project") or None)
-        return {"messages": picked,
+        return {"messages": [with_anchor_context(m)
+                             for m in picked],
                 "picked_up": len(picked),
                 "captured_at": now_iso()}
     rows = msg_mod.list_messages(
@@ -391,7 +412,8 @@ def messages_list(query: dict) -> dict:
         anchor_type=query.get("anchor_type") or None,
         anchor_ref=query.get("anchor_ref") or None,
         badge_days=CFG["messages_awaiting_badge_days"])
-    return {"messages": rows, "captured_at": now_iso()}
+    return {"messages": [with_anchor_context(r) for r in rows],
+            "captured_at": now_iso()}
 
 
 def message_create(body: dict) -> dict:

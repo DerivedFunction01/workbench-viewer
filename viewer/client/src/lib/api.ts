@@ -472,6 +472,38 @@ export interface ComponentSelection {
 
 export type SelectionAnchor = TextSelection | ComponentSelection;
 
+/** The derived anchor_context the server attaches to an
+ * annotation at read (§12/§13; lib/annotations.py
+ * verbatim): where the anchor points NOW — re-location
+ * status, the located excerpt, the resolved step — or,
+ * for a component, whether it is still present in the
+ * exhibit's drill-in. Derived, never stored; absent on
+ * non-annotation messages. */
+export interface AnchorContextText {
+  kind: "text";
+  relocated: boolean;
+  status: string;
+  component_id: string | null;
+  component_label: string | null;
+  section_heading: string | null;
+  step: number | null;
+  quote: string | null;
+  excerpt: string | null;
+  component_missing: boolean;
+}
+
+export interface AnchorContextComponent {
+  kind: "component";
+  component_id: string | null;
+  component_label: string | null;
+  entry_id: string | null;
+  entry_title: string | null;
+  present: boolean;
+  status: string;
+}
+
+export type AnchorContext = AnchorContextText | AnchorContextComponent;
+
 export interface MessageItem {
   id: number;
   project_slug: string | null;
@@ -481,6 +513,7 @@ export interface MessageItem {
   body: string;
   showcase: { main?: unknown; docs?: unknown[] } | null;
   selection: SelectionAnchor | null;
+  anchor_context?: AnchorContext | null;
   state: "draft" | "sent" | "acknowledged" | "done" | "archived";
   created_at: string;
   updated_at: string;

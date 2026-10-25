@@ -265,5 +265,97 @@ class TestAnnotationApi(AnnotationServerCase):
         self.assertEqual(len(out["messages"]), 1)
 
 
+class TestPickupAnchorContext(AnnotationServerCase):
+    """Step 7: reads carry the derived anchor_context —
+    the pickup payload is the agent's work order (§13)."""
+
+    def list_context(self, message_id, **params):
+        qs = "&".join(f"{k}={v}" for k, v in params.items())
+        status, out = self.req("GET", f"/api/messages?{qs}")
+        self.assertEqual(status, 200, out)
+        for row in out["messages"]:
+            if row["id"] == message_id:
+                return row.get("anchor_context")
+        self.fail(f"message {message_id} not listed")
+
+    def test_pickup_carries_located_context(self):
+        m = self.create_annotation(send=True)
+        status, out = self.req(
+            "GET", "/api/messages?pickup=1&project=alpha")
+        self.assertEqual(status, 200, out)
+        mine = [r for r in out["messages"]
+                if r["id"] == m["id"]]
+        self.assertEqual(len(mine), 1)
+        # The fetch acknowledged it (pickup is the act).
+        self.assertEqual(mine[0]["state"], "acknowledged")
+        ctx = mine[0]["anchor_context"]
+        self.assertEqual(ctx["kind"], "text")
+        self.assertEqual(ctx["status"], "located")
+        self.assertTrue(ctx["relocated"])
+        self.assertEqual(ctx["step"], 1)
+        self.assertEqual(ctx["section_heading"], "Steps")
+        self.assertFalse(ctx["component_missing"])
+        self.assertIn(
+            "Anything that moved since the checkpoint is",
+            ctx["excerpt"])
+
+    def test_context_orphan_after_quote_edited_away(self):
+        m = self.create_annotation()
+        edited = PLAN.replace(
+            "Anything that moved since the checkpoint is\n"
+            "   listed, not silently carried into the seal.",
+            "The moved items are printed.")
+        self.assertNotEqual(edited, PLAN)
+        type(self).write_plan(edited)
+        try:
+            ctx = self.list_context(m["id"],
+                                    anchor_ref="plan.md")
+        finally:
+            type(self).write_plan(PLAN)
+        self.assertEqual(ctx["status"], "orphan")
+        self.assertFalse(ctx["relocated"])
+        # The stored quote survives — anchor-moved is
+        # shown, never dropped.
+        self.assertEqual(ctx["quote"], QUOTE)
+        self.assertIsNone(ctx["excerpt"])
+
+    def test_component_context_present_and_moved(self):
+        status, out = self.req("POST", "/api/messages", {
+            "author": "owner", "body": "wrong chart",
+            "project_slug": "alpha",
+            "anchor_type": "component",
+            "anchor_ref": "bars-entry",
+            "selection": dict(COMPONENT_SELECTION),
+            "send": True})
+        self.assertEqual(status, 200, out)
+        mid = out["message"]["id"]
+        mock = (type(self).root / "workbench" / "entries"
+                / "bars-entry" / "mock.html")
+        # The component was renamed in the exhibit: its
+        # data-anchor no longer exists in the main file.
+        mock.write_text(
+            '<figure data-anchor="summary/other-chart">'
+            "</figure>", encoding="utf-8")
+        ctx = self.list_context(
+            mid, anchor_ref="bars-entry",
+            anchor_type="component")
+        self.assertEqual(ctx["kind"], "component")
+        self.assertFalse(ctx["present"])
+        self.assertEqual(ctx["status"], "anchor moved")
+        # The stored label snapshot still says what it was.
+        self.assertEqual(ctx["component_label"],
+                         "chart · bars-by-year")
+        self.assertEqual(ctx["entry_title"], "Bars")
+        # Restored under its id: present again.
+        mock.write_text(
+            '<figure data-anchor="summary/bars-by-year">'
+            "</figure>", encoding="utf-8")
+        ctx = self.list_context(
+            mid, anchor_ref="bars-entry",
+            anchor_type="component")
+        self.assertTrue(ctx["present"])
+        self.assertEqual(ctx["status"], "present")
+
+
 if __name__ == "__main__":
     unittest.main()
