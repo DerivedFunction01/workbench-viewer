@@ -242,6 +242,88 @@ class TestConformingFixture(unittest.TestCase):
         self.assertEqual(doc["critical_files"], [])
 
 
+DECLARING_PLAN = """\
+# Parent plan
+
+Status: in progress
+
+## Objective
+
+Decompose.
+
+## Subplans
+
+- `child-a.md`
+- `finished/child-b.md` — the finished half
+- child-c.md
+
+## Critical files
+
+- `lib/plans/parser.py`
+"""
+
+FENCED_SAMPLE_PLAN = """\
+# Plan with a quoted sample
+
+Status: draft
+
+## Notes
+
+The declaration's shape, quoted as an example:
+
+```markdown
+- `not-a-real-child.md`
+```
+
+## Subplans
+
+```text
+- `also-not-real.md`
+```
+"""
+
+
+class TestSubplans(unittest.TestCase):
+    """§21: the parent's `## Subplans` declaration joins the
+    payload, fence-aware, in declaration order. Absence is
+    an empty list, never an error."""
+
+    def test_declaring_plan_paths_in_order(self):
+        doc = parser.parse_plan(DECLARING_PLAN,
+                                path="parent.md")
+        self.assertEqual(doc["subplans"],
+                         ["child-a.md", "finished/child-b.md",
+                          "child-c.md"])
+
+    def test_section_flag(self):
+        doc = parser.parse_plan(DECLARING_PLAN,
+                                path="parent.md")
+        flags = {s["heading"]: s for s in doc["sections"]}
+        self.assertTrue(flags["Subplans"]["is_subplans"])
+        self.assertFalse(flags["Objective"]["is_subplans"])
+        self.assertFalse(
+            flags["Critical files"]["is_subplans"])
+
+    def test_fenced_samples_extract_nothing(self):
+        doc = parser.parse_plan(FENCED_SAMPLE_PLAN,
+                                path="sample.md")
+        self.assertEqual(doc["subplans"], [])
+
+    def test_legacy_plan_has_no_subplans(self):
+        doc = parse(BOOTSTRAP)
+        self.assertEqual(doc["subplans"], [])
+
+    def test_summary_carries_subplans_count(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            plans = Path(td)
+            (plans / "parent.md").write_text(
+                DECLARING_PLAN, encoding="utf-8")
+            summaries = parser.list_plans(plans)
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["subplans_count"], 3)
+
+
 class TestListing(unittest.TestCase):
     def test_list_v2_plans(self):
         summaries = parser.list_plans(V2_PLANS)

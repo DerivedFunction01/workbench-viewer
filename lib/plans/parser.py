@@ -16,8 +16,9 @@ bootstrap plan):
     notably Status / Created / Parent.
   - `## Rulings`, `## Steps`, ... sections. The plan syntax
     standard's semantic sections are read structurally:
-    `## Open questions` task-list items (with checked state)
-    and the `## Critical files` path list join the payload;
+    `## Open questions` task-list items (with checked state),
+    the `## Subplans` declared-path list, and the
+    `## Critical files` path list join the payload;
     their absence is empty, never an error.
   - Steps, two shapes: `N. **Title.**` items with `files:` /
     `verify:` / `done when:` labels, or `### Step N — Title`
@@ -234,6 +235,30 @@ def _extract_open_questions(body_lines):
     return items
 
 
+def _extract_subplans(body_lines):
+    """The declared list of a `## Subplans` section
+    (repo-home spec §21): one `.plans/`-relative path per
+    bullet, same discipline as Critical files — fence-aware,
+    the backticked span when the bullet carries one, else
+    the text up to the em-dash note. Declaration order is
+    preserved; the parent declares, children declare
+    nothing back."""
+    paths = []
+    for line in _unfenced(body_lines):
+        m = _BULLET_RE.match(line)
+        if not m:
+            continue
+        item = m.group(1).strip()
+        bt = _BACKTICK_RE.search(item)
+        if bt:
+            paths.append(bt.group(1).strip())
+        else:
+            path = item.split(" — ")[0].strip()
+            if path:
+                paths.append(path)
+    return paths
+
+
 def _extract_critical_files(body_lines):
     """The path list of a `## Critical files` section: one
     path per bullet — the backticked span when the bullet
@@ -292,6 +317,7 @@ def parse_plan(text: str, *, path: str = "") -> dict:
             break
     steps = []
     open_questions = []
+    subplans = []
     critical_files = []
     out_sections = []
     for sec in sections:
@@ -304,11 +330,15 @@ def parse_plan(text: str, *, path: str = "") -> dict:
             steps.extend(sec_steps)
         is_open_questions = \
             sec["heading"].lower() == "open questions"
+        is_subplans = sec["heading"].lower() == "subplans"
         is_critical_files = \
             sec["heading"].lower() == "critical files"
         if is_open_questions:
             open_questions.extend(
                 _extract_open_questions(body_lines))
+        if is_subplans:
+            subplans.extend(
+                _extract_subplans(body_lines))
         if is_critical_files:
             critical_files.extend(
                 _extract_critical_files(body_lines))
@@ -320,6 +350,7 @@ def parse_plan(text: str, *, path: str = "") -> dict:
             "is_rulings": sec["heading"].lower() == "rulings",
             "is_steps": bool(sec_steps),
             "is_open_questions": is_open_questions,
+            "is_subplans": is_subplans,
             "is_critical_files": is_critical_files,
         })
     conforming = status_raw is not None
@@ -336,6 +367,7 @@ def parse_plan(text: str, *, path: str = "") -> dict:
         "step_count": len(steps),
         "open_questions": open_questions,
         "open_questions_count": len(open_questions),
+        "subplans": subplans,
         "critical_files": critical_files,
         "mermaid_count": sum(
             1 for s in out_sections for b in s["blocks"]
@@ -364,6 +396,7 @@ def _summary(doc: dict, rel: str, archived: bool,
         "conforming": doc["conforming"],
         "step_count": doc["step_count"],
         "open_questions_count": doc["open_questions_count"],
+        "subplans_count": len(doc["subplans"]),
         "mermaid_count": doc["mermaid_count"],
         "archived": archived,
         "modified": mtime,
