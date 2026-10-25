@@ -64,6 +64,14 @@ DEFAULTS = {
     "messages_archive_ttl_days": 90,
     "messages_awaiting_badge_days": 14,
     "messages_per_project_cap": 1000,
+    # Repo-home §15.1: optional generic notify targets for
+    # new outbox rows, fired by the server maintenance loop.
+    # null = not configured (the outbox table alone is the
+    # interface). The command receives the event JSON on
+    # stdin; the webhook receives it as a POST body.
+    "messages_notify_webhook": None,
+    "messages_notify_command": None,
+    "messages_notify_poll_s": 30,
     # Repo-home §6: a worktree untouched this many days (or
     # merged into its base) derives the "likely done" flag.
     "worktree_stale_days": 14,
@@ -138,6 +146,13 @@ def messages_db_path(cfg: dict) -> Path:
     state_dir/messages_db unless the key is absolute."""
     p = Path(cfg["messages_db"])
     return p if p.is_absolute() else state_dir(cfg) / p
+
+
+def notify_targets(cfg: dict) -> dict:
+    """Watcher notify targets (repo-home spec §15.1),
+    assembled from the seam for lib/notify.fire_targets."""
+    return {"webhook": cfg["messages_notify_webhook"],
+            "command": cfg["messages_notify_command"]}
 
 
 def messages_policy(cfg: dict) -> dict:
