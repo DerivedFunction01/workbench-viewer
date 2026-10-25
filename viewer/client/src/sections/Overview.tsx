@@ -23,6 +23,7 @@ import {
 import { formatDate, formatRelative } from "../lib/format";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";
+import { AnchoredComment } from "./inbox/AnchoredComment";
 import {
   EmptyWell,
   ErrorWell,
@@ -33,7 +34,15 @@ import {
 } from "./shared";
 import { ActivePlanLine, ProvenanceMark, WorktreeChildren, WorktreeMeta } from "./worktreeViews";
 
-function ShowcaseCard({ slug, showcase }: { slug: string; showcase: ActiveResolution | null }) {
+function ShowcaseCard({
+  slug,
+  projectName,
+  showcase,
+}: {
+  slug: string;
+  projectName: string;
+  showcase: ActiveResolution | null;
+}) {
   if (!showcase || showcase.source === "none" || !showcase.bundle) {
     return (
       <Card anchor="overview/showcase" title="Active plan">
@@ -95,6 +104,16 @@ function ShowcaseCard({ slug, showcase }: { slug: string; showcase: ActiveResolu
         <p style={{ color: "var(--wb-danger)", margin: "var(--wb-space-8) 0 0" }}>
           {showcase.note}
         </p>
+      ) : null}
+      {plan ? (
+        <div style={{ marginTop: "var(--wb-space-8)" }}>
+          <AnchoredComment
+            slug={slug}
+            projectName={projectName}
+            anchorType="plan"
+            anchorRef={plan.path}
+          />
+        </div>
       ) : null}
       {showcase.also_in_progress.length > 0 ? (
         <div style={{ marginTop: "var(--wb-space-12)" }}>
@@ -294,7 +313,7 @@ export function OverviewSection({ slug, projectName }: { slug: string; projectNa
           gap: "var(--wb-space-16)",
         }}
       >
-        <ShowcaseCard slug={slug} showcase={showcase} />
+        <ShowcaseCard slug={slug} projectName={projectName} showcase={showcase} />
         <WorktreesCard slug={slug} payload={worktreesPayload} fallback={row} />
         <Card anchor="overview/plans" title="Plans">
           {plansQuery.isPending ? (

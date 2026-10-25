@@ -33,6 +33,7 @@ import { applyAppearance, loadAppearance, saveAppearance } from "./lib/preferenc
 import {
   boardAllHref,
   homeHref,
+  inboxHref,
   parseRoute,
   type Route,
   type SectionId,
@@ -41,6 +42,7 @@ import {
 } from "./lib/routing";
 import { BoardSection } from "./sections/Board";
 import { HomeSection } from "./sections/Home";
+import { InboxSection } from "./sections/Inbox";
 import { MockupsSection } from "./sections/Mockups";
 import { OverviewSection } from "./sections/Overview";
 import { PlansSection } from "./sections/Plans";
@@ -132,6 +134,14 @@ export function App() {
     queryKey: ["config"],
     queryFn: () => api.getConfig({}),
   });
+  const inboxQuery = useQuery({
+    queryKey: ["messages", "", "sent"],
+    queryFn: () => api.getMessages({ state: "sent" }),
+    refetchInterval: 30000,
+  });
+  const inboxCount =
+    (inboxQuery.data?.payload as unknown as { messages?: unknown[] } | null)?.messages?.length ??
+    null;
   const editingOn = configQuery.data?.payload?.config.file_editing_enabled === true;
 
   const projects = useMemo<ProjectSummary[]>(
@@ -347,6 +357,18 @@ export function App() {
 
         <div style={{ marginTop: "auto" }}>
           <a
+            href={inboxHref()}
+            style={railLinkStyle(route.view === "inbox")}
+            aria-current={route.view === "inbox" ? "page" : undefined}
+          >
+            <span>Inbox</span>
+            {inboxCount != null && inboxCount > 0 ? (
+              <span style={badgeStyle} className="num">
+                {inboxCount}
+              </span>
+            ) : null}
+          </a>
+          <a
             href={settingsHref()}
             style={railLinkStyle(route.view === "settings")}
             aria-current={route.view === "settings" ? "page" : undefined}
@@ -415,6 +437,8 @@ export function App() {
         >
           {route.view === "settings" ? (
             <SettingsSection appearance={appearance} onChange={changeAppearance} />
+          ) : route.view === "inbox" ? (
+            <InboxSection />
           ) : route.view === "board-all" ? (
             <BoardSection slug={null} projectName={null} />
           ) : route.view === "section" ? (
