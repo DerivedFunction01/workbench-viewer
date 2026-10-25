@@ -25,9 +25,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from lib import bundles as bundle_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
+from lib.plans import bundles as bundle_parser  # noqa: E402
 from lib import staleness as stale_mod  # noqa: E402
 from lib import validators as val_mod  # noqa: E402
 from lib.manifest import load_manifest  # noqa: E402
@@ -96,6 +98,68 @@ class Ctx:
         if self.db_path and self.db_path.is_file():
             export_mod.regenerate(
                 self.db_path, project=self.project_meta)
+
+
+class PlansCtx:
+    """Resolved project context for the bundle/file-todo
+    verbs (live-work-tracking spec §3.4). Unlike Ctx, a
+    registry is NOT required — bundles live in the plans
+    dir; the DB is only needed by todo import-db."""
+
+    def __init__(self, args, project_slug=None):
+        self.db_path = None
+        self.plans_dir = None
+        self.root = None
+        self.project_meta = None
+        if args.db:
+            self.db_path = Path(args.db)
+            self.root = self.db_path.parent.parent
+            manifest = None
+            candidate = self.root / "workbench.yaml"
+            if candidate.is_file():
+                manifest = load_manifest(candidate)
+            self.plans_dir = manifest.plans \
+                if manifest is not None and manifest.plans \
+                else self.root / ".plans"
+            self.project_meta = {"slug": self.root.name,
+                                 "name": self.root.name}
+            return
+        manifest = None
+        if args.root:
+            manifest = load_manifest(
+                Path(args.root) / "workbench.yaml")
+        slug = project_slug or args.project
+        if manifest is None and not slug:
+            here = Path.cwd()
+            for candidate in (here, *here.parents):
+                if (candidate / "workbench.yaml").is_file():
+                    manifest = load_manifest(
+                        candidate / "workbench.yaml")
+                    break
+        if manifest is None:
+            env_roots = os.environ.get("WB_VIEWER_SWEEP_ROOTS")
+            roots = [Path(r) for r in
+                     env_roots.split(os.pathsep) if r] \
+                if env_roots else [REPO_ROOT.parent]
+            result = sweep(roots)
+            if slug:
+                project = result.by_slug(slug)
+                if project is None:
+                    raise SystemExit(
+                        f"wb: project {slug!r} not found "
+                        f"by the sweep of {roots}")
+                manifest = project.manifest
+            else:
+                raise SystemExit(
+                    "wb: no project selected — use --project,"
+                    " --root, --db, or run inside a project")
+        self.manifest = manifest
+        self.root = manifest.root
+        self.plans_dir = manifest.plans \
+            or manifest.root / ".plans"
+        self.db_path = manifest.registry
+        self.project_meta = {"slug": manifest.slug,
+                             "name": manifest.name}
 
 
 def _print(obj):
@@ -389,6 +453,79 @@ def cmd_todo_set(args):
     return 0
 
 
+def cmd_bundle_new(args):
+    ctx = PlansCtx(args)
+    result = bundle_mod.create_bundle(
+        ctx.plans_dir, args.slug, plan=args.plan,
+        feature=args.feature, today=args.date)
+    _print(result)
+    return 0
+
+
+def cmd_todo_new(args):
+    ctx = PlansCtx(args)
+    result = bundle_mod.create_todo(
+        ctx.plans_dir, args.bundle, args.title,
+        step=args.step, worktree=args.worktree,
+        plan=args.plan, feature=args.feature,
+        body=args.body or "")
+    _print({k: result[k] for k in
+            ("id", "title", "status", "feature", "plan",
+             "plan_step", "worktree", "created", "updated",
+             "bundle", "file")})
+    return 0
+
+
+def cmd_todo_file_set(args):
+    ctx = PlansCtx(args)
+    result = bundle_mod.set_todo_status(
+        ctx.plans_dir, args.id, args.status, note=args.note)
+    _print({k: result[k] for k in
+            ("id", "title", "status", "updated", "bundle",
+             "file")})
+    return 0
+
+
+def cmd_todo_file_list(args):
+    ctx = PlansCtx(args)
+    todos = bundle_parser.list_todos(
+        ctx.plans_dir, bundle=args.bundle,
+        status=args.status)
+    invalid = 0
+    for t in todos:
+        feature = f" [{t['feature']}]" if t["feature"] else ""
+        bundle = f" ({t['bundle']})" if t.get("bundle") else ""
+        flag = ""
+        if not t["valid"]:
+            invalid += 1
+            flag = " [INVALID: " + "; ".join(t["errors"]) + "]"
+        print(f"{t['id'] or '(no id)':<32} "
+              f"{t['status'] or '?':<8} "
+              f"{t['title'] or '(no title)'}{feature}"
+              f"{bundle}{flag}")
+    if not todos:
+        print("wb: no file todos")
+    if invalid:
+        print(f"wb: {invalid} todo(s) with invalid "
+              f"front-matter (see flags above)",
+              file=sys.stderr)
+    return 0
+
+
+def cmd_todo_import_db(args):
+    ctx = PlansCtx(args,
+                   project_slug=args.import_project)
+    if ctx.db_path is None:
+        raise SystemExit(
+            "wb: project declares no registry — no DB "
+            "todos to import")
+    result = bundle_mod.import_db_todos(
+        ctx.plans_dir, ctx.db_path, bundle_slug=args.bundle,
+        today=args.date)
+    _print(result)
+    return 0
+
+
 def cmd_print_schedule(args):
     print("# Staleness check for one project — run by hand or")
     print("# hand this definition to the platform scheduler.")
@@ -531,6 +668,60 @@ def build_parser():
     sp.add_argument("--expect-version", type=int)
     sp.set_defaults(fn=cmd_todo_set)
 
+    sp = sub.add_parser(
+        "bundle", help="plan bundles (spec §3.4)")
+    bsub = sp.add_subparsers(dest="bundle_verb",
+                             required=True)
+    nb = bsub.add_parser("new")
+    nb.add_argument("slug")
+    nb.add_argument("--plan", action="store_true",
+                    help="also write a plan.md skeleton")
+    nb.add_argument("--feature")
+    nb.add_argument("--date",
+                    help="bundle date prefix (default: today)")
+    nb.set_defaults(fn=cmd_bundle_new)
+
+    sp = sub.add_parser(
+        "todo", help="file todos in bundles (spec §3.4)")
+    tsub = sp.add_subparsers(dest="todo_verb", required=True)
+    nt = tsub.add_parser("new")
+    nt.add_argument("bundle")
+    nt.add_argument("title")
+    nt.add_argument("--step", type=int)
+    nt.add_argument("--worktree")
+    nt.add_argument("--plan")
+    nt.add_argument("--feature")
+    nt.add_argument("--body")
+    nt.set_defaults(fn=cmd_todo_new)
+
+    st = tsub.add_parser("set")
+    st.add_argument("id")
+    st.add_argument("status",
+                    choices=list(bundle_mod.TODO_STATUSES))
+    st.add_argument("--note",
+                    help="appended to the todo body "
+                         "(blocker reason / deploy record)")
+    st.set_defaults(fn=cmd_todo_file_set)
+
+    lt = tsub.add_parser("list")
+    lt.add_argument("--bundle")
+    lt.add_argument("--status",
+                    choices=list(bundle_mod.TODO_STATUSES))
+    lt.set_defaults(fn=cmd_todo_file_list)
+
+    it = tsub.add_parser(
+        "import-db",
+        help="import registry-DB todos into a starter "
+             "bundle of file todos (spec §3.7)")
+    it.add_argument("import_project", nargs="?",
+                    help="project slug (sweep); default: "
+                         "the selected project")
+    it.add_argument("--bundle", default="project-zero-starter",
+                    help="starter bundle slug")
+    it.add_argument("--date",
+                    help="bundle date prefix (default: today)")
+    it.set_defaults(fn=cmd_todo_import_db)
+
     sub.add_parser("print-schedule").set_defaults(
         fn=cmd_print_schedule)
     return p
@@ -541,6 +732,9 @@ def main(argv=None) -> int:
     try:
         return args.fn(args)
     except reg.RegistryError as e:
+        print(f"wb: refused: {e}", file=sys.stderr)
+        return 2
+    except bundle_mod.BundleError as e:
         print(f"wb: refused: {e}", file=sys.stderr)
         return 2
     except files_mod.FileError_ as e:
