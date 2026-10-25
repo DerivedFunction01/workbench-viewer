@@ -19,9 +19,10 @@
 # tree (the artifact build itself belongs to the viewer build steps;
 # this script only moves source).
 #
-# NOTE: viewer/ is currently EMPTY — the viewer build steps are held
-# for the owner's fundamentals approval (2026-10-25). This script is the
-# deploy mechanism, ready for when the source lands.
+# The exclusions below apply at ANY depth: the tree's build output
+# lives at client/dist + server/dist (hashed names churn every
+# build), and *.tsbuildinfo.* is local typecheck state — neither is
+# source, and the builder regenerates dist in the runtime tree.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_VIEWER="$HERE/viewer"
@@ -32,8 +33,9 @@ manifest() {  # $1 = base dir; prints "sha256  relpath" lines, sorted
     [ -d "$base" ] || return 0
     ( cd "$base" || exit 0
       find . -type f \
-        -not -path './node_modules/*' -not -path './dist/*' \
-        -not -path './.bun-cache/*' -not -name '*.db*' \
+        -not -path '*/node_modules/*' -not -path '*/dist/*' \
+        -not -path '*/.bun-cache/*' -not -name '*.db*' \
+        -not -name '*.tsbuildinfo.*' \
         -not -name 'app.db*' | sed 's|^\./||' ) | sort \
       | while IFS= read -r rel; do
         printf '%s  %s\n' "$(sha256sum < "$base/$rel" | cut -d' ' -f1)" "$rel"
@@ -57,8 +59,9 @@ sync_tree() {  # $1 = src, $2 = dst
     local src="$1" dst="$2"
     mkdir -p "$dst"
     ( cd "$src" && find . -type f \
-        -not -path './node_modules/*' -not -path './dist/*' \
-        -not -path './.bun-cache/*' -not -name '*.db*' \
+        -not -path '*/node_modules/*' -not -path '*/dist/*' \
+        -not -path '*/.bun-cache/*' -not -name '*.db*' \
+        -not -name '*.tsbuildinfo.*' \
         -not -name 'app.db*' -print0 ) \
       | while IFS= read -r -d '' rel; do
           rel="${rel#./}"

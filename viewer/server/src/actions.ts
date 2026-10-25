@@ -175,13 +175,14 @@ export const Actions = {
 
   getEntry: defineAction({
     request: entryArg,
-    response: feedResult,
+    // The entry-detail payload ({entry, files, history,
+    // latest_review, approval, derived}) is NOT a feed
+    // envelope — it carries no slug/name/degraded/available —
+    // so it passes through verbatim like getEntryFile.
+    response: rawResult,
     privileged: [privileged.wbApi],
     async handler(ctx, args) {
-      return callServer<z.infer<typeof feedEnvelope>>(
-        ctx,
-        `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}`,
-      );
+      return callServer<unknown>(ctx, `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}`);
     },
   }),
 
