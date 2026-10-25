@@ -731,6 +731,74 @@ def todo_action(project, body: dict) -> dict:
 # HTTP layer
 # ----------------------------------------------------------------
 
+# Legacy route aliases (API unification, release N — TEMPORARY).
+# Each entry maps one legacy method/path pattern to its
+# canonical /api pattern. Dispatch canonicalizes through this
+# map before routing: internal dispatch to the same handler,
+# never a redirect, so the status, body, and POST payload are
+# the canonical handler's own. The inventory is exact — same
+# method, same segment count, every literal equal; a `<name>`
+# pattern segment binds the path segment at its position. No
+# prefix matching, no extra segments. This map lives for
+# exactly one published checkpoint cycle: Step 8 of the
+# unification plan removes it in release N+1 (bundle todo
+# t-01M5TNR7V99D3P2ENBA85N0W2F). The frozen inventory is
+# mirrored by tests/test_server_route_unification.py.
+LEGACY_ROUTE_ALIASES = [
+    ("GET", ("health",), ("api", "health")),
+    ("GET", ("config",), ("api", "config")),
+    ("GET", ("projects",), ("api", "projects")),
+    ("GET", ("board",), ("api", "board")),
+    ("GET", ("todos",), ("api", "todos")),
+    ("GET", ("projects", "<slug>", "mockups"),
+     ("api", "projects", "<slug>", "mockups")),
+    ("GET", ("projects", "<slug>", "plans"),
+     ("api", "projects", "<slug>", "plans")),
+    ("GET", ("projects", "<slug>", "plan"),
+     ("api", "projects", "<slug>", "plan")),
+    ("GET", ("projects", "<slug>", "todos"),
+     ("api", "projects", "<slug>", "todos")),
+    ("GET", ("projects", "<slug>", "entries", "<entry_id>"),
+     ("api", "projects", "<slug>", "entries", "<entry_id>")),
+    ("GET", ("projects", "<slug>", "entries", "<entry_id>",
+             "file"),
+     ("api", "projects", "<slug>", "entries", "<entry_id>",
+      "file")),
+    ("POST", ("projects", "rescan"),
+     ("api", "projects", "rescan")),
+    ("POST", ("projects", "<slug>", "todos"),
+     ("api", "projects", "<slug>", "todos")),
+    ("POST", ("projects", "<slug>", "entries", "<entry_id>",
+              "action"),
+     ("api", "projects", "<slug>", "entries", "<entry_id>",
+      "action")),
+    ("POST", ("projects", "<slug>", "entries", "<entry_id>",
+              "file"),
+     ("api", "projects", "<slug>", "entries", "<entry_id>",
+      "file")),
+]
+
+
+def _canonicalize(method, parts):
+    """Rewrite an exact legacy path to its canonical /api
+    segments through LEGACY_ROUTE_ALIASES. Returns the parts
+    unchanged when no alias matches (canonical paths and
+    unknown paths pass through as-is)."""
+    for alias_method, legacy, canonical in LEGACY_ROUTE_ALIASES:
+        if alias_method != method or len(legacy) != len(parts):
+            continue
+        bound = {}
+        for pattern, segment in zip(legacy, parts):
+            if pattern.startswith("<"):
+                bound[pattern] = segment
+            elif pattern != segment:
+                break
+        else:
+            return [bound.get(segment, segment)
+                    for segment in canonical]
+    return parts
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = f"WorkbenchViewer/{VERSION}"
     protocol_version = "HTTP/1.1"
@@ -800,7 +868,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route_get(self):
         parts, query = self._parts()
-        if parts == ["health"]:
+        parts = _canonicalize("GET", parts)
+        if parts == ["api", "health"]:
             result = get_sweep()
             uptime = (datetime.now(timezone.utc)
                       - STARTED_AT).total_seconds()
@@ -815,13 +884,12 @@ class Handler(BaseHTTPRequestHandler):
                 "sweep": {"projects": len(result.projects),
                           "errors": len(result.errors)},
             })
-        if parts == ["config"]:
+        if parts == ["api", "config"]:
             return self._send(200, {
                 "config": CFG,
                 "config_hash": cfgmod.config_hash(CFG),
                 "config_file": str(cfgmod.config_path()),
             })
-        # -- repo-home additions (additive /api namespace) --
         if parts == ["api", "home"]:
             return self._send(200, home_feed())
         if len(parts) == 4 and parts[0] == "api" \
@@ -843,12 +911,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, outbox_feed(query))
         if parts == ["api", "settings", "effective"]:
             return self._send(200, effective_settings())
-        if parts == ["projects"]:
+        if parts == ["api", "projects"]:
             result = get_sweep()
             return self._send(200, result.summary())
-        if parts == ["board"]:
+        if parts == ["api", "board"]:
             return self._send(200, board_feed())
-        if parts == ["todos"]:
+        if parts == ["api", "todos"]:
             items, errors = [], []
             for project in get_sweep().projects:
                 feed = todos_feed(project)
@@ -864,16 +932,17 @@ class Handler(BaseHTTPRequestHandler):
                                   "project_name": project.name})
             return self._send(200, {"todos": items,
                                     "errors": errors})
-        if len(parts) >= 2 and parts[0] == "projects":
-            project = self._project_or_404(parts[1])
-            if len(parts) == 3 and parts[2] == "mockups":
+        if len(parts) >= 3 and parts[0] == "api" \
+                and parts[1] == "projects":
+            project = self._project_or_404(parts[2])
+            if len(parts) == 4 and parts[3] == "mockups":
                 archived = query.get("archived") == "1"
                 return self._send(
                     200, mockups_feed(project,
                                       archived=archived))
-            if len(parts) == 3 and parts[2] == "plans":
+            if len(parts) == 4 and parts[3] == "plans":
                 return self._send(200, plans_feed(project))
-            if len(parts) == 3 and parts[2] == "plan":
+            if len(parts) == 4 and parts[3] == "plan":
                 rel = query.get("path")
                 if not rel:
                     raise ApiError(400, "plan needs ?path=")
@@ -886,20 +955,20 @@ class Handler(BaseHTTPRequestHandler):
                 except (ValueError, FileNotFoundError) as e:
                     raise ApiError(404, str(e))
                 return self._send(200, doc)
-            if len(parts) == 3 and parts[2] == "todos":
+            if len(parts) == 4 and parts[3] == "todos":
                 return self._send(200, todos_feed(project))
-            if len(parts) == 4 and parts[2] == "entries":
+            if len(parts) == 5 and parts[3] == "entries":
                 db = _require_registry(project)
                 try:
-                    detail = entry_detail(db, parts[3])
+                    detail = entry_detail(db, parts[4])
                 except reg.RegistryError as e:
                     raise ApiError(404, str(e))
                 return self._send(200, detail)
-            if len(parts) == 5 and parts[2] == "entries" \
-                    and parts[4] == "file":
+            if len(parts) == 6 and parts[3] == "entries" \
+                    and parts[5] == "file":
                 db = _require_registry(project)
                 try:
-                    entry = reg.get_entry(db, parts[3])
+                    entry = reg.get_entry(db, parts[4])
                 except reg.RegistryError as e:
                     raise ApiError(404, str(e))
                 rel = query.get("path")
@@ -917,7 +986,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route_post(self):
         parts, _query = self._parts()
-        # -- repo-home additions (additive /api namespace) --
+        parts = _canonicalize("POST", parts)
         if parts == ["api", "messages"]:
             return self._send(200,
                               message_create(self._body()))
@@ -939,29 +1008,32 @@ class Handler(BaseHTTPRequestHandler):
             verb = {"done": message_done, "send": message_send,
                     "archive": message_archive}[parts[3]]
             return self._send(200, verb(message_id))
-        if parts == ["projects", "rescan"]:
+        if parts == ["api", "projects", "rescan"]:
             result = get_sweep(force=True)
             return self._send(200, result.summary())
-        if len(parts) == 3 and parts[0] == "projects" \
-                and parts[2] == "todos":
-            project = self._project_or_404(parts[1])
+        if len(parts) == 4 and parts[0] == "api" \
+                and parts[1] == "projects" \
+                and parts[3] == "todos":
+            project = self._project_or_404(parts[2])
             return self._send(200,
                               todo_action(project, self._body()))
-        if len(parts) == 5 and parts[0] == "projects" \
-                and parts[2] == "entries" \
-                and parts[4] == "action":
-            project = self._project_or_404(parts[1])
+        if len(parts) == 6 and parts[0] == "api" \
+                and parts[1] == "projects" \
+                and parts[3] == "entries" \
+                and parts[5] == "action":
+            project = self._project_or_404(parts[2])
             return self._send(
-                200, entry_action(project, parts[3],
+                200, entry_action(project, parts[4],
                                   self._body()))
-        if len(parts) == 5 and parts[0] == "projects" \
-                and parts[2] == "entries" \
-                and parts[4] == "file":
-            project = self._project_or_404(parts[1])
+        if len(parts) == 6 and parts[0] == "api" \
+                and parts[1] == "projects" \
+                and parts[3] == "entries" \
+                and parts[5] == "file":
+            project = self._project_or_404(parts[2])
             db = _require_registry(project)
             body = self._body()
             try:
-                entry = reg.get_entry(db, parts[3])
+                entry = reg.get_entry(db, parts[4])
             except reg.RegistryError as e:
                 raise ApiError(404, str(e))
             backup_root = cfgmod.state_dir(CFG) \
