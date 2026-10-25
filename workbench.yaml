@@ -1,0 +1,9 @@
+# Workbench Viewer manifest — project zero: the harness is its
+# own first project. The manifest is tracked; the data it
+# points at (registry DB, entries, archive) is not.
+name: Workbench Viewer
+slug: workbench-viewer
+registry: workbench/registry.db
+plans: .plans
+mockups: workbench/entries
+archive: workbench/archive

@@ -72,9 +72,23 @@ change.
   land. (curl in this shell needs --noproxy for loopback —
   the egress-proxy trap; healthcheck.py is the probe.)
 
+- Step 7: adoptions DONE — project zero adopted itself
+  (tracked `workbench.yaml`; registry initialized via `wb
+  init`; 4 genuine todos seeded: fundamentals approval,
+  final name, SPEC.md approval, artifact retirement;
+  Mockups honestly empty — the build produced no mockups
+  while Steps 5–6 are held). v2 adopted by manifest only
+  (`../example-project/workbench.yaml`, the one
+  authorized file; NO v2 commits, registry NOT initialized —
+  it arrives with subplan 09 Part A). Live verify on the
+  real config: sweep discovers exactly 2 projects (another-project
+  absent by design), 0 sweep errors; v2 Plans feed lists
+  its 11 plans; v2 Mockups/Todos show the correct
+  not-initialized state; board aggregates both projects.
+
 ## In Progress
 
-- Step 7: adoptions (project zero + the v2 manifest).
+- Step 8: systemd units + watchdog cron (publish held).
 
 ## Held (the owner's direction, 2026-10-25 — not a failure)
 
