@@ -39,6 +39,18 @@ commit time), peekable the same way, and NEVER diffed —
 no baseline exists. A plan-declared file that is
 git-ignored earns a warning entry: it will not be
 committed.
+
+Vanished references are states, not errors: a repo
+with no commits yet diffs against the empty tree
+(everything renders as additions, payload marked
+`base_kind: "empty-tree"` + a note); a worktree whose
+directory was deleted returns a typed `gone` payload;
+a bundle whose plan document no longer loads falls
+back to the un-narrowed working-state diff with a
+note; a declared path that exists nowhere simply
+contributes nothing. Error text that can reach a
+payload comes from a small label vocabulary — raw
+git stderr never renders.
 """
 
 import os
@@ -73,18 +85,35 @@ class DiffError(Exception):
         self.message = message
 
 
+# Error messages that can reach a payload come from
+# this small vocabulary ONLY — raw git stderr never
+# renders (a vanished reference is a state, not error
+# text). The same vocabulary labels lib/worktrees.
+def _label(stderr: str) -> str:
+    text = (stderr or "").lower()
+    if "not a git repository" in text:
+        return "not a git repository"
+    if "ambiguous argument 'head'" in text \
+            or "unknown revision" in text \
+            or "bad revision" in text \
+            or "needed a single revision" in text:
+        return "no commits yet"
+    return "git command failed"
+
+
 def _git(cwd, *args, timeout=10) -> str:
     try:
         out = subprocess.run(
             ["git", "-C", str(cwd), *args],
             capture_output=True, text=True, timeout=timeout,
             env=_GIT_ENV)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        raise DiffError(500, f"git {args[0]} failed: {e}")
+    except subprocess.TimeoutExpired:
+        raise DiffError(500, "git timed out")
+    except OSError:
+        raise DiffError(500, "git unavailable")
     if out.returncode != 0:
-        reason = (out.stderr or out.stdout).strip()
         raise DiffError(
-            500, f"git {' '.join(args[:2])}: {reason[:160]}")
+            500, _label(out.stderr or out.stdout))
     return out.stdout
 
 
@@ -93,13 +122,14 @@ def _git_bytes(cwd, *args, timeout=15) -> bytes:
         out = subprocess.run(
             ["git", "-C", str(cwd), *args],
             capture_output=True, timeout=timeout, env=_GIT_ENV)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        raise DiffError(500, f"git {args[0]} failed: {e}")
+    except subprocess.TimeoutExpired:
+        raise DiffError(500, "git timed out")
+    except OSError:
+        raise DiffError(500, "git unavailable")
     if out.returncode != 0:
         reason = (out.stderr or b"").decode(
-            "utf-8", errors="replace").strip()
-        raise DiffError(
-            500, f"git {' '.join(args[:2])}: {reason[:160]}")
+            "utf-8", errors="replace")
+        raise DiffError(500, _label(reason))
     return out.stdout
 
 
@@ -114,16 +144,30 @@ def _rev(cwd, rev) -> str:
              "--quiet", f"{rev}^{{commit}}"],
             capture_output=True, text=True, timeout=5,
             env=_GIT_ENV)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        raise DiffError(500, f"git rev-parse failed: {e}")
+    except subprocess.TimeoutExpired:
+        raise DiffError(500, "git timed out")
+    except OSError:
+        raise DiffError(500, "git unavailable")
     sha = out.stdout.strip()
     if out.returncode != 0 or not sha:
         raise DiffError(400, f"unknown revision: {rev!r}")
     return sha
 
 
-def _head_sha(cwd) -> str:
-    return _git(cwd, "rev-parse", "HEAD").strip()
+def _head_sha(cwd):
+    """HEAD's sha, or None when HEAD is unborn — a repo
+    with no commits yet is a state, not an error."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(cwd), "rev-parse", "--verify",
+             "--quiet", "HEAD^{commit}"],
+            capture_output=True, text=True, timeout=5,
+            env=_GIT_ENV)
+    except subprocess.TimeoutExpired:
+        raise DiffError(500, "git timed out")
+    except OSError:
+        raise DiffError(500, "git unavailable")
+    return out.stdout.strip() or None
 
 
 def _merge_base(cwd, a, b):
@@ -132,8 +176,10 @@ def _merge_base(cwd, a, b):
             ["git", "-C", str(cwd), "merge-base", a, b],
             capture_output=True, text=True, timeout=5,
             env=_GIT_ENV)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        raise DiffError(500, f"git merge-base failed: {e}")
+    except subprocess.TimeoutExpired:
+        raise DiffError(500, "git timed out")
+    except OSError:
+        raise DiffError(500, "git unavailable")
     sha = out.stdout.strip()
     return sha or None
 
@@ -519,8 +565,14 @@ def _untracked(root) -> list:
 
 
 def _ignored_changed(root) -> dict:
-    head_time = int(_git(root, "log", "-1", "--format=%ct",
-                         "HEAD").strip() or 0)
+    try:
+        head_time = int(_git(root, "log", "-1",
+                             "--format=%ct",
+                             "HEAD").strip() or 0)
+    except DiffError:
+        # No commits yet: no baseline time exists, so
+        # every ignored file present counts as changed.
+        head_time = 0
     raw = _git(root, "ls-files", "--others", "--ignored",
                "--exclude-standard", "-z")
     out, truncated = [], False
@@ -606,6 +658,7 @@ def get_diff(root, *, worktree=None, mode="working",
 
     declared, warnings, bundle_id = [], [], None
     linked_branch = None
+    plan_gone = False
     if bundle is not None:
         if plans_dir is None:
             raise DiffError(
@@ -613,6 +666,13 @@ def get_diff(root, *, worktree=None, mode="working",
         found = _find_bundle(plans_dir, bundle)
         bundle_id = found["id"]
         doc = _bundle_plan_doc(plans_dir, found)
+        if doc is None and found.get("plan"):
+            # The bundle still references a plan document
+            # that no longer loads — deleted or moved by
+            # later work. The diff falls back to the
+            # un-narrowed working state with a note; the
+            # worktree's changes are still real.
+            plan_gone = True
         if doc is not None:
             declared = declared_files(doc)
             for key, value in doc["fields"].items():
@@ -652,17 +712,59 @@ def get_diff(root, *, worktree=None, mode="working",
         anchor_kind = "commit"
     cwd = Path(wt_path)
 
+    # -- vanished worktree --------------------------------
+    if not cwd.is_dir():
+        # The directory was deleted without `git worktree
+        # remove` — a typed, honest "gone" result in the
+        # normal payload shape, never a 500.
+        return {
+            "anchor": {"kind": anchor_kind,
+                       "worktree": wt_path,
+                       "branch": wt_branch,
+                       "bundle": bundle_id},
+            "mode": mode,
+            "base": None, "target": None,
+            "merge_base": None, "head": None,
+            "base_kind": None,
+            "note": "worktree path missing",
+            "gone": True, "no_commits": False,
+            "narrowed": False,
+            "declared_files": declared
+            if bundle is not None else [],
+            "files": [],
+            "totals": {"files": 0, "additions": 0,
+                       "deletions": 0},
+            "empty": True,
+            "untracked": [],
+            "ignored_changed": [],
+            "ignored_truncated": False,
+            "warnings": [],
+        }
+
     # -- mode → comparison --------------------------------
     head = _head_sha(cwd)
+    no_commits = head is None
     base_ref = _base_branch(cwd, wt_branch, main_branch)
     merge_base = _merge_base(cwd, base_ref, "HEAD") \
         if base_ref else None
-    target_desc = base_desc = None
+    target_desc = base_desc = base_kind = None
     legs_from = None
-    if mode == "working":
+    if no_commits and mode in ("working", "uncommitted"):
+        # Zero-commit repo: the empty tree is the base,
+        # so every tracked-or-staged file renders as an
+        # addition; untracked files keep their §18.4
+        # group. There is no committed leg.
+        spec = [_EMPTY_TREE]
+        base_desc = "empty tree"
+        base_kind = "empty-tree"
+        target_desc = "working state"
+        legs_from = {"staged": [_EMPTY_TREE, "--cached"],
+                     "unstaged": []}
+    elif mode == "working":
         if merge_base:
             spec = [merge_base]
             base_desc = f"merge-base with {base_ref}"
+            base_kind = "merge-base"
             legs_from = {
                 "committed": [merge_base, "HEAD"],
                 "staged": ["HEAD", "--cached"],
@@ -671,6 +773,7 @@ def get_diff(root, *, worktree=None, mode="working",
         else:
             spec = ["HEAD"]
             base_desc = "HEAD"
+            base_kind = "head"
             legs_from = {
                 "staged": ["HEAD", "--cached"],
                 "unstaged": [],
@@ -679,16 +782,22 @@ def get_diff(root, *, worktree=None, mode="working",
     elif mode == "uncommitted":
         spec = ["HEAD"]
         base_desc = "HEAD"
+        base_kind = "head"
         target_desc = "working state"
         legs_from = {"staged": ["HEAD", "--cached"],
                      "unstaged": []}
     elif mode == "committed":
+        if no_commits:
+            raise DiffError(
+                400, "no commits yet — nothing "
+                     "committed to diff")
         if not merge_base:
             raise DiffError(
                 400, "committed mode needs a fork point: "
                      "this worktree is its base branch")
         spec = [merge_base, "HEAD"]
         base_desc = f"merge-base with {base_ref}"
+        base_kind = "merge-base"
         target_desc = "HEAD"
     elif mode == "range":
         if not base or not target:
@@ -697,6 +806,7 @@ def get_diff(root, *, worktree=None, mode="working",
         lo, hi = _rev(cwd, base), _rev(cwd, target)
         spec = [lo, hi]
         base_desc, target_desc = lo[:12], hi[:12]
+        base_kind = "range"
     else:  # commit
         if not base:
             raise DiffError(
@@ -711,6 +821,8 @@ def get_diff(root, *, worktree=None, mode="working",
         spec = [parent or _EMPTY_TREE, sha]
         base_desc = (parent or "∅")[:12]
         target_desc = sha[:12]
+        base_kind = "empty-tree" if parent is None \
+            else "commit"
 
     # -- paths narrowing (bundle anchor) -----------------
     paths, narrowed = [], False
@@ -740,6 +852,14 @@ def get_diff(root, *, worktree=None, mode="working",
                            "it will not be committed",
             })
 
+    notes = []
+    if no_commits:
+        notes.append(
+            "No commits yet — everything here is new.")
+    if plan_gone:
+        notes.append(
+            "The plan anchored here no longer exists — "
+            "showing the full working-state diff.")
     return {
         "anchor": {"kind": anchor_kind,
                    "worktree": wt_path,
@@ -749,6 +869,10 @@ def get_diff(root, *, worktree=None, mode="working",
         "base": base_desc, "target": target_desc,
         "merge_base": merge_base,
         "head": head,
+        "base_kind": base_kind,
+        "note": " ".join(notes) or None,
+        "gone": False,
+        "no_commits": no_commits,
         "narrowed": narrowed,
         "declared_files": declared if bundle is not None
         else [],

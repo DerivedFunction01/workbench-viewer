@@ -55,6 +55,12 @@ def make_alpha(ws) -> Path:
         "# Old plan\n\nStatus: done\nCreated: 2026-10-24\n",
         encoding="utf-8")
     git(root, "init", "-b", "main")
+    # Alpha is the fixture's ordinary headed repo: one
+    # commit, so `git.head` is a real sha. (Before the
+    # zero-commit fix this passed vacuously — head was
+    # the truthy zero hash of an unborn HEAD.)
+    git(root, "add", ".")
+    git(root, "commit", "-m", "alpha base")
     return root
 
 
