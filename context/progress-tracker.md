@@ -86,9 +86,24 @@ change.
   its 11 plans; v2 Mockups/Todos show the correct
   not-initialized state; board aggregates both projects.
 
+- Step 8: units DONE, publish held, declutter blocked.
+  systemd unit `workbench-viewer-server` installed +
+  enabled + active (venv python, port 8792); healthcheck
+  exit 0 with 2 projects; watchdog cron
+  `workbench-viewer-healthcheck` (every 5m, plain agent job
+  — no artifact exists yet for a space owner); revival
+  proven end to end (server PID killed → watchdog revived
+  via systemd → health restored). PUBLISH held: no viewer
+  exists while Steps 5–6 are held. DECLUTTER blocked on
+  subplan 09 Part A data: no registry entries exist in any
+  project, so no standalone artifact can be retired yet.
+  Implementation record added to the founding plan
+  (2026-10-25).
+
 ## In Progress
 
-- Step 8: systemd units + watchdog cron (publish held).
+- Nothing running. Awaiting the approved-fundamentals
+  handoff (via main chat) to unblock Steps 5–6.
 
 ## Held (the owner's direction, 2026-10-25 — not a failure)
 
@@ -101,9 +116,10 @@ change.
 
 ## Next Up
 
-- Step 7: adoptions (project zero + the v2 manifest).
 - Step 8: systemd units + watchdog cron (publish held with
   Steps 5–6; declutter blocked on subplan 09 Part A data).
+- When the owner approves the fundamentals: Steps 5–6 (viewer
+  builds), then Step 8's publish.
 - Step 7: adoptions (project zero, then v2 manifest).
 - Step 8: systemd units; publish held with Steps 5–6;
   declutter blocked on subplan 09 Part A data (reported,
