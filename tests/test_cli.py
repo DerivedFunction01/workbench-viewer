@@ -68,8 +68,19 @@ class CliWalk(unittest.TestCase):
         self.assertTrue(any(archived_dir.rglob("mock.html")))
         self.wb(*p, "unarchive", "alpha")
         self.wb(*p, "verify", "alpha-v2")
-        self.wb(*p, "todo-add", "ship-it", "Ship it")
-        self.wb(*p, "todo-set-status", "ship-it", "doing")
+        # file todos (spec §3.4 verbs; the legacy DB todo
+        # verbs are retired, §3.7)
+        self.wb(*p, "bundle", "new", "ship-work",
+                "--date", "2026-10-25")
+        r = self.wb(*p, "todo", "new", "ship-work", "Ship it")
+        ship = json.loads(r.stdout)
+        self.wb(*p, "todo", "set", ship["id"], "doing")
+        r = self.wb(*p, "todo", "list")
+        self.assertIn("Ship it", r.stdout)
+        self.assertIn("doing", r.stdout)
+        r = self.wb(*p, "todo-add", "x", "retired",
+                    expect=None)
+        self.assertEqual(r.returncode, 2)
         r = self.wb(*p, "validate")
         self.assertIn("clean", r.stdout)
         # history grew at every step + export is consistent
@@ -87,8 +98,8 @@ class CliWalk(unittest.TestCase):
         # project B untouched by project A's lifecycle
         r = self.wb("--project", "proj-b", "list")
         self.assertIn("no entries", r.stdout)
-        r = self.wb("--project", "proj-b", "todo-list")
-        self.assertIn("no todos", r.stdout)
+        r = self.wb("--project", "proj-b", "todo", "list")
+        self.assertIn("no file todos", r.stdout)
 
     def test_projects_lists_sweep(self):
         r = self.wb("projects", "--root", str(self.ws))

@@ -82,8 +82,12 @@ class BundleCli(unittest.TestCase):
 
     def test_todo_import_db_cli(self):
         self.wb("init")
-        self.wb("todo-add", "db-one", "DB one",
-                "--notes", "From the fixture DB.")
+        # seed the DB directly through lib (the legacy wb
+        # todo verbs are retired, §3.7 — the table stays)
+        from lib import registry as reg
+        db = self.root / "workbench" / "registry.db"
+        reg.add_todo(db, "db-one", "DB one",
+                     notes="From the fixture DB.")
         r = self.wb("todo", "import-db")
         result = json.loads(r.stdout)
         self.assertEqual(len(result["imported"]), 1)
@@ -93,9 +97,13 @@ class BundleCli(unittest.TestCase):
                          "todo")
         r = self.wb("todo", "list")
         self.assertIn("DB one", r.stdout)
-        # DB todo still listed by the legacy verb (not deleted)
-        r = self.wb("todo-list")
-        self.assertIn("DB one", r.stdout)
+        # the DB row itself is untouched by the import
+        rows = reg.list_todos(db)
+        self.assertEqual([row["id"] for row in rows],
+                         ["db-one"])
+        # the retired legacy verb no longer exists
+        r = self.wb("todo-list", expect=None)
+        self.assertEqual(r.returncode, 2)
 
 
 if __name__ == "__main__":
