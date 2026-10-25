@@ -13,12 +13,7 @@
     }
   },
   "files": {
-    "includes": [
-      "**",
-      "!client/src/themes",
-      "!**/dist",
-      "!bun.lock"
-    ]
+    "includes": ["**", "!client/src/themes", "!**/dist", "!bun.lock"]
   },
   "formatter": {
     "enabled": true,
@@ -78,9 +73,7 @@
       "formatter": {
         "enabled": false
       },
-      "includes": [
-        "client/src/themes/**"
-      ],
+      "includes": ["client/src/themes/**"],
       "linter": {
         "enabled": false
       }
@@ -89,9 +82,7 @@
       "formatter": {
         "enabled": false
       },
-      "includes": [
-        "**/dist/**"
-      ],
+      "includes": ["**/dist/**"],
       "linter": {
         "enabled": false
       }
@@ -100,9 +91,7 @@
       "formatter": {
         "enabled": false
       },
-      "includes": [
-        "bun.lock"
-      ],
+      "includes": ["bun.lock"],
       "linter": {
         "enabled": false
       }

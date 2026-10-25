@@ -1,7 +1,7 @@
 // STUB — Subplan 03 scaffold. Typed actions over the raw-socket bridge
 // land in Subplan 05 (with server/src/privileged.ts); this single ping
 // action only proves the server builds and typechecks end to end.
-import { defineAction, z, type ActionsModule } from "@hatch/space-sdk";
+import { type ActionsModule, defineAction, z } from "@hatch/space-sdk";
 
 export const Actions = {
   ping: defineAction({
