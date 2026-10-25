@@ -67,6 +67,7 @@ the relevant file before continuing.
 
 ## Commands
 
+- Repo gate: `tools/check.sh` — the ONE gate (Python unittest + Biome check + typecheck + client build, fail-fast); run it before handing off any change.
 - Build the venv: `python3 init_venv.py` (uv, Python 3.11)
 - Tests: `.venv/bin/python -m unittest discover -s tests -v`
 - Harness CLI: `.venv/bin/python wb --help`

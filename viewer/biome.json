@@ -1,0 +1,105 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.3/schema.json",
+  "css": {
+    "formatter": {
+      "enabled": true
+    },
+    "linter": {
+      "enabled": true
+    },
+    "parser": {
+      "cssModules": false,
+      "tailwindDirectives": true
+    }
+  },
+  "files": {
+    "includes": ["**", "!client/src/themes", "!**/dist", "!bun.lock"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "arrowParentheses": "always",
+      "bracketSameLine": false,
+      "bracketSpacing": true,
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "lineWidth": 100,
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "json": {
+    "formatter": {
+      "enabled": true
+    },
+    "parser": {
+      "allowComments": false,
+      "allowTrailingCommas": false
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        "noAccessKey": "on",
+        "noAutofocus": "on",
+        "noPositiveTabindex": "on",
+        "noRedundantAlt": "on",
+        "noSvgWithoutTitle": "on",
+        "useAltText": "on",
+        "useAnchorContent": "on",
+        "useAriaPropsForRole": "on",
+        "useButtonType": "on",
+        "useHeadingContent": "on",
+        "useHtmlLang": "on",
+        "useIframeTitle": "on",
+        "useKeyWithClickEvents": "on",
+        "useMediaCaption": "on",
+        "useValidAnchor": "on",
+        "useValidAriaProps": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "formatter": {
+        "enabled": false
+      },
+      "includes": ["client/src/themes/**"],
+      "linter": {
+        "enabled": false
+      }
+    },
+    {
+      "formatter": {
+        "enabled": false
+      },
+      "includes": ["**/dist/**"],
+      "linter": {
+        "enabled": false
+      }
+    },
+    {
+      "formatter": {
+        "enabled": false
+      },
+      "includes": ["bun.lock"],
+      "linter": {
+        "enabled": false
+      }
+    }
+  ],
+  "vcs": {
+    "clientKind": "git",
+    "enabled": true,
+    "useIgnoreFile": true
+  }
+}
