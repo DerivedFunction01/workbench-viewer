@@ -282,3 +282,17 @@ change.
 - Annotation MERGED to main 2026-10-25 (merge `490d9a6`):
   gate green on the merged tree, 228 tests. Server
   restart migrates the live messages.db to schema v3.
+- Vanished references + commit-less repos BUILT on
+  branch `build/diff-vanished-refs` (awaiting merge):
+  a zero-commit repo is a state, not an error —
+  worktree entries carry head null + `no_commits`,
+  diffs run against the empty tree (`base_kind:
+  "empty-tree"` + note "No commits yet — everything
+  here is new."); a deleted worktree path returns a
+  typed `gone` diff payload; a bundle whose plan
+  document no longer loads falls back to the
+  un-narrowed diff with a note, and vanished declared
+  paths simply contribute nothing. Raw git stderr
+  never reaches a payload: reasons/errors come from
+  a small label vocabulary in lib/worktrees +
+  lib/diffs. Gate green, 238 tests.
