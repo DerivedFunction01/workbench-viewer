@@ -344,3 +344,148 @@ export interface BoardPayload {
   errors?: unknown[];
   [key: string]: unknown;
 }
+
+// ---------------------------------------------------------------------------
+// Repo-home payloads (repo-home spec §§3-7, §15, §17): the
+// /api namespace. Shapes are lib/home.py, lib/worktrees.py,
+// lib/active.py, lib/messages.py verbatim.
+// ---------------------------------------------------------------------------
+
+/** One bundle's side of an active-plan resolution (§17). */
+export interface ActiveBundle {
+  id: string;
+  slug: string;
+  path: string;
+  kind: string;
+  feature: string | null;
+  todo_count: number;
+  open_count: number;
+}
+
+export interface ActivePlanRef {
+  path: string;
+  title: string;
+  status_bucket: string;
+  status_raw: string | null;
+  /** Epoch seconds (the plan parser's mtime). */
+  modified: number;
+  feature: string | null;
+}
+
+/** The §17.2 resolution for one worktree, provenance
+ * included: `source` is declared (a ruling) or one of the
+ * derived signals (branch / unique / recency), or none. */
+export interface ActiveResolution {
+  source: "declared" | "branch" | "unique" | "recency" | "none";
+  bundle: ActiveBundle | null;
+  plan: ActivePlanRef | null;
+  also_in_progress: { bundle: ActiveBundle; plan: ActivePlanRef | null }[];
+  declared: { bundle: string; plan: string | null; since: string | null } | null;
+  note: string | null;
+}
+
+export interface WorktreeItem {
+  path: string;
+  branch: string | null;
+  head: string | null;
+  head_short: string | null;
+  is_main: boolean;
+  base: string | null;
+  ahead: number | null;
+  behind: number | null;
+  dirty: boolean | null;
+  changed_count: number | null;
+  last_commit_at: string | null;
+  untouched_days: number | null;
+  merged: boolean;
+  likely_done: boolean;
+  rebase_in_progress: boolean;
+  degraded: boolean;
+  reason: string | null;
+  attribution: { label: string | null; plan: string | null; source: string };
+  active?: ActiveResolution | null;
+}
+
+export interface WorktreesPayload {
+  slug: string;
+  name: string;
+  captured_at: string;
+  available: boolean;
+  reason?: string;
+  worktrees: WorktreeItem[];
+}
+
+/** One row of GET /api/home (§4 + §17 showcase). */
+export interface HomeRow {
+  slug: string;
+  name: string;
+  root: string;
+  degraded: boolean;
+  reasons: string[];
+  git: { branch: string | null; head: string | null; head_short: string | null } | null;
+  worktrees: WorktreeItem[];
+  has_extra_worktrees: boolean;
+  showcase: ActiveResolution | null;
+  plans: {
+    available: boolean;
+    counts: Record<string, number>;
+    in_progress: { title: string; path: string } | null;
+    total: number;
+  };
+  todos: {
+    available: boolean;
+    counts: Record<string, number>;
+    total: number;
+    source?: string;
+  };
+  review: { available: boolean; triage_count: number; stale_count: number };
+  last_activity: string | null;
+}
+
+export interface HomePayload {
+  projects: HomeRow[];
+  sweep_errors?: unknown[];
+  captured_at?: string;
+}
+
+export interface MessageItem {
+  id: number;
+  project_slug: string | null;
+  anchor_type: string;
+  anchor_ref: string | null;
+  author: string;
+  body: string;
+  showcase: { main?: unknown; docs?: unknown[] } | null;
+  state: "draft" | "sent" | "acknowledged" | "done" | "archived";
+  created_at: string;
+  updated_at: string;
+  sent_at: string | null;
+  acked_at: string | null;
+  done_at: string | null;
+  archived_at: string | null;
+  parent_id: number | null;
+  awaiting_pickup?: boolean;
+}
+
+export interface MessagesPayload {
+  messages: MessageItem[];
+  picked_up?: number;
+  captured_at?: string;
+}
+
+export interface EffectiveSettingsPayload {
+  config: Record<string, unknown>;
+  config_hash?: string;
+  config_file?: string;
+  messages: {
+    db: string;
+    policy: Record<string, number>;
+    counts?: Record<string, number>;
+    last_cleanup_at?: string | null;
+    last_cleanup_counts?: Record<string, number> | null;
+    outbox_rows?: number;
+    notify_checkpoint?: number;
+    error?: string;
+  };
+  captured_at?: string;
+}

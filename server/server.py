@@ -39,12 +39,14 @@ sys.path.insert(0, str(REPO_ROOT))  # for lib/
 sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 
 import config as cfgmod  # noqa: E402
+from lib import active as active_mod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
 from lib import diffs as diff_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import home as home_mod  # noqa: E402
 from lib import messages as msg_mod  # noqa: E402
+from lib import notify as notify_mod  # noqa: E402
 from lib import worktrees as wt_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
 from lib import staleness  # noqa: E402
@@ -319,14 +321,60 @@ def _message_cleanup_loop():
         run_message_cleanup("daily")
 
 
+def fire_pending_notifications() -> dict:
+    """One watcher-notify pass (spec §15.1): read outbox
+    rows past the store's notify checkpoint, fire the
+    configured targets for each, then advance the
+    checkpoint past the ATTEMPTED rows (notify is a
+    wake-up; the durable record is the outbox + the
+    messages). Never raises — a dead target is logged,
+    never a server failure."""
+    targets = cfgmod.notify_targets(CFG)
+    if not targets["webhook"] and not targets["command"]:
+        return {"events": 0, "results": []}
+    try:
+        checkpoint = msg_mod.notify_checkpoint(MSG_DB)
+        events = msg_mod.list_outbox(MSG_DB, after=checkpoint)
+        if not events:
+            return {"events": 0, "results": []}
+        results = notify_mod.fire_targets(targets, events)
+        msg_mod.set_notify_checkpoint(MSG_DB, events[-1]["id"])
+        failed = [r for r in results if not r["ok"]]
+        if failed:
+            print(f"workbench-viewer: notify fired "
+                  f"{len(events)} event(s), {len(failed)} "
+                  f"target failure(s): {failed}",
+                  file=sys.stderr)
+        return {"events": len(events), "results": results}
+    except Exception as e:  # containment, like the feeds
+        print(f"workbench-viewer: notify pass failed: {e}",
+              file=sys.stderr)
+        return {"error": str(e)[:200]}
+
+
+def _notify_loop():
+    while True:
+        fire_pending_notifications()
+        time.sleep(max(5, CFG["messages_notify_poll_s"]))
+
+
 def start_message_maintenance():
     """Spec §5.3: the cleanup pass runs at server start and
-    daily inside the server process. No cron."""
+    daily inside the server process. No cron. Spec §15.1:
+    when notify targets are configured, a poll loop fires
+    them for new outbox rows (its checkpoint lives in the
+    store's meta, in lib/)."""
     run_message_cleanup("startup")
     thread = threading.Thread(target=_message_cleanup_loop,
                               name="message-cleanup",
                               daemon=True)
     thread.start()
+    targets = cfgmod.notify_targets(CFG)
+    if targets["webhook"] or targets["command"]:
+        notify_thread = threading.Thread(
+            target=_notify_loop, name="message-notify",
+            daemon=True)
+        notify_thread.start()
 
 
 def messages_list(query: dict) -> dict:
@@ -371,6 +419,42 @@ def message_done(message_id: int) -> dict:
     return {"message": message}
 
 
+def message_send(message_id: int) -> dict:
+    """draft -> sent for an existing draft (the Inbox's
+    send action; lib send_message is the one path, and the
+    outbox row lands in its transaction, §15.1)."""
+    try:
+        message = msg_mod.send_message(MSG_DB, message_id)
+    except msg_mod.MessageError as e:
+        raise ApiError(400, str(e))
+    return {"message": message}
+
+
+def message_archive(message_id: int) -> dict:
+    try:
+        message = msg_mod.archive_message(MSG_DB, message_id)
+    except msg_mod.MessageError as e:
+        raise ApiError(400, str(e))
+    return {"message": message}
+
+
+def outbox_feed(query: dict) -> dict:
+    """GET /api/outbox?after=<id> (spec §15.1): the watcher
+    poll. Consumers keep their own checkpoints; reading
+    never consumes."""
+    after = query.get("after") or "0"
+    try:
+        after_id = int(after)
+    except ValueError:
+        raise ApiError(400, f"after must be an event id, "
+                            f"got {after!r}")
+    events = msg_mod.list_outbox(MSG_DB, after=after_id)
+    return {"events": events,
+            "last_id": events[-1]["id"] if events
+                       else after_id,
+            "captured_at": now_iso()}
+
+
 def message_cleanup(body: dict) -> dict:
     """Guarded manual controls (§5.4): cleanup now, or a
     per-state purge. All require an explicit confirm."""
@@ -403,10 +487,19 @@ def home_feed() -> dict:
 
 def worktrees_feed(project) -> dict:
     """GET /api/projects/<slug>/worktrees (repo-home §6):
-    the project's worktrees, derived read-only."""
+    the project's worktrees, derived read-only, each with
+    its active-plan resolution attached (§17 — resolved in
+    lib from that worktree's own .plans/)."""
     result = wt_mod.list_worktrees(
         project.root, plans_dir=project.manifest.plans,
         stale_days=CFG["worktree_stale_days"])
+    if result["available"]:
+        actives = active_mod.active_by_worktree(
+            project.root, project.manifest.plans,
+            result["worktrees"])
+        by_path = {a["path"]: a["active"] for a in actives}
+        for w in result["worktrees"]:
+            w["active"] = by_path.get(w["path"])
     return {"slug": project.slug, "name": project.name,
             "captured_at": now_iso(), **result}
 
@@ -705,6 +798,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, messages_list(query))
             except msg_mod.MessageError as e:
                 raise ApiError(400, str(e))
+        if parts == ["api", "outbox"]:
+            return self._send(200, outbox_feed(query))
         if parts == ["api", "settings", "effective"]:
             return self._send(200, effective_settings())
         if parts == ["projects"]:
@@ -790,13 +885,15 @@ class Handler(BaseHTTPRequestHandler):
                               message_cleanup(self._body()))
         if len(parts) == 4 and parts[0] == "api" \
                 and parts[1] == "messages" \
-                and parts[3] == "done":
+                and parts[3] in ("done", "send", "archive"):
             try:
                 message_id = int(parts[2])
             except ValueError:
                 raise ApiError(404, "no such message: "
                                     f"{parts[2]}")
-            return self._send(200, message_done(message_id))
+            verb = {"done": message_done, "send": message_send,
+                    "archive": message_archive}[parts[3]]
+            return self._send(200, verb(message_id))
         if parts == ["projects", "rescan"]:
             result = get_sweep(force=True)
             return self._send(200, result.summary())

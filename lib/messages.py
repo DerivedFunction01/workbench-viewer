@@ -22,6 +22,16 @@ pass (cleanup()) drives draft -> purged, done -> archived,
 archived -> purged on the §5.3 schedule, plus orphan and
 cap archiving. Sent-but-unacknowledged messages are never
 purged by anything automatic.
+
+Watcher core (spec §15.1): every transition INTO `sent`
+also writes one row to the `outbox` table IN THE SAME
+TRANSACTION as the state change — an event can never
+exist without its state change or vice versa. Consumers
+poll list_outbox(after=<id>) and keep their own
+checkpoints; the cleanup pass prunes outbox rows once
+they age past the archived horizon. The server's notify
+checkpoint (meta key `notify_checkpoint`) is read/written
+through the helpers here so no SQL lives outside lib/.
 """
 
 import json
@@ -94,6 +104,27 @@ CREATE INDEX idx_messages_project_state
 CREATE INDEX idx_messages_parent ON messages(parent_id);
 """
 
+# Schema v2 (spec §15.1): the watcher outbox. One row per
+# transition into `sent`, written in the same transaction
+# as the state change (see _outbox). Consumers poll by id
+# and keep their own checkpoints; `anchor_summary` is the
+# human first line a wake-up handoff carries (§15.2).
+SCHEMA_V2 = """
+CREATE TABLE outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL,
+  project_slug TEXT,
+  anchor_type TEXT NOT NULL DEFAULT 'none',
+  anchor_ref TEXT,
+  anchor_summary TEXT,
+  event TEXT NOT NULL DEFAULT 'sent',
+  at TEXT NOT NULL
+);
+CREATE INDEX idx_outbox_message ON outbox(message_id);
+"""
+
+SCHEMA_VERSION = 2
+
 
 class MessageError(Exception):
     """A message-store mutation was refused, with a reason."""
@@ -118,11 +149,22 @@ def connect(db_path, *, busy_timeout_ms: int = 5000,
 
 
 def _migrate(conn):
+    """Stepwise, one version at a time (the store's own
+    user_version lineage): 0 -> 1 creates the v1 schema,
+    1 -> 2 adds the watcher outbox (existing rows are
+    untouched — the outbox starts empty; nothing already
+    sent is backfilled, per §15.1's same-transaction rule:
+    an event exists only with its state change)."""
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version == 0:
         conn.executescript(SCHEMA_V1)
         conn.execute("PRAGMA user_version = 1")
-    elif version != 1:
+        version = 1
+    if version == 1:
+        conn.executescript(SCHEMA_V2)
+        conn.execute("PRAGMA user_version = 2")
+        version = 2
+    if version != SCHEMA_VERSION:
         raise MessageError(
             f"unsupported messages schema version {version}")
 
@@ -173,11 +215,29 @@ def _check_transition(row, target, verb):
             f"{sorted(TRANSITIONS[row['state']]) or 'none'})")
 
 
+def _outbox(conn, row):
+    """Append the watcher outbox row for a transition into
+    `sent` (§15.1) — called INSIDE the same transaction as
+    the state change, never on its own. The anchor summary
+    is the body's first line, clipped: a wake-up handoff
+    carries the summary, never the whole message (§15.2)."""
+    body = row["body"] or ""
+    first = body.strip().split("\n")[0].strip() \
+        if body.strip() else ""
+    conn.execute(
+        "INSERT INTO outbox (message_id, project_slug,"
+        " anchor_type, anchor_ref, anchor_summary, event,"
+        " at) VALUES (?, ?, ?, ?, ?, 'sent', ?)",
+        (row["id"], row["project_slug"], row["anchor_type"],
+         row["anchor_ref"], first[:120] or None, now_iso()))
+
+
 def _move(conn, row, target, *, event, detail=None,
           stamp=None):
     """Apply a state move inside the caller's transaction:
     set state + the state's timestamp column + updated_at,
-    and append the event."""
+    and append the event. A move INTO `sent` also appends
+    the outbox row (§15.1) in this same transaction."""
     ts = now_iso()
     sets = {"state": target, "updated_at": ts}
     if stamp:
@@ -186,6 +246,8 @@ def _move(conn, row, target, *, event, detail=None,
     conn.execute(f"UPDATE messages SET {cols} WHERE id = ?",
                  (*sets.values(), row["id"]))
     _event(conn, row["id"], event, detail)
+    if target == "sent":
+        _outbox(conn, row)
 
 
 # ----------------------------------------------------------------
@@ -232,6 +294,9 @@ def create_message(db_path, *, author, body="",
                    "reply" if parent_id is not None else None)
             if send:
                 _event(conn, mid, "sent")
+                # Born sent: the outbox row lands in this
+                # same transaction (§15.1).
+                _outbox(conn, _row(conn, mid))
             return message_dict(_row(conn, mid))
     finally:
         conn.close()
@@ -415,6 +480,44 @@ def events_for(db_path, message_id) -> list:
         conn.close()
 
 
+def list_outbox(db_path, *, after=0, limit=500) -> list:
+    """Watcher poll (spec §15.1): outbox rows with id >
+    `after`, oldest first. Consumers keep their own
+    last-seen id and pass it back — the store never marks
+    events consumed (acknowledgement stays an agent act,
+    §15.2)."""
+    conn = connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM outbox WHERE id > ? ORDER BY id"
+            " LIMIT ?", (int(after), int(limit))).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def notify_checkpoint(db_path) -> int:
+    """The server maintenance loop's own outbox checkpoint
+    (§15.1: kept in the store's meta). 0 = nothing fired
+    yet."""
+    conn = connect(db_path)
+    try:
+        raw = _get_meta(conn, "notify_checkpoint")
+        return int(raw) if raw else 0
+    finally:
+        conn.close()
+
+
+def set_notify_checkpoint(db_path, event_id) -> None:
+    conn = connect(db_path)
+    try:
+        with _tx(conn):
+            _set_meta(conn, "notify_checkpoint",
+                      str(int(event_id)))
+    finally:
+        conn.close()
+
+
 def _get_meta(conn, key):
     row = conn.execute("SELECT value FROM meta WHERE key = ?",
                        (key,)).fetchone()
@@ -459,12 +562,18 @@ def cleanup(db_path, *, known_slugs=None, policy=None,
     thread follows its root) and rows for purges. The
     pass records itself in meta (last_cleanup_at/counts)
     in the same transaction, so a re-run at the same clock
-    changes nothing."""
+    changes nothing.
+
+    The watcher outbox is pruned in the same pass (§15.1):
+    rows older than the archived horizon (archive_ttl_days)
+    are deleted — consumers checkpoint by id, and an event
+    older than the horizon has outlived every message it
+    could wake anyone about."""
     policy = {**DEFAULT_POLICY, **(policy or {})}
     now = now or datetime.now(timezone.utc)
     counts = {"drafts_purged": 0, "done_archived": 0,
               "archived_purged": 0, "orphans_archived": 0,
-              "cap_archived": 0}
+              "cap_archived": 0, "outbox_pruned": 0}
     conn = connect(db_path)
     try:
         with _tx(conn):
@@ -524,6 +633,16 @@ def cleanup(db_path, *, known_slugs=None, policy=None,
                     _archive_tree(conn, row,
                                   detail="cleanup: cap")
                     counts["cap_archived"] += 1
+            horizon = now - timedelta(
+                days=policy["archive_ttl_days"])
+            stale_outbox = conn.execute(
+                "SELECT id, at FROM outbox").fetchall()
+            for orow in stale_outbox:
+                if parse_iso(orow["at"]) < horizon:
+                    conn.execute(
+                        "DELETE FROM outbox WHERE id = ?",
+                        (orow["id"],))
+                    counts["outbox_pruned"] += 1
             _set_meta(conn, "last_cleanup_at",
                       now.isoformat())
             _set_meta(conn, "last_cleanup_counts",
@@ -567,6 +686,9 @@ def store_stats(db_path) -> dict:
     try:
         last_at = _get_meta(conn, "last_cleanup_at")
         last_counts = _get_meta(conn, "last_cleanup_counts")
+        outbox_rows = conn.execute(
+            "SELECT COUNT(*) AS n FROM outbox").fetchone()["n"]
+        checkpoint = _get_meta(conn, "notify_checkpoint")
     finally:
         conn.close()
     return {
@@ -574,4 +696,7 @@ def store_stats(db_path) -> dict:
         "last_cleanup_at": last_at,
         "last_cleanup_counts": json.loads(last_counts)
         if last_counts else None,
+        "outbox_rows": outbox_rows,
+        "notify_checkpoint": int(checkpoint)
+        if checkpoint else 0,
     }

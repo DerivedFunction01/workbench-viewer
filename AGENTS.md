@@ -73,8 +73,8 @@ the relevant file before continuing.
 - Harness CLI: `.venv/bin/python wb --help`
   (verbs: `projects`, `init`, `add`, `list`, `show`, `set`,
   `set-status`, `supersede`, `verify`, `archive`, `unarchive`,
-  `stale`, `validate`, `export`, `rebuild`, `todo-*`,
-  `print-schedule`)
+  `stale`, `validate`, `export`, `rebuild`, `bundle *`,
+  `todo *`, `activate`, `print-schedule`)
 - Server: `.venv/bin/python run.py` (binds per `config.json`;
   default 127.0.0.1:8792). Health: `GET /health`.
 - Viewer artifact sync: `./viewer.sh status|pull|deploy`

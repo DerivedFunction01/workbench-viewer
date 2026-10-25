@@ -226,3 +226,15 @@ change.
   and the Changes UI (plan Changes tab + worktree panel on
   the Plans landing; the panel moves into Overview when the
   repo-home UI phase lands) — gate green at 154 tests.
+- Repo-home UI phase landed on main 2026-10-25 (branch
+  `build/repo-home-ui`, tip `3816724`): watcher core
+  (§15.1 — outbox table in messages.db schema v2,
+  same-transaction append on sent, `GET /api/outbox`,
+  generic notify targets from the maintenance loop);
+  active-plan resolution (§17 — `lib/active.py`, `wb
+  activate`, per-worktree actives + row showcase in the
+  home feed) with the lib/home.py todo seam closed (bundle
+  file todos, §3.7 DB fallback); Home + Overview + Inbox
+  + Settings Workspace/Messages UI; grouped worktree
+  presentation (§19) in Home, Overview, and the rail.
+  Gate green at 161 tests on the branch.

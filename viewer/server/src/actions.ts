@@ -350,4 +350,99 @@ export const Actions = {
       return callServer<unknown>(ctx, "/board");
     },
   }),
+
+  // -- repo-home additions (repo-home spec §§3-7, §15, §17):
+  // the /api namespace, proxied verbatim like everything
+  // above. Payloads ride rawResult: their shapes are the
+  // home/messages/settings contracts in lib/, typed on the
+  // client in lib/api.ts.
+  getHome: defineAction({
+    request: z.object({}),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<unknown>(ctx, "/api/home");
+    },
+  }),
+
+  getWorktrees: defineAction({
+    request: slugArg,
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/projects/${enc(args.slug)}/worktrees`);
+    },
+  }),
+
+  getEffectiveSettings: defineAction({
+    request: z.object({}),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<unknown>(ctx, "/api/settings/effective");
+    },
+  }),
+
+  getMessages: defineAction({
+    request: z.object({
+      project: z.string().optional(),
+      state: z.string().optional(),
+      pickup: z.boolean().optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      if (args.project) params.set("project", args.project);
+      if (args.state) params.set("state", args.state);
+      if (args.pickup) params.set("pickup", "1");
+      const query = params.toString();
+      return callServer<unknown>(ctx, `/api/messages${query ? `?${query}` : ""}`);
+    },
+  }),
+
+  createMessage: defineAction({
+    request: z.object({ body: z.record(z.string(), z.unknown()) }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, "/api/messages", "POST", args.body);
+    },
+  }),
+
+  sendMessage: defineAction({
+    request: z.object({ id: z.number().int() }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/messages/${args.id}/send`, "POST", {});
+    },
+  }),
+
+  doneMessage: defineAction({
+    request: z.object({ id: z.number().int() }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/messages/${args.id}/done`, "POST", {});
+    },
+  }),
+
+  archiveMessage: defineAction({
+    request: z.object({ id: z.number().int() }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/messages/${args.id}/archive`, "POST", {});
+    },
+  }),
+
+  cleanupMessages: defineAction({
+    request: z.object({ body: z.record(z.string(), z.unknown()) }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, "/api/messages/cleanup", "POST", args.body);
+    },
+  }),
 } satisfies ActionsModule;
