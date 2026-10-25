@@ -129,7 +129,7 @@ export const Actions = {
     response: healthResult,
     privileged: [privileged.wbApi],
     async handler(ctx) {
-      return callServer<z.infer<typeof healthPayload>>(ctx, "/health");
+      return callServer<z.infer<typeof healthPayload>>(ctx, "/api/health");
     },
   }),
 
@@ -138,7 +138,7 @@ export const Actions = {
     response: configResult,
     privileged: [privileged.wbApi],
     async handler(ctx) {
-      return callServer<z.infer<typeof configResult>["payload"]>(ctx, "/config");
+      return callServer<z.infer<typeof configResult>["payload"]>(ctx, "/api/config");
     },
   }),
 
@@ -147,7 +147,7 @@ export const Actions = {
     response: projectsResult,
     privileged: [privileged.wbApi],
     async handler(ctx) {
-      return callServer<z.infer<typeof projectsPayload>>(ctx, "/projects");
+      return callServer<z.infer<typeof projectsPayload>>(ctx, "/api/projects");
     },
   }),
 
@@ -156,7 +156,7 @@ export const Actions = {
     response: projectsResult,
     privileged: [privileged.wbApi],
     async handler(ctx) {
-      return callServer<z.infer<typeof projectsPayload>>(ctx, "/projects/rescan", "POST", {});
+      return callServer<z.infer<typeof projectsPayload>>(ctx, "/api/projects/rescan", "POST", {});
     },
   }),
 
@@ -168,7 +168,7 @@ export const Actions = {
       const suffix = args.archived ? "?archived=1" : "";
       return callServer<z.infer<typeof feedEnvelope>>(
         ctx,
-        `/projects/${enc(args.slug)}/mockups${suffix}`,
+        `/api/projects/${enc(args.slug)}/mockups${suffix}`,
       );
     },
   }),
@@ -182,7 +182,10 @@ export const Actions = {
     response: rawResult,
     privileged: [privileged.wbApi],
     async handler(ctx, args) {
-      return callServer<unknown>(ctx, `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}`);
+      return callServer<unknown>(
+        ctx,
+        `/api/projects/${enc(args.slug)}/entries/${enc(args.entryId)}`,
+      );
     },
   }),
 
@@ -203,7 +206,7 @@ export const Actions = {
       const suffix = query ? `?${query}` : "";
       return callServer<unknown>(
         ctx,
-        `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/file${suffix}`,
+        `/api/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/file${suffix}`,
       );
     },
   }),
@@ -222,7 +225,7 @@ export const Actions = {
     async handler(ctx, args) {
       return callServer(
         ctx,
-        `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/file`,
+        `/api/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/file`,
         "POST",
         {
           path: args.path,
@@ -245,7 +248,7 @@ export const Actions = {
     async handler(ctx, args) {
       return callServer(
         ctx,
-        `/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/action`,
+        `/api/projects/${enc(args.slug)}/entries/${enc(args.entryId)}/action`,
         "POST",
         args.body,
       );
@@ -257,7 +260,7 @@ export const Actions = {
     response: feedResult,
     privileged: [privileged.wbApi],
     async handler(ctx, args) {
-      return callServer<z.infer<typeof feedEnvelope>>(ctx, `/projects/${enc(args.slug)}/plans`);
+      return callServer<z.infer<typeof feedEnvelope>>(ctx, `/api/projects/${enc(args.slug)}/plans`);
     },
   }),
 
@@ -266,7 +269,10 @@ export const Actions = {
     response: rawResult,
     privileged: [privileged.wbApi],
     async handler(ctx, args) {
-      return callServer<unknown>(ctx, `/projects/${enc(args.slug)}/plan?path=${enc(args.path)}`);
+      return callServer<unknown>(
+        ctx,
+        `/api/projects/${enc(args.slug)}/plan?path=${enc(args.path)}`,
+      );
     },
   }),
 
@@ -275,7 +281,7 @@ export const Actions = {
     response: feedResult,
     privileged: [privileged.wbApi],
     async handler(ctx, args) {
-      return callServer<z.infer<typeof feedEnvelope>>(ctx, `/projects/${enc(args.slug)}/todos`);
+      return callServer<z.infer<typeof feedEnvelope>>(ctx, `/api/projects/${enc(args.slug)}/todos`);
     },
   }),
 
@@ -284,7 +290,7 @@ export const Actions = {
     response: proxied(z.looseObject({ todos: z.array(z.unknown()) })),
     privileged: [privileged.wbApi],
     async handler(ctx) {
-      return callServer<{ todos: unknown[] }>(ctx, "/todos");
+      return callServer<{ todos: unknown[] }>(ctx, "/api/todos");
     },
   }),
 
@@ -296,7 +302,7 @@ export const Actions = {
     response: rawResult,
     privileged: [privileged.wbApi],
     async handler(ctx, args) {
-      return callServer(ctx, `/projects/${enc(args.slug)}/todos`, "POST", args.body);
+      return callServer(ctx, `/api/projects/${enc(args.slug)}/todos`, "POST", args.body);
     },
   }),
 
@@ -335,7 +341,7 @@ export const Actions = {
     response: rawResult,
     privileged: [privileged.wbApi],
     async handler(ctx) {
-      return callServer<unknown>(ctx, "/board");
+      return callServer<unknown>(ctx, "/api/board");
     },
   }),
 

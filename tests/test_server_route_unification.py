@@ -13,6 +13,7 @@ the equivalence tests into 404 proofs.
 
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -424,6 +425,39 @@ class TestServedWithoutAliasTripwire(RouteServerCase):
         # candidate; the 15 unified patterns strip exactly to
         # the alias inventory and are excluded above.
         self.assertEqual(probed, len(PRE_EXISTING_API))
+
+
+# A legacy route literal in caller source: a quote directly
+# before a legacy first segment, bounded by a quote, slash,
+# query, or template marker. Canonical paths put the quote
+# before /api and never match.
+LEGACY_LITERAL_RE = re.compile(
+    r"[\"'`]/(?:health|config|projects|todos|board)"
+    r"(?=[\"'`/?$])")
+
+
+class TestControlledCallerScan(unittest.TestCase):
+    """Controlled callers speak canonical paths only
+    (Step 5): the bridge actions carry no legacy route
+    literal at all, and the healthcheck's single legacy
+    literal is its explicitly bounded release N fallback."""
+
+    def test_bridge_actions_have_no_legacy_literal(self):
+        source = (REPO / "viewer" / "server" / "src"
+                  / "actions.ts").read_text(encoding="utf-8")
+        self.assertEqual(LEGACY_LITERAL_RE.findall(source),
+                         [])
+
+    def test_healthcheck_legacy_literal_is_only_the_fallback(
+            self):
+        source = (REPO / "server" / "healthcheck.py").read_text(
+            encoding="utf-8")
+        # Found tokens are quote + legacy segment (the regex
+        # lookahead leaves the closing quote unconsumed): the
+        # fallback's one "/health literal, and nothing else.
+        self.assertEqual(LEGACY_LITERAL_RE.findall(source),
+                         ['"/health'])
+        self.assertIn('"/api/health"', source)
 
 
 if __name__ == "__main__":
