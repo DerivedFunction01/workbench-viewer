@@ -8,7 +8,9 @@
 // does not conform (whole source as formatted markdown;
 // content is never dropped). A Raw toggle swaps to the
 // source view (highlight.js, lazy). Structural anchors are
-// derived at render time (plans/anchors.ts, §14.5).
+// derived at render time (plans/anchors.ts, §14.5). The
+// reader also carries D7's anchored comment box for the
+// open plan, under the checklist strip.
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -18,6 +20,7 @@ import { api, type BundleItem, type PlanDoc, type TodoItem } from "../lib/api";
 import { formatDate, formatRelative } from "../lib/format";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";
+import { AnchoredComment } from "./inbox/AnchoredComment";
 import { anchor } from "./plans/anchors";
 import { ChangesPanel, WorktreeChanges } from "./plans/ChangesPanel";
 import { BlockView, MarkdownBlock, StepBlock } from "./plans/PlanBody";
@@ -197,10 +200,12 @@ function SourceView({ source }: { source: string }) {
 
 function PlanReader({
   slug,
+  projectName,
   path,
   bundle,
 }: {
   slug: string;
+  projectName: string;
   path: string;
   bundle: BundleItem | null;
 }) {
@@ -248,6 +253,12 @@ function PlanReader({
         />
       </div>
       {bundle ? <ChecklistStrip todos={bundle.todos} /> : null}
+      {/* D7's second compose surface: a comment box anchored
+          to the open plan (the Overview showcase mount is the
+          same box on the same anchor). */}
+      <div style={{ marginTop: "var(--wb-space-8)" }}>
+        <AnchoredComment slug={slug} projectName={projectName} anchorType="plan" anchorRef={path} />
+      </div>
       {!doc.conforming ? (
         <div style={{ margin: "var(--wb-space-16) 0" }}>
           <KitBanner
@@ -396,7 +407,7 @@ export function PlansSection({
       <h1 style={sectionTitleStyle}>Plans</h1>
       <DegradedBanner feed={feed} />
       {item ? (
-        <PlanReader slug={slug} path={item} bundle={readerBundle} />
+        <PlanReader slug={slug} projectName={projectName} path={item} bundle={readerBundle} />
       ) : (
         <div data-anchor={anchor.planList}>
           {feed.bundles.length === 0 ? (
