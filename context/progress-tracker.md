@@ -299,3 +299,16 @@ change.
 - Vanished-refs fix MERGED to main 2026-10-25: gate green
   on the merged tree, 238 tests. Server restart picks up
   the new worktree/diff derivations.
+- Plan syntax conformance BUILT on branch
+  `build/plan-syntax` (awaiting merge): the approved
+  standard lands end to end — KaTeX math in the plan
+  renderer (lazy chunk, vendored woff2 fonts in the
+  themes bundle, source-text fallback for unparseable
+  math), task lists as styled disabled checkboxes, the
+  parser exposing `## Open questions` items + count and
+  the `## Critical files` path list in the plan payload,
+  and the `coding_plan` skill template rewritten to the
+  standard's skeleton (decisions stated precisely,
+  never transcripts). Proof: the conforming fixture
+  (tests/fixtures/conforming-plan.md) through
+  tests/test_plans.py and viewer/tools/test-math.ts.

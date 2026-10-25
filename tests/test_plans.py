@@ -148,6 +148,100 @@ class TestMermaid(unittest.TestCase):
             (base + "\n" + diagram).rstrip("\n"))
 
 
+CONFORMING_FIXTURE = (Path(__file__).resolve().parent
+                      / "fixtures" / "conforming-plan.md")
+
+
+class TestConformingFixture(unittest.TestCase):
+    """The plan syntax standard's fully conforming fixture:
+    every element the standard names, asserted structurally.
+    Renderer-side proof lives in viewer/tools/test-math.ts
+    (same fixture)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = CONFORMING_FIXTURE.read_text(
+            encoding="utf-8")
+        cls.doc = parser.parse_plan(cls.text,
+                                    path="conforming-plan.md")
+
+    def test_lossless(self):
+        self.assertEqual(
+            parser.reconstruct(self.doc).rstrip(),
+            self.text.rstrip())
+
+    def test_header_fields(self):
+        doc = self.doc
+        self.assertTrue(doc["conforming"])
+        self.assertEqual(doc["title"],
+                         "Add the widget index to the "
+                         "messages store")
+        self.assertEqual(doc["fields"]["Status"], "draft")
+        self.assertEqual(doc["fields"]["Worktree"],
+                         "../wv-plansyntax")
+        self.assertEqual(doc["fields"]["Branch"],
+                         "build/plan-syntax")
+
+    def test_steps_carry_all_labels(self):
+        doc = self.doc
+        self.assertEqual(doc["step_count"], 2)
+        one, two = doc["steps"]
+        self.assertEqual(one["title"], "Store and payload")
+        self.assertIn("lib/plans/parser.py", one["files"])
+        self.assertIn("tests.test_plans", one["verify"])
+        self.assertTrue(one["done_when"])
+        # The unverifiable convention lands as the literal
+        # line, never silence.
+        self.assertTrue(
+            two["verify"].startswith("unverifiable —"))
+
+    def test_open_questions_items_and_count(self):
+        doc = self.doc
+        self.assertEqual(doc["open_questions_count"], 2)
+        open_q, answered_q = doc["open_questions"]
+        self.assertFalse(open_q["checked"])
+        self.assertIn("Which store holds the index?",
+                      open_q["text"])
+        self.assertIn("Recommendation:", open_q["text"])
+        self.assertTrue(answered_q["checked"])
+        self.assertIn("Created:", answered_q["text"])
+
+    def test_critical_files_path_list(self):
+        self.assertEqual(
+            self.doc["critical_files"],
+            ["lib/plans/parser.py",
+             "viewer/client/src/sections/plans/PlanBody.tsx",
+             "tests/test_plans.py"])
+
+    def test_section_flags(self):
+        flags = {s["heading"]: s for s in self.doc["sections"]}
+        self.assertTrue(
+            flags["Open questions"]["is_open_questions"])
+        self.assertTrue(
+            flags["Critical files"]["is_critical_files"])
+        self.assertFalse(
+            flags["Objective"]["is_open_questions"])
+        self.assertFalse(
+            flags["Rulings"]["is_critical_files"])
+
+    def test_summary_carries_question_count(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            plans = Path(td)
+            (plans / "conforming-plan.md").write_text(
+                self.text, encoding="utf-8")
+            summaries = parser.list_plans(plans)
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(
+            summaries[0]["open_questions_count"], 2)
+
+    def test_legacy_plan_has_empty_semantics(self):
+        doc = parse(BOOTSTRAP)
+        self.assertEqual(doc["open_questions"], [])
+        self.assertEqual(doc["open_questions_count"], 0)
+        self.assertEqual(doc["critical_files"], [])
+
+
 class TestListing(unittest.TestCase):
     def test_list_v2_plans(self):
         summaries = parser.list_plans(V2_PLANS)
