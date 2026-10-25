@@ -153,7 +153,7 @@ export function KitSpecimen() {
       </Section>
 
       <Section title="Card / Frame / Lane">
-        <Card title="A card" actions={<Button variant="ghost">Act</Button>}>
+        <Card title="A card" anchor="specimen/card" actions={<Button variant="ghost">Act</Button>}>
           <p className="text-sm">Card body text.</p>
         </Card>
         <Frame

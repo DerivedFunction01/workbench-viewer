@@ -166,6 +166,7 @@ export function App() {
       }}
     >
       <nav
+        data-anchor="shell/project-rail"
         aria-label="Projects and sections"
         style={{
           width: "232px",
@@ -349,6 +350,7 @@ export function App() {
         </header>
 
         <main
+          data-anchor="shell/content"
           style={{
             maxWidth: "1600px",
             margin: "0 auto",
