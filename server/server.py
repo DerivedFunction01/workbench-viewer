@@ -25,6 +25,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, \
@@ -40,6 +41,7 @@ sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 import config as cfgmod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
+from lib import messages as msg_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
 from lib import staleness  # noqa: E402
 from lib import sweep as sweep_mod  # noqa: E402
@@ -223,6 +225,142 @@ def board_feed() -> dict:
     return {"todos": lanes, "plans": plan_cards,
             "review_queue": review_queue, "errors": errors,
             "sweep_errors": result.errors}
+
+
+# ================================================================
+# REPO-HOME ADDITIONS — BEGIN (repo-home spec §§5-7)
+# Everything in this block is additive: the message store
+# (lib/messages.py), its cleanup lifecycle, and the /api
+# namespace. All store access goes through lib/ — no SQL
+# here, per the one-mutation-path rule. The UI for these
+# endpoints is a later phase; this block is backend only.
+# ================================================================
+
+MSG_DB = cfgmod.messages_db_path(CFG)
+MSG_POLICY = cfgmod.messages_policy(CFG)
+
+
+def run_message_cleanup(reason: str) -> dict:
+    """One cleanup pass over the viewer message store with
+    the sweep's current slugs as the known-project set.
+    Never raises: a cleanup failure must not block the
+    server (counts are logged either way)."""
+    try:
+        slugs = [p.slug for p in get_sweep().projects]
+        counts = msg_mod.cleanup(MSG_DB, known_slugs=slugs,
+                                 policy=MSG_POLICY)
+        print(f"workbench-viewer: message cleanup ({reason}):"
+              f" {counts}", file=sys.stderr)
+        return counts
+    except Exception as e:  # containment, like the feeds
+        print(f"workbench-viewer: message cleanup ({reason})"
+              f" failed: {e}", file=sys.stderr)
+        return {"error": str(e)[:200]}
+
+
+def _message_cleanup_loop():
+    while True:
+        time.sleep(24 * 3600)
+        run_message_cleanup("daily")
+
+
+def start_message_maintenance():
+    """Spec §5.3: the cleanup pass runs at server start and
+    daily inside the server process. No cron."""
+    run_message_cleanup("startup")
+    thread = threading.Thread(target=_message_cleanup_loop,
+                              name="message-cleanup",
+                              daemon=True)
+    thread.start()
+
+
+def messages_list(query: dict) -> dict:
+    if query.get("pickup") == "1":
+        # Agent pickup (spec D3): the fetch acknowledges.
+        picked = msg_mod.fetch_unacked(
+            MSG_DB, query.get("project") or None)
+        return {"messages": picked,
+                "picked_up": len(picked),
+                "captured_at": now_iso()}
+    rows = msg_mod.list_messages(
+        MSG_DB, project_slug=query.get("project") or None,
+        state=query.get("state") or None,
+        badge_days=CFG["messages_awaiting_badge_days"])
+    return {"messages": rows, "captured_at": now_iso()}
+
+
+def message_create(body: dict) -> dict:
+    if not body.get("author"):
+        raise ApiError(400, "message needs an author "
+                            "(owner|Muse)")
+    try:
+        message = msg_mod.create_message(
+            MSG_DB, author=body["author"],
+            body=body.get("body") or "",
+            project_slug=body.get("project_slug"),
+            anchor_type=body.get("anchor_type") or "none",
+            anchor_ref=body.get("anchor_ref"),
+            showcase=body.get("showcase"),
+            parent_id=body.get("parent_id"),
+            send=bool(body.get("send")))
+    except msg_mod.MessageError as e:
+        raise ApiError(400, str(e))
+    return {"message": message}
+
+
+def message_done(message_id: int) -> dict:
+    try:
+        message = msg_mod.mark_done(MSG_DB, message_id)
+    except msg_mod.MessageError as e:
+        raise ApiError(400, str(e))
+    return {"message": message}
+
+
+def message_cleanup(body: dict) -> dict:
+    """Guarded manual controls (§5.4): cleanup now, or a
+    per-state purge. All require an explicit confirm."""
+    if body.get("confirm") is not True:
+        raise ApiError(400, "guarded mutation: pass "
+                            "{\"confirm\": true}")
+    purge = body.get("purge")
+    if purge == "archived":
+        return {"purged": msg_mod.purge_archived(MSG_DB),
+                "captured_at": now_iso()}
+    if purge == "drafts":
+        return {"purged": msg_mod.purge_drafts(MSG_DB),
+                "captured_at": now_iso()}
+    if purge is not None:
+        raise ApiError(400, f"unknown purge: {purge!r}")
+    return {"cleanup": run_message_cleanup("manual"),
+            "captured_at": now_iso()}
+
+
+def effective_settings() -> dict:
+    """GET /api/settings/effective: the seam's resolved
+    values, read-only (Settings → Workspace, spec §3).
+    Anything secret-shaped is excluded by key name — the
+    config carries no secrets today, and this keeps it
+    that way by construction."""
+    hidden = ("secret", "token", "password", "key")
+    shown = {k: v for k, v in CFG.items()
+             if not any(h in k.lower() for h in hidden)}
+    try:
+        stats = msg_mod.store_stats(MSG_DB)
+    except Exception as e:
+        stats = {"error": str(e)[:200]}
+    return {
+        "config": shown,
+        "config_hash": cfgmod.config_hash(CFG),
+        "config_file": str(cfgmod.config_path()),
+        "messages": {"db": str(MSG_DB),
+                     "policy": MSG_POLICY, **stats},
+        "captured_at": now_iso(),
+    }
+
+
+# ================================================================
+# REPO-HOME ADDITIONS — END
+# ================================================================
 
 
 # ----------------------------------------------------------------
@@ -452,6 +590,14 @@ class Handler(BaseHTTPRequestHandler):
                 "config_hash": cfgmod.config_hash(CFG),
                 "config_file": str(cfgmod.config_path()),
             })
+        # -- repo-home additions (additive /api namespace) --
+        if parts == ["api", "messages"]:
+            try:
+                return self._send(200, messages_list(query))
+            except msg_mod.MessageError as e:
+                raise ApiError(400, str(e))
+        if parts == ["api", "settings", "effective"]:
+            return self._send(200, effective_settings())
         if parts == ["projects"]:
             result = get_sweep()
             return self._send(200, result.summary())
@@ -523,6 +669,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route_post(self):
         parts, _query = self._parts()
+        # -- repo-home additions (additive /api namespace) --
+        if parts == ["api", "messages"]:
+            return self._send(200,
+                              message_create(self._body()))
+        if parts == ["api", "messages", "cleanup"]:
+            return self._send(200,
+                              message_cleanup(self._body()))
+        if len(parts) == 4 and parts[0] == "api" \
+                and parts[1] == "messages" \
+                and parts[3] == "done":
+            try:
+                message_id = int(parts[2])
+            except ValueError:
+                raise ApiError(404, "no such message: "
+                                    f"{parts[2]}")
+            return self._send(200, message_done(message_id))
         if parts == ["projects", "rescan"]:
             result = get_sweep(force=True)
             return self._send(200, result.summary())
@@ -597,6 +759,7 @@ def acquire_lock():
 def main() -> int:
     acquire_lock()
     get_sweep()  # warm the cache; sweep errors never block
+    start_message_maintenance()  # repo-home §5.3 cleanup
     server = ThreadingHTTPServer((CFG["host"], CFG["port"]),
                                  Handler)
     print(f"workbench-viewer server v{VERSION} on "
