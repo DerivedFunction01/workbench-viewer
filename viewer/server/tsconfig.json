@@ -1,0 +1,1 @@
+{"compilerOptions":{"lib":["ES2022"],"outDir":"./dist","paths":{"@space/privileged":["./.generated/privileged.contract"]},"rootDir":".","tsBuildInfoFile":"./.tsbuildinfo.server","types":["bun-types"]},"extends":"../tsconfig.base.json","include":["src/**/*",".generated/**/*"]}
