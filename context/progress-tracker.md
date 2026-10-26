@@ -410,3 +410,8 @@ change.
   (parent release sequence): merge by SHA, merged-
   tree gate, companion restart, checkpoint publish
   with the 390px audit; the PR waits on this landing.
+- Mobile variant MERGED to main 2026-10-25 (merge
+  `91746f0`): gate green on the merged tree, 272 tests.
+  Checkpoint publish follows; its audit must prove the
+  phone rendering in the published artifact itself
+  (tab bar, no sideways scroll, drill-in click-through).
