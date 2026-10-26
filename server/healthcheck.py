@@ -5,12 +5,6 @@ Answers "is it up right now" from GET /api/health plus the
 lock file's PID. Changes nothing except the configured
 health file. Safe to run any time.
 
-Release N transition only: if the canonical path answers
-404 — the healthcheck files landed before the unified
-server restarted — the probe falls back once to the legacy
-/health alias. That fallback is removed with the aliases
-in release N+1 (the unification plan's Step 8).
-
     python3 healthcheck.py        # exit 0 = healthy, 1 = not
 
 The watchdog (ops/watchdog.sh, invoked by the cron) runs this
@@ -22,7 +16,6 @@ literals here.
 import json
 import os
 import sys
-import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,14 +48,7 @@ def main() -> int:
         result["last_error"] = f"lock/pid: {e}"
     health = None
     try:
-        try:
-            health = fetch_health("/api/health")
-        except urllib.error.HTTPError as e:
-            if e.code != 404:
-                raise
-            # Release N only: the unified server has not
-            # restarted yet — fall back once to the alias.
-            health = fetch_health("/health")
+        health = fetch_health("/api/health")
     except Exception as e:
         result["last_error"] = f"health http: {e}"
     if health is not None:

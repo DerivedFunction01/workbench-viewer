@@ -76,8 +76,8 @@ mockup data model is example-project's subplan 09, Part B.
 - `GET /api/health` reports the resolved config hash and
   the last sweep's project list — "why doesn't it see my
   repo?" is answered there. (All routes are under `/api`;
-  the former unprefixed paths answer as exact aliases for
-  one published checkpoint cycle only.)
+  the former unprefixed paths were removed in release
+  N+1 and return 404.)
 - The artifact is published from `viewer/` via `./viewer.sh`
   (drift-guarded copy to the runtime tree, then a builder
   publish pass). Editing in the viewer is OFF by default
