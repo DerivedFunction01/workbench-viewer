@@ -475,3 +475,34 @@ change.
   2026-10-25: gate green on the merged tree, 291 tests.
   Server restart makes it live; the precision plan is
   closed out in the same pass.
+- API unification Step 8 (release N+1) BUILT on branch
+  `build/api-alias-removal` (awaiting merge): the legacy
+  aliases are removed. LEGACY_ROUTE_ALIASES and the
+  _canonicalize dispatch pass are gone from
+  server/server.py (both route handlers dispatch on the
+  canonical /api segments directly), and the
+  healthcheck's bounded release-N fallback to /health is
+  gone with them — it probes only /api/health. The
+  conformance suite is rewritten for the removed world:
+  the frozen inventory survives only as the 404 proof
+  matrix (all 15 former legacy patterns return the
+  router's own 404 over HTTP while their canonical
+  counterparts still succeed; near misses stay 404; the
+  served-without-alias tripwire covers all 27 stripped
+  candidates with no exclusions; machinery-removed
+  guards pin the absence of the map and the pass; the
+  caller scan requires zero legacy literals in the
+  healthcheck). Route docs (SPEC.md,
+  context/architecture.md, AGENTS.md, README.md) record
+  the removal. Caller audit before removal found no
+  remaining legacy caller: the only legacy literal in
+  production code was the healthcheck fallback itself —
+  bridge actions, watcher hook, and watchdog were
+  already canonical. Gate green on the branch: 285
+  tests (291 baseline − 6: the conformance suite's 15
+  release-N tests become 9 removal-proof tests).
+  PENDING (parent release acts): merge by SHA,
+  companion restart, live /api/health proof, live 404
+  proof of the former legacy paths, and closing the
+  alias-removal todo `t-01M5TNR7V99D3P2ENBA85N0W2F`
+  with the removal evidence.
