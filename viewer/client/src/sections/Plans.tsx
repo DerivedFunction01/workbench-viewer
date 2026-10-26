@@ -296,9 +296,7 @@ function SubplanRows({
               <div style={{ ...rowStyle, color: "var(--wb-content-muted)" }}>
                 <span
                   className="mono"
-                  style={
-                    isPhone ? { flex: "1 1 100%", overflowWrap: "anywhere" } : { flex: 1 }
-                  }
+                  style={isPhone ? { flex: "1 1 100%", overflowWrap: "anywhere" } : { flex: 1 }}
                 >
                   {declaredPath}
                 </span>

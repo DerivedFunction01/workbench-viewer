@@ -513,13 +513,7 @@ export function MockupDetail({
           alignItems: "start",
         }}
       >
-        <div
-          style={
-            isPhone
-              ? { minWidth: 0 }
-              : { position: "sticky", top: "var(--wb-space-16)" }
-          }
-        >
+        <div style={isPhone ? { minWidth: 0 } : { position: "sticky", top: "var(--wb-space-16)" }}>
           <div data-palette={palette} data-mode={frameMode}>
             <Frame
               anchor="mockups/exhibit-stage"

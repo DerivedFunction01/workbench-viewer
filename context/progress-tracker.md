@@ -368,3 +368,45 @@ change.
   the tracker conflicted; both sides' entries kept.
   Release sequence continues: restart, alias audit,
   checkpoint publish, canonical audit.
+- Mobile variant BUILT on branch `build/mobile-variant`
+  (5 step commits over `b044797`: seam+survey, phone
+  shell, sections, annotations, this closeout) per the
+  approved plan + mobile mockup, repo-home spec §20.
+  ONE breakpoint: 480px (`max-width`), the seam in
+  `viewer/client/src/lib/responsive.ts` — the mockup's
+  exhibits are 390px frames and its own stylesheet's
+  small-screen threshold is 480px; no tablet variant.
+  The audit advisory is closed by cause: the shell's
+  fixed 232px rail + content row measured 445px
+  intrinsic on Home (582px on Plans) in a 390px box.
+  Overflow fixes, all phone-gated: bottom tab bar +
+  top bar + section nav shell; Board lanes stack,
+  cards full width; Home project cards (§19 grouping
+  intact); Plans rows wrap (§21 grouping intact);
+  reader rails stack under their blocks; Changes
+  summaries wrap, diff body keeps its own scroller;
+  kit fix — SegmentedControl clamps (max-width 100%)
+  and wraps between pills; MockupDetail single column
+  is `minmax(0, 1fr)` after the bare-`1fr` blowout
+  (cards measured 398px in a 358px column) was found
+  by the probe. Annotations (§20): same lifecycle,
+  badges, pickup; composer in-flow full-width with
+  the connector ornaments dropped (annotation
+  mockup's proven 390px treatment); anchor-moved
+  lists with its quote, never dropped — proven with
+  synthetic threads injected into the probe cache
+  only (live data carries zero annotations). Proof:
+  14/14 routes at 390×844 report zero viewport
+  offenders on live data; desktop A/B at 1440×900
+  vs `b044797` is geometry-identical on 8 routes
+  (rail 232px, content 232×1208, no tab bar).
+  Exceptions vs the mockup, explicit: (1) the top
+  bar's theme toggle is NOT reproduced — appearance
+  controls live on Settings only (§3 standing
+  ruling); (2) specimen-only status chips with no
+  real-data counterpart (project-head "Doing", per-
+  step chips) are not reproduced. Gate PASS on the
+  branch tree: 272 tests, all 4 legs. PENDING
+  (parent release sequence): merge by SHA, merged-
+  tree gate, companion restart, checkpoint publish
+  with the 390px audit; the PR waits on this landing.
