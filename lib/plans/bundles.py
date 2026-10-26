@@ -24,13 +24,21 @@ valid=False with structured `errors` on THAT item (and
 aggregated on its bundle) — never a silent skip, never
 a crash of other items. Unknown front-matter fields are
 preserved in `fields` (lossless, like the plan parser).
+
+A flat plan whose declared Status contradicts its filing
+location — `complete` while still active, or anything but
+`complete`/`superseded` under finished/ — carries the
+same treatment: one `closeout:` bundle error naming the
+fix (the plan syntax standard's Closeout section, enforced
+by `_closeout_error`). Bundle directories are not plan
+files and are never closeout-checked.
 """
 
 import re
 from datetime import date
 from pathlib import Path
 
-from .parser import parse_plan, status_bucket
+from .parser import declared_status, parse_plan, status_bucket
 
 TODO_STATUSES = ("todo", "doing", "blocked", "done")
 REQUIRED_TODO_FIELDS = ("id", "title", "status",
@@ -226,9 +234,42 @@ def _read_bundle(bundle_dir: Path, rel_prefix: str,
     }
 
 
+def _closeout_error(status_raw, archived: bool):
+    """The plan-closeout contradiction (plan syntax
+    standard, Closeout section): a plan file's declared
+    Status and its filing location must agree. Returns
+    the error text naming the fix, or None when they
+    agree — and None when the plan declares nothing
+    (no Status header: no flag; the degraded treatment
+    covers it). Plan files only: bundle directories
+    carry no plan file, and their state rides their
+    todos, so they are never checked here."""
+    declared = declared_status(status_raw)
+    if declared is None:
+        return None
+    if not archived and declared == "complete":
+        return ("closeout: Status declares complete, "
+                "but the plan is filed under .plans/ — "
+                "close it out by moving it to "
+                ".plans/finished/")
+    if archived and declared not in ("complete",
+                                     "superseded"):
+        return (f"closeout: Status declares {declared}, "
+                f"but the plan is filed under "
+                f".plans/finished/ — a finished plan must "
+                f"declare complete or superseded: fix "
+                f"the Status line, or move it back to "
+                f".plans/")
+    return None
+
+
 def _flat_bundle(plan_path: Path, rel: str,
                  archived: bool) -> dict:
     plan = _plan_summary(plan_path, rel, archived)
+    errors = []
+    closeout = _closeout_error(plan["status_raw"], archived)
+    if closeout is not None:
+        errors.append({"path": rel, "error": closeout})
     return {
         "kind": "flat-plan",
         "id": plan_path.name,
@@ -238,7 +279,7 @@ def _flat_bundle(plan_path: Path, rel: str,
         "feature": plan["feature"],
         "plan": plan,
         "todos": [],
-        "errors": [],
+        "errors": errors,
         "todo_count": 0,
         "open_count": 0,
     }
