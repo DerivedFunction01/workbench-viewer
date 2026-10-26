@@ -531,7 +531,11 @@ function PlanReader({
     return (
       <aside
         style={{
-          width: "300px",
+          // Phone (§20): there is no margin — the thread
+          // stack goes full width and the enclosing flex
+          // row turns column, so the stack renders directly
+          // under its step/section block.
+          width: isPhone ? "100%" : "300px",
           flexShrink: 0,
           display: "grid",
           gap: "var(--wb-space-8)",
@@ -698,8 +702,9 @@ function PlanReader({
                 <div
                   style={{
                     display: "flex",
+                    flexDirection: isPhone ? "column" : "row",
                     gap: "var(--wb-space-16)",
-                    alignItems: "flex-start",
+                    alignItems: isPhone ? "stretch" : "flex-start",
                   }}
                 >
                   <section
@@ -722,8 +727,9 @@ function PlanReader({
                             <div
                               style={{
                                 display: "flex",
+                                flexDirection: isPhone ? "column" : "row",
                                 gap: "var(--wb-space-16)",
-                                alignItems: "flex-start",
+                                alignItems: isPhone ? "stretch" : "flex-start",
                               }}
                             >
                               <div style={{ flex: 1, minWidth: 0 }}>

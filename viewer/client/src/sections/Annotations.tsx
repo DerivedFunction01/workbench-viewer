@@ -25,6 +25,7 @@ import {
   type TextSelection,
 } from "../lib/api";
 import { formatRelative } from "../lib/format";
+import { useIsPhone } from "../lib/responsive";
 import { locateInText, type RelocationStatus } from "./plans/relocation";
 
 export interface AnnotationThread {
@@ -211,6 +212,7 @@ export function AnnotationComposer({
   onClose: () => void;
   onSent?: () => void;
 }) {
+  const isPhone = useIsPhone();
   const queryClient = useQueryClient();
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -292,29 +294,39 @@ export function AnnotationComposer({
       data-annotation-ui="true"
       style={{ position: "relative", marginTop: "var(--wb-space-16)" }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          top: "-11px",
-          left: "18px",
-          width: "7px",
-          height: "7px",
-          borderRadius: "50%",
-          background: "var(--wb-accent)",
-        }}
-      />
-      <span
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          top: "-4px",
-          left: "21px",
-          width: "1.5px",
-          height: "6px",
-          background: "var(--wb-accent)",
-        }}
-      />
+      {/* Phone (§20): the composer is the same AnchoredComment
+          surface as an in-flow full-width sheet — the
+          connector dot/line ornaments belong to the desktop
+          margin presentation and drop, exactly as the
+          annotation mockup's proven 390px treatment drops
+          them. The card itself is unchanged. */}
+      {!isPhone ? (
+        <>
+          <span
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: "-11px",
+              left: "18px",
+              width: "7px",
+              height: "7px",
+              borderRadius: "50%",
+              background: "var(--wb-accent)",
+            }}
+          />
+          <span
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: "-4px",
+              left: "21px",
+              width: "1.5px",
+              height: "6px",
+              background: "var(--wb-accent)",
+            }}
+          />
+        </>
+      ) : null}
       <div style={{ ...cardStyle, boxShadow: "var(--wb-shadow-overlay)" }}>
         {quote !== undefined ? (
           <p
@@ -574,6 +586,7 @@ export function AnnotationList({
   threads: AnnotationThread[];
   statusOf: (root: MessageItem) => "located" | "moved";
 }) {
+  const isPhone = useIsPhone();
   const located = threads.filter((t) => statusOf(t.root) === "located");
   const movedThreads = threads.filter((t) => statusOf(t.root) === "moved");
   return (
@@ -592,6 +605,10 @@ export function AnnotationList({
                   gap: "var(--wb-space-12)",
                   padding: "var(--wb-space-8) 0",
                   borderBottom: "1px solid var(--wb-border-default)",
+                  // Phone: the row wraps rather than letting
+                  // the nowrap pieces squeeze the first line
+                  // out; every piece stays, nothing dropped.
+                  flexWrap: isPhone ? "wrap" : undefined,
                 }}
               >
                 <span
@@ -599,7 +616,10 @@ export function AnnotationList({
                   style={{
                     fontSize: "var(--wb-font-size-xs)",
                     color: "var(--wb-content-secondary)",
-                    whiteSpace: "nowrap",
+                    // Phone: a long component label (a full
+                    // section heading) wraps as prose instead
+                    // of painting one 457px line past the row.
+                    whiteSpace: isPhone ? "normal" : "nowrap",
                   }}
                 >
                   {anchorLabelOf(t.root)}
@@ -620,6 +640,7 @@ export function AnnotationList({
                 <span
                   style={{
                     flex: 1,
+                    minWidth: isPhone ? 0 : undefined,
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",

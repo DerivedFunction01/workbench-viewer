@@ -503,12 +503,23 @@ export function MockupDetail({
           // composer and pinned threads) first, then the
           // card column stacked under it (§20: the drill-in
           // carries its per-exhibit annotation list).
-          gridTemplateColumns: isPhone ? "1fr" : "7fr 5fr",
+          // Phone: minmax(0, 1fr), not 1fr — a bare 1fr is
+          // minmax(auto, 1fr) and the stage's min-content
+          // (frame header + summary) blows the track out to
+          // 398px in a 358px column (measured on the
+          // drill-in). Desktop's 7fr/5fr is untouched.
+          gridTemplateColumns: isPhone ? "minmax(0, 1fr)" : "7fr 5fr",
           gap: "var(--wb-space-24)",
           alignItems: "start",
         }}
       >
-        <div style={isPhone ? undefined : { position: "sticky", top: "var(--wb-space-16)" }}>
+        <div
+          style={
+            isPhone
+              ? { minWidth: 0 }
+              : { position: "sticky", top: "var(--wb-space-16)" }
+          }
+        >
           <div data-palette={palette} data-mode={frameMode}>
             <Frame
               anchor="mockups/exhibit-stage"
@@ -596,7 +607,14 @@ export function MockupDetail({
           </Card>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--wb-space-16)" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--wb-space-16)",
+            minWidth: isPhone ? 0 : undefined,
+          }}
+        >
           <Card title="Metadata" anchor="mockups/metadata-card">
             <MetaRow label="Id">
               <span className="mono">{entry.id}</span>
