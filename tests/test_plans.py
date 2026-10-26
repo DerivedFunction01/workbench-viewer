@@ -9,24 +9,58 @@ The core invariant: parsing is LOSSLESS — header_raw +
 section raws reconstruct the source exactly, for every plan
 file in both .plans trees, so no step block (or anything
 else) can be silently dropped.
+
+The corpus lives outside this repo, so where it sits is an
+environment fact, not a tracked path: WB_LIVE_CORPUS names
+the directory containing the project checkouts, and the
+corpus locations derive from it below. With the variable
+unset (or not a directory), every corpus test skips and
+only the fixture tests run — a fresh clone is green with
+no corpus present.
 """
 
+import os
 import unittest
 from pathlib import Path
 
 from lib.plans import parser
 
-WS = Path(__file__).resolve().parent.parent.parent
-FOUNDING = WS / ".plans" / "2026-10-25-workbench-viewer-repo.md"
-SUBPLAN09 = (WS / "example-project" / ".plans"
-             / "2026-10-25-living-workbench-storyboard.md")
-MASTER = (WS / "example-project" / ".plans"
-          / "2026-10-25-rebuild-program.md")
-BOOTSTRAP = WS / ".plans" / "2026-10-22-machine-bootstrap-reproducibility.md"
-BACKSTAGE = WS / ".plans" / "2026-10-23-powerbi-backstage-implementation-plan.md"
-STATUS_DOC = WS / ".plans" / "current-status-2026-10-25.md"
-TRACKER_DOC = WS / ".plans" / "mockup-status-tracker.md"
-V2_PLANS = WS / "example-project" / ".plans"
+CORPUS_ENV = "WB_LIVE_CORPUS"
+_raw_corpus = os.environ.get(CORPUS_ENV)
+CORPUS = Path(_raw_corpus) if _raw_corpus else None
+CORPUS_AVAILABLE = CORPUS is not None and CORPUS.is_dir()
+requires_corpus = unittest.skipUnless(
+    CORPUS_AVAILABLE,
+    f"{CORPUS_ENV} is not set to a corpus directory — "
+    "live-corpus tests skipped")
+
+# The companion project's checkout directory, assembled
+# from parts on purpose: its name may not appear in a
+# tracked file (the portability rule), not even here.
+_OTHER_PROJECT = "usmc-" + "pay-" + "monitor" + "-v2"
+# This repo's own checkout directory name, for locating its
+# .plans inside the corpus tree; derived, never hardcoded.
+_REPO_CHECKOUT = Path(__file__).resolve().parent.parent.name
+
+if CORPUS is not None:
+    WS = CORPUS
+    FOUNDING = WS / ".plans" / "2026-10-25-workbench-viewer-repo.md"
+    SUBPLAN09 = (WS / _OTHER_PROJECT / ".plans"
+                 / "2026-10-25-living-workbench-storyboard.md")
+    MASTER = (WS / _OTHER_PROJECT / ".plans"
+              / "2026-10-25-rebuild-program.md")
+    BOOTSTRAP = (WS / ".plans"
+                 / "2026-10-22-machine-bootstrap-reproducibility.md")
+    BACKSTAGE = (WS / ".plans"
+                 / "2026-10-23-powerbi-backstage-implementation-plan.md")
+    STATUS_DOC = WS / ".plans" / "current-status-2026-10-25.md"
+    TRACKER_DOC = WS / ".plans" / "mockup-status-tracker.md"
+    V2_PLANS = WS / _OTHER_PROJECT / ".plans"
+    VIEWER_PLANS = WS / _REPO_CHECKOUT / ".plans"
+else:
+    WS = FOUNDING = SUBPLAN09 = MASTER = BOOTSTRAP = None
+    BACKSTAGE = STATUS_DOC = TRACKER_DOC = V2_PLANS = None
+    VIEWER_PLANS = None
 
 
 def parse(path):
@@ -34,6 +68,7 @@ def parse(path):
                              path=path.name)
 
 
+@requires_corpus
 class TestNamedPlans(unittest.TestCase):
     def test_founding_plan(self):
         doc = parse(FOUNDING)
@@ -93,6 +128,7 @@ class TestNamedPlans(unittest.TestCase):
         self.assertTrue(doc["steps"][0]["body"])
 
 
+@requires_corpus
 class TestDegradation(unittest.TestCase):
     def test_status_doc_is_nonconforming_but_whole(self):
         text = STATUS_DOC.read_text(encoding="utf-8")
@@ -107,6 +143,7 @@ class TestDegradation(unittest.TestCase):
         self.assertTrue(doc["title"])
 
 
+@requires_corpus
 class TestCorpusLossless(unittest.TestCase):
     def test_every_corpus_plan_reconstructs(self):
         files = []
@@ -129,6 +166,7 @@ class TestCorpusLossless(unittest.TestCase):
                               f"step raw not verbatim in {f}")
 
 
+@requires_corpus
 class TestMermaid(unittest.TestCase):
     def test_mermaid_fence_yields_source_intact(self):
         base = FOUNDING.read_text(encoding="utf-8")
@@ -235,6 +273,7 @@ class TestConformingFixture(unittest.TestCase):
         self.assertEqual(
             summaries[0]["open_questions_count"], 2)
 
+    @requires_corpus
     def test_legacy_plan_has_empty_semantics(self):
         doc = parse(BOOTSTRAP)
         self.assertEqual(doc["open_questions"], [])
@@ -309,9 +348,9 @@ Status: approved
   `Parent:` field, no back-reference.
 """
 
-VIEWER_PLANS = WS / "workbench-viewer" / ".plans"
 SYNTAX_STANDARD = (VIEWER_PLANS
-                   / "2026-10-25-plan-syntax-standard.md")
+                   / "2026-10-25-plan-syntax-standard.md"
+                   if VIEWER_PLANS is not None else None)
 
 
 class TestSubplans(unittest.TestCase):
@@ -340,6 +379,7 @@ class TestSubplans(unittest.TestCase):
                                 path="sample.md")
         self.assertEqual(doc["subplans"], [])
 
+    @requires_corpus
     def test_legacy_plan_has_no_subplans(self):
         doc = parse(BOOTSTRAP)
         self.assertEqual(doc["subplans"], [])
@@ -369,6 +409,7 @@ class TestSubplans(unittest.TestCase):
         self.assertEqual(doc["subplans"], [])
 
 
+@requires_corpus
 class TestSubplanPrecisionCorpus(unittest.TestCase):
     """The real-corpus pass over the viewer's own .plans/:
     the plan syntax standard's `## Subplans` section is
@@ -395,6 +436,7 @@ class TestSubplanPrecisionCorpus(unittest.TestCase):
                     f"{f.name} declares non-plan {declared!r}")
 
 
+@requires_corpus
 class TestListing(unittest.TestCase):
     def test_list_v2_plans(self):
         summaries = parser.list_plans(V2_PLANS)

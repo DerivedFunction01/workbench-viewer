@@ -6,6 +6,12 @@ Walks every tracked file (`git ls-files`), reads it as UTF-8
 (binary files that do not decode are skipped), and asserts
 none of the forbidden strings appear.
 
+One boundary: `viewer/vendor/` is pinned, unmodified
+third-party code — the same carve-out as node_modules and
+dist — so its files are excluded from the scan. Vendored
+bytes are never patched to satisfy this guard; the exclusion
+is the entire accommodation.
+
 The forbidden strings are assembled by concatenation on
 purpose: this file is itself a tracked file scanned by its
 own test, so none of them may appear here literally.
@@ -43,6 +49,8 @@ class TestExternalReferences(unittest.TestCase):
         self.assertTrue(names, "git ls-files returned nothing")
         offenders = []
         for name in names:
+            if name.startswith("viewer/vendor/"):
+                continue  # pinned third-party code; see docstring
             try:
                 text = (ROOT / name).read_text(encoding="utf-8")
             except (UnicodeDecodeError, OSError):

@@ -13,7 +13,7 @@
     }
   },
   "files": {
-    "includes": ["**", "!client/src/themes", "!**/dist", "!bun.lock"]
+    "includes": ["**", "!client/src/themes", "!**/dist", "!**/vendor", "!bun.lock"]
   },
   "formatter": {
     "enabled": true,

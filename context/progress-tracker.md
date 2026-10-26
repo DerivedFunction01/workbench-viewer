@@ -563,3 +563,19 @@ change.
   entries above predate the rewrite and are
   superseded. The pre-rewrite history is preserved
   on the local pre-sanitize-backup branch.
+- Sanitization rulings closed (2026-10-26): the
+  vendored SDK tree (viewer/vendor/) is pinned
+  third-party code — the guard test excludes it by
+  prefix with the boundary stated in its docstring,
+  and Biome ignores the tree like dist, returning
+  repo files to their baseline diagnostics (75
+  files, 2 warnings, 30 infos, no errors). The
+  live-corpus plan tests no longer derive the
+  corpus from the checkout's location: the
+  WB_LIVE_CORPUS environment variable names the
+  directory holding the project checkouts — unset,
+  the corpus tests skip with the variable named
+  (13 fixture tests still run); set, all 28 run.
+  With the gate green at the tip, the history
+  rewrite follows, carrying the Phase-1
+  replacements through every commit.
