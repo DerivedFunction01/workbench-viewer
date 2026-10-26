@@ -475,3 +475,28 @@ change.
   2026-10-25: gate green on the merged tree, 291 tests.
   Server restart makes it live; the precision plan is
   closed out in the same pass.
+- Overview plans card removal BUILT on branch
+  `build/overview-plans-removal` (awaiting merge):
+  repo-home spec section 22 lands — the Overview's
+  flat Plans card and its PlanList are deleted (the
+  Plans section is the only plan list; the card had
+  no section 21 grouping, no finished view, no
+  checklist strips, no bundle error lines, and it
+  violated the strip's own references-never-re-
+  implemented rule). The section 17 Active plan
+  showcase and the worktree panel are unchanged.
+  A Plans reference joins the Todos & review strip
+  between Todos and In triage, in the strip's
+  link-and-count pattern: the link plus the active-
+  plan count from the home payload Overview already
+  loads (the plans block's counts buckets, todo +
+  doing; archived plans bucket done, so the count
+  is the not-done plans — no new fetch, nothing
+  fabricated). The plans query and its orphaned
+  imports leave Overview with the card. The
+  showcase's empty state now points at the Plans
+  section instead of "the plan list below". Gate
+  green on the branch: 291 tests. PENDING (parent
+  release sequence): merge by SHA, checkpoint
+  publish (client change), audit of Overview at
+  desktop and phone widths against section 22.
