@@ -266,7 +266,14 @@ def _extract_subplans(body_lines):
     the backticked span when the bullet carries one, else
     the text up to the em-dash note. Declaration order is
     preserved; the parent declares, children declare
-    nothing back."""
+    nothing back.
+
+    Precision rule: a span counts as a declaration only
+    when it names a plan file — it ends in `.md`. A
+    section can also be prose ABOUT the format (the plan
+    syntax standard's own `## Subplans` section is exactly
+    that: rules bullets carrying backticked spans like
+    `.plans/` and `Parent:`), and prose declares nothing."""
     paths = []
     for line in _unfenced(body_lines):
         m = _BULLET_RE.match(line)
@@ -275,11 +282,11 @@ def _extract_subplans(body_lines):
         item = m.group(1).strip()
         bt = _BACKTICK_RE.search(item)
         if bt:
-            paths.append(bt.group(1).strip())
+            candidate = bt.group(1).strip()
         else:
-            path = item.split(" — ")[0].strip()
-            if path:
-                paths.append(path)
+            candidate = item.split(" — ")[0].strip()
+        if candidate.endswith(".md"):
+            paths.append(candidate)
     return paths
 
 

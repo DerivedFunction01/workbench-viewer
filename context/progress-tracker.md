@@ -449,3 +449,25 @@ change.
   tree. Checkpoint publish follows; the owner's device is
   the decisive check (headless Chromium stacked even
   before the fix).
+- Subplan declaration precision BUILT on branch
+  `build/subplan-declaration-precision` (awaiting
+  merge): the parser's `## Subplans` extraction counts
+  an extracted span as a declaration only when it ends
+  in `.md`; everything else in the section is prose
+  about subplans and declares nothing. The proving
+  case is the plan syntax standard itself — no
+  exemption, no carve-out: its rules bullets
+  (backticked `.plans/` and `Parent:`, plain text up
+  to an em-dash) extracted three phantom "missing"
+  children; it now extracts zero. A declared `.md`
+  path that resolves to nothing still renders as a
+  missing child row per section 21. Proof:
+  TestSubplans precision fixtures (a mixed section
+  extracts exactly the one `.md`; a pure-prose section
+  extracts none) + TestSubplanPrecisionCorpus over
+  this repo's own .plans/ (standard declaration-free,
+  every corpus declaration naming a plan file); the
+  grouping fixtures are unchanged and green. Gate
+  green on the branch: 291 tests. PENDING (parent
+  release sequence): merge by SHA, companion restart
+  — server-side only, no republish.

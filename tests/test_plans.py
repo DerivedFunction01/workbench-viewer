@@ -282,6 +282,37 @@ The declaration's shape, quoted as an example:
 ```
 """
 
+MIXED_SUBPLANS_PLAN = """\
+# Plan mixing declaration and prose
+
+Status: draft
+
+## Subplans
+
+- `real-child.md`
+- Paths are relative to the `.plans/` directory.
+- A subplan declares nothing back — no `Parent:` field.
+- The format in prose, not a declaration of one.
+"""
+
+PURE_PROSE_SUBPLANS_PLAN = """\
+# A standard-like document
+
+Status: approved
+
+## Subplans
+
+- Present only when the plan decomposes into subplans; the
+  section lists them, one bullet per subplan, each a backticked
+  path relative to the `.plans/` directory.
+- The parent declares; a subplan declares nothing back — no
+  `Parent:` field, no back-reference.
+"""
+
+VIEWER_PLANS = WS / "workbench-viewer" / ".plans"
+SYNTAX_STANDARD = (VIEWER_PLANS
+                   / "2026-10-25-plan-syntax-standard.md")
+
 
 class TestSubplans(unittest.TestCase):
     """§21: the parent's `## Subplans` declaration joins the
@@ -322,6 +353,46 @@ class TestSubplans(unittest.TestCase):
             summaries = parser.list_plans(plans)
         self.assertEqual(len(summaries), 1)
         self.assertEqual(summaries[0]["subplans_count"], 3)
+
+    def test_mixed_section_extracts_only_plan_files(self):
+        # Precision rule: a span declares only when it
+        # names a plan file (ends in .md). Prose bullets —
+        # backticked non-.md spans, plain text up to an
+        # em-dash — declare nothing.
+        doc = parser.parse_plan(MIXED_SUBPLANS_PLAN,
+                                path="mixed.md")
+        self.assertEqual(doc["subplans"], ["real-child.md"])
+
+    def test_pure_prose_section_extracts_nothing(self):
+        doc = parser.parse_plan(PURE_PROSE_SUBPLANS_PLAN,
+                                path="standard-like.md")
+        self.assertEqual(doc["subplans"], [])
+
+
+class TestSubplanPrecisionCorpus(unittest.TestCase):
+    """The real-corpus pass over the viewer's own .plans/:
+    the plan syntax standard's `## Subplans` section is
+    prose about the format and must declare nothing, and
+    every declaration anywhere in the corpus names a
+    plan file."""
+
+    def test_the_standard_declares_no_subplans(self):
+        doc = parse(SYNTAX_STANDARD)
+        flags = {s["heading"]: s for s in doc["sections"]}
+        # Guard against a vacuous pass: the section whose
+        # prose produced the phantom rows is really there.
+        self.assertTrue(flags["Subplans"]["is_subplans"])
+        self.assertEqual(doc["subplans"], [])
+
+    def test_every_corpus_declaration_names_a_plan_file(self):
+        files = sorted(VIEWER_PLANS.rglob("*.md"))
+        self.assertTrue(files)
+        for f in files:
+            doc = parse(f)
+            for declared in doc["subplans"]:
+                self.assertTrue(
+                    declared.endswith(".md"),
+                    f"{f.name} declares non-plan {declared!r}")
 
 
 class TestListing(unittest.TestCase):
