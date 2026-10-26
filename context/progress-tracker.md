@@ -415,3 +415,25 @@ change.
   Checkpoint publish follows; its audit must prove the
   phone rendering in the published artifact itself
   (tab bar, no sideways scroll, drill-in click-through).
+- Plan closeout enforcement BUILT on branch
+  `build/plan-closeout-enforcement` (awaiting merge):
+  the plans feed now flags the two Status/filing
+  contradictions from the plan syntax standard's
+  Closeout section as bundle errors the Plans list
+  already renders inline — an active plan declaring
+  complete, and a finished plan declaring anything
+  other than complete/superseded — each exactly one
+  `closeout:` error naming the fix. No flag for a
+  missing Status header (the run record under
+  finished/ stays clean) and none for bundle
+  directories (their state rides their todos).
+  Proof: tests/test_plan_closeout.py — the fixture
+  matrix across the filing states, declared-status
+  normalization pins, and a real-corpus pass over this
+  repo's own .plans/ after the 2026-10-25 sweep
+  (zero flags, coverage-guarded). Gate green on the
+  branch: 287 tests. PENDING (parent release
+  sequence): merge by SHA, merged-tree gate, restart,
+  checkpoint publish; on merge the parent closes the
+  closeout plan itself out under this rule and
+  verifies the live feed shows zero flags.
