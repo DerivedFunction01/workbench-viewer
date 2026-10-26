@@ -26,6 +26,7 @@ import {
 } from "../lib/api";
 import { formatDate, formatRelative } from "../lib/format";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
+import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
 import {
   AnnotationComposer,
@@ -123,10 +124,18 @@ function BundleRow({
   subplansCount?: number;
   children?: React.ReactNode;
 }) {
+  const isPhone = useIsPhone();
   const plan = bundle.plan;
+  // Phone: the title takes its own full-width line and the
+  // nowrap meta (status · steps · date) wraps beneath it —
+  // on one line the meta squeezes the title into a ~160px
+  // column. Desktop's single line is untouched.
+  const rowStyle: React.CSSProperties = isPhone
+    ? { ...listRowStyle, flexWrap: "wrap" }
+    : listRowStyle;
   const inner = (
     <>
-      <span style={{ flex: 1 }}>
+      <span style={isPhone ? { flex: "1 1 100%" } : { flex: 1 }}>
         {bundleTitle(bundle)}
         {plan && !plan.conforming ? (
           <span style={{ color: "var(--wb-content-secondary)" }}> · source format</span>
@@ -163,11 +172,11 @@ function BundleRow({
   return (
     <li>
       {plan ? (
-        <a href={sectionHref(slug, "plans", plan.path)} style={listRowStyle}>
+        <a href={sectionHref(slug, "plans", plan.path)} style={rowStyle}>
           {inner}
         </a>
       ) : (
-        <div style={listRowStyle}>{inner}</div>
+        <div style={rowStyle}>{inner}</div>
       )}
       {bundle.errors.length > 0 ? (
         <p style={{ color: "var(--wb-danger)", margin: "0 0 var(--wb-space-8)" }}>
@@ -272,7 +281,11 @@ function SubplanRows({
   declared: string[];
   planIndex: Map<string, PlanSummary>;
 }) {
+  const isPhone = useIsPhone();
   const distinct = [...new Set(declared)];
+  const rowStyle: React.CSSProperties = isPhone
+    ? { ...listRowStyle, flexWrap: "wrap" }
+    : listRowStyle;
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {distinct.map((declaredPath) => {
@@ -280,8 +293,11 @@ function SubplanRows({
         if (!target) {
           return (
             <li key={declaredPath}>
-              <div style={{ ...listRowStyle, color: "var(--wb-content-muted)" }}>
-                <span className="mono" style={{ flex: 1 }}>
+              <div style={{ ...rowStyle, color: "var(--wb-content-muted)" }}>
+                <span
+                  className="mono"
+                  style={isPhone ? { flex: "1 1 100%", overflowWrap: "anywhere" } : { flex: 1 }}
+                >
                   {declaredPath}
                 </span>
                 <span style={metaStyle}>missing</span>
@@ -291,8 +307,10 @@ function SubplanRows({
         }
         return (
           <li key={declaredPath}>
-            <a href={sectionHref(slug, "plans", target.path)} style={listRowStyle}>
-              <span style={{ flex: 1 }}>{target.title || target.path}</span>
+            <a href={sectionHref(slug, "plans", target.path)} style={rowStyle}>
+              <span style={isPhone ? { flex: "1 1 100%" } : { flex: 1 }}>
+                {target.title || target.path}
+              </span>
               <span style={metaStyle}>{planBucketLabel(target.status_bucket)}</span>
             </a>
           </li>
@@ -393,6 +411,7 @@ function PlanReader({
   planIndex: Map<string, PlanSummary>;
 }) {
   const [view, setView] = useState<"formatted" | "changes" | "source">("formatted");
+  const isPhone = useIsPhone();
   const query = useQuery({
     queryKey: ["plan", slug, path],
     queryFn: () => api.getPlan({ slug, path }),
@@ -510,7 +529,11 @@ function PlanReader({
     return (
       <aside
         style={{
-          width: "300px",
+          // Phone (§20): there is no margin — the thread
+          // stack goes full width and the enclosing flex
+          // row turns column, so the stack renders directly
+          // under its step/section block.
+          width: isPhone ? "100%" : "300px",
           flexShrink: 0,
           display: "grid",
           gap: "var(--wb-space-8)",
@@ -546,10 +569,28 @@ function PlanReader({
           alignItems: "center",
           justifyContent: "space-between",
           gap: "var(--wb-space-16)",
+          // Phone: the title takes its own line and the
+          // Annotations count + view switch wrap under it
+          // (the mockup carries the count in the top bar;
+          // the reader header keeps it here, wrapped).
+          flexWrap: isPhone ? "wrap" : undefined,
         }}
       >
-        <h2 style={{ margin: 0 }}>{doc.title || doc.path}</h2>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--wb-space-8)" }}>
+        <h2 style={{ margin: 0, minWidth: 0, overflowWrap: "anywhere" }}>
+          {doc.title || doc.path}
+        </h2>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--wb-space-8)",
+            // Phone: the cluster may shrink below its
+            // max-content so the view switch wraps inside
+            // the header instead of painting past it.
+            minWidth: isPhone ? 0 : undefined,
+            flexWrap: isPhone ? "wrap" : undefined,
+          }}
+        >
           <span
             style={{
               display: "inline-flex",
@@ -638,6 +679,7 @@ function PlanReader({
                         padding: "var(--wb-space-8) var(--wb-space-16)",
                         borderBottom: "1px solid var(--wb-border-default)",
                         whiteSpace: "pre-wrap",
+                        overflowWrap: isPhone ? "anywhere" : undefined,
                       }}
                     >
                       {value}
@@ -658,8 +700,9 @@ function PlanReader({
                 <div
                   style={{
                     display: "flex",
+                    flexDirection: isPhone ? "column" : "row",
                     gap: "var(--wb-space-16)",
-                    alignItems: "flex-start",
+                    alignItems: isPhone ? "stretch" : "flex-start",
                   }}
                 >
                   <section
@@ -682,8 +725,9 @@ function PlanReader({
                             <div
                               style={{
                                 display: "flex",
+                                flexDirection: isPhone ? "column" : "row",
                                 gap: "var(--wb-space-16)",
-                                alignItems: "flex-start",
+                                alignItems: isPhone ? "stretch" : "flex-start",
                               }}
                             >
                               <div style={{ flex: 1, minWidth: 0 }}>

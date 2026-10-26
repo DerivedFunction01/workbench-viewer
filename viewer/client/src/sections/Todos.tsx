@@ -16,6 +16,7 @@ import { Button } from "../components/Button";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { api, type TodoItem, type TodosFeed } from "../lib/api";
 import { todoStatusLabel } from "../lib/labels";
+import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
 import { anchor } from "./plans/anchors";
 import {
@@ -49,11 +50,22 @@ function TodoRow({
   showProject: boolean;
   onSetStatus: (todo: TodoItem, status: string) => void;
 }) {
+  const isPhone = useIsPhone();
   const invalid = todo.valid === false;
   const fromDb = todo.source === "db";
   const editable = !invalid && !fromDb && todo.id != null;
   return (
-    <li style={{ ...listRowStyle, alignItems: "flex-start" }}>
+    <li
+      style={{
+        ...listRowStyle,
+        alignItems: "flex-start",
+        // Phone: checkbox + title + meta chips + status
+        // select exceed the column on one line (selects
+        // measured out to 634px at 390) — wrap so the
+        // controls drop under the title.
+        flexWrap: isPhone ? "wrap" : undefined,
+      }}
+    >
       <span
         style={{
           display: "inline-flex",
@@ -72,7 +84,7 @@ function TodoRow({
           style={{ width: "18px", height: "18px" }}
         />
       </span>
-      <span style={{ flex: 1 }}>
+      <span style={{ flex: 1, minWidth: isPhone ? 0 : undefined }}>
         <span>{todo.title ?? todo.path ?? "Untitled todo"}</span>
         {todo.plan ? (
           <>

@@ -15,6 +15,7 @@ import { Button } from "../components/Button";
 import { Lane } from "../components/Lane";
 import { api, type BoardPayload, type BoardPlan, type ReviewItem, type TodoItem } from "../lib/api";
 import { todoStatusLabel } from "../lib/labels";
+import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
 import { anchor } from "./plans/anchors";
 import { EmptyWell, ErrorWell, SkeletonWell, sectionTitleStyle } from "./shared";
@@ -58,6 +59,7 @@ function CardShell({
   draggable,
   onDragStart,
   onOpen,
+  styleOverride,
 }: {
   glyph: string;
   projectName: string;
@@ -66,6 +68,9 @@ function CardShell({
   draggable: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   onOpen?: () => void;
+  /** Phone presentation: the card goes full lane width
+   * (the mockup's stacked-lane card) instead of 264px. */
+  styleOverride?: React.CSSProperties;
 }) {
   const inner = (
     <>
@@ -89,7 +94,7 @@ function CardShell({
     return (
       <button
         type="button"
-        style={{ ...cardStyle, cursor: "pointer", font: "inherit" }}
+        style={{ ...cardStyle, ...styleOverride, cursor: "pointer", font: "inherit" }}
         draggable={false}
         onClick={onOpen}
       >
@@ -98,7 +103,11 @@ function CardShell({
     );
   }
   return (
-    <article style={cardStyle} draggable={draggable} onDragStart={onDragStart}>
+    <article
+      style={{ ...cardStyle, ...styleOverride }}
+      draggable={draggable}
+      onDragStart={onDragStart}
+    >
       {inner}
     </article>
   );
@@ -113,6 +122,7 @@ export function BoardSection({
 }) {
   const [doneExpanded, setDoneExpanded] = useState(false);
   const [dragOver, setDragOver] = useState<TodoLane | null>(null);
+  const isPhone = useIsPhone();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["board"],
@@ -163,11 +173,21 @@ export function BoardSection({
     mutation.mutate({ project, id, status: lane });
   };
 
+  // Phone (◆2): lanes stack vertically in lane order and
+  // cards take the full lane width — no sideways scrolling
+  // anywhere in the Board. Desktop keeps the 264px card in
+  // the horizontally scrolling lane row.
+  const cardOverride: React.CSSProperties | undefined = isPhone ? { width: "100%" } : undefined;
+  const laneWrapStyle: React.CSSProperties = isPhone
+    ? { width: "100%" }
+    : { flexShrink: 0, width: "288px" };
+
   const todoCard = (todo: TodoItem) => {
     const fromDb = todo.source === "db";
     const draggable = !fromDb && todo.valid !== false && todo.id != null;
     return (
       <CardShell
+        styleOverride={cardOverride}
         key={`${todo.project}:${todo.path ?? todo.id}`}
         glyph="☑"
         projectName={todo.project_name ?? todo.project ?? ""}
@@ -195,6 +215,7 @@ export function BoardSection({
 
   const planCard = (plan: BoardPlan) => (
     <CardShell
+      styleOverride={cardOverride}
       key={`${plan.project}:${plan.path}`}
       glyph="❑"
       projectName={plan.project_name ?? plan.project ?? ""}
@@ -216,6 +237,7 @@ export function BoardSection({
 
   const reviewCard = (item: ReviewItem) => (
     <CardShell
+      styleOverride={cardOverride}
       key={`${item.project}:${item.id}`}
       glyph="▤"
       projectName={item.project_name ?? item.project ?? ""}
@@ -246,13 +268,14 @@ export function BoardSection({
           data-anchor={anchor.boardLanes}
           style={{
             display: "flex",
+            flexDirection: isPhone ? "column" : "row",
             gap: "var(--wb-space-16)",
-            alignItems: "flex-start",
-            overflowX: "auto",
+            alignItems: isPhone ? "stretch" : "flex-start",
+            overflowX: isPhone ? "visible" : "auto",
             paddingBottom: "var(--wb-space-8)",
           }}
         >
-          <div style={{ flexShrink: 0, width: "288px" }}>
+          <div style={laneWrapStyle}>
             <Lane title="Review queue" count={review.length} accent>
               {review.length === 0 ? (
                 <p style={{ color: "var(--wb-content-muted)", margin: 0 }}>
@@ -272,7 +295,7 @@ export function BoardSection({
               // biome-ignore lint/a11y/noStaticElementInteractions: HTML5 drag-and-drop target; the identical status move is keyboard-available in the Todos section's status select
               <div
                 key={lane}
-                style={{ flexShrink: 0, width: "288px" }}
+                style={laneWrapStyle}
                 onDragOver={(e) => {
                   e.preventDefault();
                   setDragOver(lane);

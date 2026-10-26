@@ -116,14 +116,20 @@ export function PreviewSummary({
         {entry.source_ref ? (
           <>
             {" · "}
-            <span className="mono">{entry.source_ref}</span>
+            {/* overflowWrap: a source_ref is an unbroken
+                path token; at phone width it outruns its
+                line and paints past the figure (496px in a
+                356px box in the step-3 capture). */}
+            <span className="mono" style={{ overflowWrap: "anywhere" }}>
+              {entry.source_ref}
+            </span>
           </>
         ) : null}
       </p>
       {keys.length > 0 ? (
         <ul style={{ listStyle: "none", margin: "var(--wb-space-8) 0 0", padding: 0 }}>
           {keys.map((key) => (
-            <li key={key}>
+            <li key={key} style={{ overflowWrap: "anywhere" }}>
               <span className="mono" style={{ color: "var(--wb-content-muted)" }}>
                 {key}
               </span>{" "}

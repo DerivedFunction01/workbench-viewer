@@ -226,7 +226,7 @@ export function WorktreeChild({
             }}
           >
             <dt style={metaStyle}>Path</dt>
-            <dd className="mono" style={{ margin: 0 }}>
+            <dd className="mono" style={{ margin: 0, overflowWrap: "anywhere" }}>
               {worktree.path}
             </dd>
             <dt style={metaStyle}>Base</dt>
