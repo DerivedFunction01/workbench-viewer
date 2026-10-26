@@ -471,3 +471,7 @@ change.
   green on the branch: 291 tests. PENDING (parent
   release sequence): merge by SHA, companion restart
   — server-side only, no republish.
+- Subplan declaration precision MERGED to main
+  2026-10-25: gate green on the merged tree, 291 tests.
+  Server restart makes it live; the precision plan is
+  closed out in the same pass.
