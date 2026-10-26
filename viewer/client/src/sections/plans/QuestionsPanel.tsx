@@ -19,14 +19,31 @@
 // sha256, so a saved resolve (or a reload after a
 // conflict) remounts it with values re-initialized from
 // the recorded answers.
+//
+// Staging is purely local to this panel (the owner's
+// answering ruling, 2026-10-26): a tap changes only the
+// values state below — the plan document's rendering
+// never hears about it. Submit is ONE round-trip: the
+// answers post once, the file is edited server-side,
+// and the client then fetches the new plan exactly once
+// and swaps it into the cache in a single update (no
+// invalidation fan-out on the reader's path, no loading
+// state — the old document stays on screen until the
+// new one replaces it). The swap is anchored on this
+// card: its viewport offset is recorded at submit and
+// restored by delta after the swap, so the reader does
+// not drift when the answered texts change heights
+// above it (the diagnosis measured a 24px drift across
+// the old invalidation swap).
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { Toggle } from "../../components/Toggle";
 import { api, type PlanDoc, type PlanQuestion } from "../../lib/api";
+import { scrollContentBy } from "../../lib/scroll";
 import { anchor } from "./anchors";
 import { MarkdownBlock } from "./PlanBody";
 import {
@@ -144,6 +161,9 @@ export function QuestionsPanel({ slug, path, doc }: { slug: string; path: string
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const pending = pendingAnswers(doc.questions, values);
+  // The questions card's viewport offset at submit time;
+  // the post-swap restore scrolls by its delta.
+  const cardTopAtSubmit = useRef<number | null>(null);
 
   const mutation = useMutation({
     mutationFn: (answers: Record<string, string>) =>
@@ -153,12 +173,86 @@ export function QuestionsPanel({ slug, path, doc }: { slug: string; path: string
         baseSha256: doc.file_sha256,
         answers,
       }) as Promise<Envelope>,
+    onMutate: () => {
+      const card = document.querySelector(`[data-anchor="${anchor.questionsPanel}"]`);
+      cardTopAtSubmit.current = card ? card.getBoundingClientRect().top : null;
+    },
     onSuccess: (result) => {
       if (result.status === 200) {
         setConflict(false);
         setError(null);
         setSaved(true);
-        queryClient.invalidateQueries({ queryKey: ["plan", slug, path] });
+        // One fetch, one swap: the new plan replaces the
+        // cached document atomically when it lands; the
+        // reader keeps showing the old document until
+        // then (an active query with data never enters a
+        // loading state for a background fetch). The
+        // fetch must be REAL: staleTime 0 overrides any
+        // default staleness the host query client carries
+        // — a cached "fetch" here would swap nothing and
+        // leave the staged panel standing over a written
+        // file (the first verification run caught exactly
+        // that). A failed fetch falls back to
+        // invalidation — the write itself already landed
+        // server-side.
+        void queryClient
+          .fetchQuery({
+            queryKey: ["plan", slug, path],
+            queryFn: () => api.getPlan({ slug, path }),
+            staleTime: 0,
+          })
+          .then(() => {
+            const before = cardTopAtSubmit.current;
+            if (before === null) return;
+            // Convergent restore: the swap remounts the
+            // reader, and the layout settling that follows
+            // (late background refetches re-rendering the
+            // page) can shift the card after the first
+            // painted frame, so keep correcting across a
+            // real settle window (a frame floor before
+            // stability counts, a few seconds at most) and
+            // stop the moment the user takes the scroll
+            // back. One bound is physical, not a defect:
+            // when the submit happens at the document's
+            // end and the answered card is shorter than
+            // the staged one, the scroller clamps to the
+            // new maximum and the card rides up by the
+            // shrink — there is no scroll room left to
+            // preserve into (measured on the short probe
+            // fixture; mid-document on a long plan the
+            // offset holds exactly).
+            let frames = 0;
+            let stable = 0;
+            let cancelled = false;
+            const cancel = () => {
+              cancelled = true;
+            };
+            window.addEventListener("pointerdown", cancel, { once: true });
+            window.addEventListener("wheel", cancel, { once: true });
+            const step = () => {
+              if (cancelled) return;
+              const card = document.querySelector(`[data-anchor="${anchor.questionsPanel}"]`);
+              if (!card) return;
+              const delta = card.getBoundingClientRect().top - before;
+              if (Math.abs(delta) > 1) {
+                scrollContentBy(delta);
+                stable = 0;
+              } else if (frames >= 45) {
+                stable += 1;
+              }
+              frames += 1;
+              if (stable < 3 && frames < 240) {
+                requestAnimationFrame(step);
+              } else {
+                window.removeEventListener("pointerdown", cancel);
+                window.removeEventListener("wheel", cancel);
+              }
+            };
+            requestAnimationFrame(step);
+          })
+          .catch(() => {
+            void queryClient.invalidateQueries({ queryKey: ["plan", slug, path] });
+          });
         queryClient.invalidateQueries({ queryKey: ["plans", slug] });
       } else if (result.status === 409) {
         // The file changed on disk: surface it, keep the

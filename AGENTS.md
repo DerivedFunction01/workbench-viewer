@@ -82,14 +82,21 @@ relevant file before continuing.
 
 ## Commands
 
-- Repo gate: `tools/check.sh` — the ONE gate (Python unittest + Biome check + typecheck + client build, fail-fast); run it before handing off any change.
+- Repo gate: `tools/check.sh` — the ONE gate (Python unittest + Biome check + typecheck + client build, fail-fast); run it before handing off any change. The gate runs on the FINAL tree: a landing's tracker commit is itself a tracked-file change (its text is scanned by the portability guard and linted like any other), so re-run at least the unittest + Biome legs AFTER the tracker commit lands, not only on the merge (learned 2026-10-26: two tracker entries in a row broke the portability guard post-gate).
 - Build the venv: `python3 init_venv.py` (uv, Python 3.11)
 - Tests: `.venv/bin/python -m unittest discover -s tests -v`
 - Harness CLI: `.venv/bin/python wb --help`
   (verbs: `projects`, `init`, `add`, `list`, `show`, `set`,
   `set-status`, `supersede`, `verify`, `archive`, `unarchive`,
   `stale`, `validate`, `export`, `rebuild`, `bundle *`,
-  `todo *`, `activate`, `print-schedule`)
+  `todo *`, `activate`, `doctor`, `print-schedule`)
+- Doctor: `.venv/bin/python wb doctor` — read-only
+  consistency checks over every swept project (plan/todo
+  closeout and status, the registry validators, approval
+  coverage); `--post` diffs against the previous run and
+  posts one digest through the message store when the
+  finding set changes. `ops/doctor.sh` runs it on the
+  15-minute Muse cron (`workbench-viewer-doctor`).
 - Server: `.venv/bin/python run.py` (binds per `config.json`;
   default 127.0.0.1:8792). Health: `GET /api/health`. All
   HTTP routes live under `/api`; the 15 legacy unprefixed

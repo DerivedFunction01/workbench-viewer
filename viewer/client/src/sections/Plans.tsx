@@ -13,7 +13,7 @@
 // open plan, under the checklist strip.
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { DegradedBanner as KitBanner } from "../components/DegradedBanner";
 import { SegmentedControl } from "../components/SegmentedControl";
 import {
@@ -44,6 +44,17 @@ import { ChangesPanel, WorktreeChanges } from "./plans/ChangesPanel";
 import { groupBundles, type PlanGroupEntry, type PlanGrouping } from "./plans/grouping";
 import { BlockView, MarkdownBlock, StepBlock } from "./plans/PlanBody";
 import { QuestionsPanel } from "./plans/QuestionsPanel";
+
+// The Questions card, memoized on its content props
+// (the owner's answering ruling): the reader's chrome
+// state — view switching, annotation arming, thread
+// status — re-renders PlanReader without ever
+// re-rendering the card, and the card's staged values
+// live inside it alone. The two share a render pass
+// only when the document itself changes (a swap), which
+// is the one moment both must move.
+const MemoQuestionsPanel = memo(QuestionsPanel);
+
 import { sectionPresentation } from "./plans/questions";
 import { normalizeText } from "./plans/relocation";
 import {
@@ -807,7 +818,7 @@ function PlanReader({
                 </div>
                 {activeArmed?.hostAnchor === sectionAnchor ? composer : null}
                 {showQuestions ? (
-                  <QuestionsPanel key={doc.file_sha256} slug={slug} path={path} doc={doc} />
+                  <MemoQuestionsPanel key={doc.file_sha256} slug={slug} path={path} doc={doc} />
                 ) : null}
               </div>
             );

@@ -740,6 +740,38 @@ Never: danger tokens (degraded is contained, not
 destructive); a banner per row (one per project/section);
 auto-dismiss behaviour.
 
+## SectionBoundary — section error containment
+
+Purpose: the shell's structural backstop — a React error
+boundary wrapping the routed section content (both
+presentations), so a render exception in any section
+degrades to a fallback panel in that section's place and
+can never unmount the shell's chrome (top bar, tab bar,
+rail) or blank the viewer. `role="alert"`,
+`data-anchor="section/error"`.
+
+Props:
+
+```ts
+type SectionBoundaryProps = {
+  children: ReactNode;  // the routed section content
+};
+```
+
+Form: a surface-1 panel (1px `--wb-border-default`,
+`--wb-radius-md`) headed "This section hit an error",
+carrying the error's message in mono, and one recovery
+sentence (the rest of the viewer is unaffected). The shell
+keys the boundary by the route, so navigating away remounts
+it and clears a stuck fallback; the error is also logged to
+the console with its stack.
+
+Never: chrome inside the boundary (the shell renders it
+outside, which is the point); a retry/remount control of its
+own (navigation is the recovery); swallowing the message
+(the fallback names the error, never a bare "something went
+wrong").
+
 ## TriageRow
 
 Purpose: one entry in the triage queue (Mockups triage /

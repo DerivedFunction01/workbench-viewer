@@ -36,36 +36,36 @@ function varName(path) {
   if (tier === "primitive") {
     parts = parts.slice(1);
     if (parts[0] === "color") parts = parts.slice(1); // --wb-olive-500, --wb-okabe-blue
-    return "--wb-" + parts.join("-");
+    return `--wb-${parts.join("-")}`;
   }
   if (tier === "semantic") {
     parts = parts.slice(3); // drop semantic.<palette>.<mode>
-    return "--wb-" + parts.join("-");
+    return `--wb-${parts.join("-")}`;
   }
   if (tier === "status") {
     const [, name, kind] = parts;
-    if (name === "chart") return "--wb-chart-" + kind;
-    if (kind === "hue") return "--wb-status-" + name;
-    if (kind === "text") return "--wb-status-" + name + "-text";
-    return "--wb-status-" + name + "-" + kind;
+    if (name === "chart") return `--wb-chart-${kind}`;
+    if (kind === "hue") return `--wb-status-${name}`;
+    if (kind === "text") return `--wb-status-${name}-text`;
+    return `--wb-status-${name}-${kind}`;
   }
   if (tier === "component") {
-    return "--wb-" + parts.slice(1).join("-");
+    return `--wb-${parts.slice(1).join("-")}`;
   }
   if (tier === "density") {
     // density.<set>.<name> -> the SAME variable the component tier defines
     // (--wb-card-padding, --wb-row-height, ...): density re-points names,
     // it never renames them.
-    return "--wb-" + parts.slice(2).join("-");
+    return `--wb-${parts.slice(2).join("-")}`;
   }
-  throw new Error("unknown tier: " + path.join("."));
+  throw new Error(`unknown tier: ${path.join(".")}`);
 }
 
-function lookup(pathStr) {
+function _lookup(pathStr) {
   let node = tokens;
   for (const p of pathStr.split(".")) {
     if (node == null || typeof node !== "object" || !(p in node))
-      throw new Error("alias target not found: " + pathStr);
+      throw new Error(`alias target not found: ${pathStr}`);
     node = node[p];
   }
   return node;
@@ -78,13 +78,13 @@ function cssValue(raw) {
   if (typeof raw !== "string") return String(raw);
   if (raw.startsWith("{") && raw.endsWith("}")) {
     const target = raw.slice(1, -1);
-    return "var(" + varName(target.split(".")) + ")";
+    return `var(${varName(target.split("."))})`;
   }
   return raw; // literal, or an explicit var(--wb-...) recorded in tokens.json
 }
 
 function declarations(entries, indent = "  ") {
-  return entries.map(([name, value]) => indent + name + ": " + value + ";").join("\n");
+  return entries.map(([name, value]) => `${indent + name}: ${value};`).join("\n");
 }
 
 // Flatten a token subtree into [varName, cssValue] pairs, in file order.
@@ -113,11 +113,11 @@ const lh = tokens.primitive["line-height"];
 const themeLines = [];
 for (const key of Object.keys(ts)) {
   const tw = { xs: "xs", sm: "sm", base: "base", lg: "lg", xl: "xl", "2xl": "2xl" }[key];
-  themeLines.push("  --text-" + tw + ": " + ts[key].$value + ";");
-  themeLines.push("  --text-" + tw + "--line-height: " + lh[key].$value + ";");
+  themeLines.push(`  --text-${tw}: ${ts[key].$value};`);
+  themeLines.push(`  --text-${tw}--line-height: ${lh[key].$value};`);
 }
-themeLines.push("  --font-sans: " + tokens.primitive.font.ui.$value + ";");
-themeLines.push("  --font-mono: " + tokens.primitive.font.mono.$value + ";");
+themeLines.push(`  --font-sans: ${tokens.primitive.font.ui.$value};`);
+themeLines.push(`  --font-mono: ${tokens.primitive.font.mono.$value};`);
 
 // ---- fonts.css ---------------------------------------------------------------
 const LATIN_RANGE =
@@ -127,12 +127,12 @@ const LATIN_RANGE =
 function fontFace(family, src, weight) {
   return [
     "@font-face {",
-    '  font-family: "' + family + '";',
-    '  src: url("../assets/fonts/' + src + '") format("woff2");',
-    "  font-weight: " + weight + ";",
+    `  font-family: "${family}";`,
+    `  src: url("../assets/fonts/${src}") format("woff2");`,
+    `  font-weight: ${weight};`,
     "  font-style: normal;",
     "  font-display: swap;",
-    "  unicode-range: " + LATIN_RANGE + ";",
+    `  unicode-range: ${LATIN_RANGE};`,
     "}",
   ].join("\n");
 }
@@ -154,8 +154,8 @@ function paletteCss(palette) {
   const isDefault = palette === "olive";
   const sel = (extra = "") =>
     isDefault
-      ? '[data-palette="' + palette + '"]' + extra + ", :root:not([data-palette])" + extra
-      : '[data-palette="' + palette + '"]' + extra;
+      ? `[data-palette="${palette}"]${extra}, :root:not([data-palette])${extra}`
+      : `[data-palette="${palette}"]${extra}`;
   const selAuto = (extra = "") =>
     isDefault
       ? '[data-palette="' +
@@ -164,15 +164,15 @@ function paletteCss(palette) {
         extra +
         ', :root:not([data-palette]):not([data-mode="light"])' +
         extra
-      : '[data-palette="' + palette + '"]:not([data-mode="light"])' + extra;
+      : `[data-palette="${palette}"]:not([data-mode="light"])${extra}`;
 
   function modeDecls(mode) {
     const sem = flatten(tokens.semantic[palette][mode], ["semantic", palette, mode]);
     const stat = [];
     for (const [name, st] of Object.entries(tokens.status)) {
       if (name === "chart") continue;
-      stat.push(["--wb-status-" + name, cssValue(st.hue.$value)]);
-      stat.push(["--wb-status-" + name + "-text", cssValue(st.text[mode].$value)]);
+      stat.push([`--wb-status-${name}`, cssValue(st.hue.$value)]);
+      stat.push([`--wb-status-${name}-text`, cssValue(st.text[mode].$value)]);
     }
     const comp = flatten(tokens.component, ["component"]);
     return [...sem, ...stat, ...comp];
@@ -227,20 +227,22 @@ const indexCss =
   // generated — the import is emitted here so the themes
   // bundle carries the math styles beside the fonts.
   '@import "./katex.css";\n' +
-  palettes.map((p) => '@import "./' + p + '.css";').join("\n") +
+  palettes.map((p) => `@import "./${p}.css";`).join("\n") +
   "\n\n:root {\n" +
   declarations([...primitiveDecls, ...chartDecls]) +
   "\n  scrollbar-color: var(--wb-border-default) transparent;\n  scrollbar-width: thin;\n}\n" +
   "\n@theme {\n" +
   themeLines.join("\n") +
   "\n}\n" +
-  // Scroll chain (phone scroll hardening): a boundary pull
-  // on the shell's inner scroller must never chain to the
-  // host — in the artifact webview that chain is what
-  // triggers pull-to-refresh. overscroll-behavior is not
-  // inherited, so every element that can sit in the chain
-  // refuses it: html, body, and the SDK shell wrapper here;
-  // the App shell roots and <main> elements carry it inline.
+  // Scroll chain: both presentations are document-flow
+  // shells, so a boundary pull on the document must never
+  // chain to the host — in the artifact webview that chain
+  // is what triggers pull-to-refresh. overscroll-behavior
+  // is not inherited, so the document-level elements
+  // refuse it here: html, body, and the SDK shell wrapper.
+  // (The desktop shell root and its <main> also carry it
+  // inline in App.tsx; the phone shell is plain flow and
+  // needs nothing of its own.)
   "\nhtml {\n  overscroll-behavior: none;\n}\n" +
   "\nbody {\n  font-family: var(--wb-font-ui);\n  background: var(--wb-surface-canvas);\n  color: var(--wb-content-primary);\n  overscroll-behavior: none;\n}\n" +
   "\n.hatch-space-root {\n  overscroll-behavior: none;\n}\n" +
@@ -258,7 +260,7 @@ const indexCss =
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "index.css"), indexCss);
 writeFileSync(join(outDir, "fonts.css"), fontsCss);
-for (const p of palettes) writeFileSync(join(outDir, p + ".css"), paletteCss(p));
+for (const p of palettes) writeFileSync(join(outDir, `${p}.css`), paletteCss(p));
 console.log(
-  "gen-tokens: wrote index.css, fonts.css, " + palettes.map((p) => p + ".css").join(", "),
+  `gen-tokens: wrote index.css, fonts.css, ${palettes.map((p) => `${p}.css`).join(", ")}`,
 );

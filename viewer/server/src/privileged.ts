@@ -40,8 +40,7 @@ function fetchJson(args: {
         `Host: ${args.host}:${args.port}\r\n` +
         "Accept: application/json\r\nConnection: close\r\n";
       if (args.method === "POST") {
-        request +=
-          `Content-Type: application/json\r\n` + `Content-Length: ${Buffer.byteLength(body)}\r\n`;
+        request += `Content-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n`;
       }
       request += "\r\n";
       if (args.method === "POST") request += body;

@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import active as active_mod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
+from lib import doctor as doctor_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
@@ -512,6 +513,48 @@ def cmd_activate(args):
     return 0
 
 
+def cmd_doctor(args):
+    """Read-only consistency checks over every swept
+    project (wb-doctor plan): broken todos, plans not
+    archived, conflicting status — all derived by
+    lib/doctor.py from the same functions the feeds use.
+    --post diffs against the previous run's state and
+    posts one digest through lib/messages when the
+    finding set changed. Paths resolve through the server
+    config seam, like every other caller."""
+    from server import config as cfgmod
+    cfg = cfgmod.load()
+    roots = [Path(r) for r in args.root] \
+        if args.root else cfgmod.sweep_roots(cfg)
+    result = sweep(roots)
+    findings = doctor_mod.run_checks(result.projects)
+    for f in findings:
+        print(f"[{f['project']}] {f['check']} — "
+              f"{f['subject']}: {f['detail']}")
+    if findings:
+        print(f"wb doctor: {len(findings)} finding(s) "
+              f"across {len(result.projects)} project(s)")
+    else:
+        print("wb doctor: clean")
+    if args.post:
+        own = load_manifest(REPO_ROOT / "workbench.yaml")
+        summary = doctor_mod.run_post(
+            result.projects, findings=findings,
+            state_path=cfgmod.state_dir(cfg)
+            / "doctor-findings.json",
+            messages_db=cfgmod.messages_db_path(cfg),
+            harness_slug=own.slug)
+        if summary["posted"]:
+            print(f"wb doctor: digest posted "
+                  f"(message {summary['message_id']}) — "
+                  f"{len(summary['new'])} new, "
+                  f"{len(summary['resolved'])} resolved")
+        else:
+            print("wb doctor: finding set unchanged — "
+                  "no digest posted")
+    return 1 if findings else 0
+
+
 def cmd_print_schedule(args):
     print("# Staleness check for one project — run by hand or")
     print("# hand this definition to the platform scheduler.")
@@ -700,6 +743,20 @@ def build_parser():
     sp.add_argument("--clear", action="store_true",
                     help="remove the declaration")
     sp.set_defaults(fn=cmd_activate)
+
+    sp = sub.add_parser(
+        "doctor",
+        help="read-only consistency checks over every "
+             "swept project")
+    sp.add_argument("--post", action="store_true",
+                    help="diff against the previous run "
+                         "and post a digest message when "
+                         "the finding set changed")
+    sp.add_argument("--root", action="append",
+                    help="sweep root (repeatable); "
+                         "default: the server config's "
+                         "sweep roots")
+    sp.set_defaults(fn=cmd_doctor)
 
     sub.add_parser("print-schedule").set_defaults(
         fn=cmd_print_schedule)

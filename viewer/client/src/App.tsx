@@ -17,7 +17,8 @@
 // project; switching project re-scopes them all.
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { SectionBoundary } from "./components/SectionBoundary";
 import {
   api,
   type BoardPayload,
@@ -41,7 +42,7 @@ import {
   sectionHref,
   settingsHref,
 } from "./lib/routing";
-import { useAppViewportHeight } from "./lib/viewport";
+import { resetContentScroll } from "./lib/scroll";
 import { ArtifactsSection } from "./sections/Artifacts";
 import { BoardSection } from "./sections/Board";
 import { HomeSection } from "./sections/Home";
@@ -179,6 +180,14 @@ function PhoneTabBar({
       data-anchor="shell/tab-bar"
       aria-label="Primary"
       style={{
+        // Viewport-anchored, outside the shell's height
+        // equation entirely (the v1 dashboard's shape):
+        // the bar cannot ride, shrink, or be clipped by
+        // the shell whatever the shell's height does.
+        position: "fixed",
+        left: 0,
+        right: 0,
+        bottom: 0,
         zIndex: 20,
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",
@@ -302,23 +311,51 @@ function projectStatus(project: ProjectSummary): { word: string; degraded: boole
 export function App() {
   const route = useHashRoute();
   const isPhone = useIsPhone();
-  // Keep --wb-app-height synced with the visual viewport
-  // (lib/viewport): the phone shell below sizes from it,
-  // because the host webview's layout viewport — what dvh
-  // measures — can be taller than the visible area. One
-  // document root serves both presentations, so the hook
-  // installs here, before the phone/desktop branch.
-  useAppViewportHeight();
-  // Phone shell: <main> is the sole scroller (the document
-  // no longer scrolls), so a route change must reset it
-  // explicitly — the document scroller used to do this
-  // implicitly. The ref is only attached in the phone
-  // branch; on desktop this effect is a no-op.
-  const phoneMainRef = useRef<HTMLElement | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: route is the trigger, not an input — the effect fires on every navigation and reads only the ref
+  // Route changes reset the content scroll: the phone
+  // presentation is plain document flow, and a new route
+  // entered at the previous page's scroll depth is the
+  // defect the old inner-scroller reset used to mask.
+  // The reset targets the resolved content scroller —
+  // the host container when embedded, the document when
+  // served bare (lib/scroll).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: route is the trigger, not an input — the effect fires on every navigation and reads only the scroller
   useEffect(() => {
-    phoneMainRef.current?.scrollTo(0, 0);
+    resetContentScroll();
   }, [route]);
+  // The phone bars are position:fixed (below), so the
+  // content pads clear of them by their real heights:
+  // measured here, published on the phone root as
+  // --wb-phone-top-h / --wb-phone-tab-h (the CSS fallbacks
+  // in <main>'s padding cover the first frame). A
+  // ResizeObserver keeps them exact as the top bar's
+  // sub-line comes and goes with the route and the tab
+  // bar's safe-area inset resolves. The bars are found by
+  // their contract anchors inside the phone root.
+  const phoneShellRef = useRef<HTMLDivElement | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: isPhone is not read in the body; the dep tracks the ref's target, which exists only in the phone presentation — the effect must rebind when the presentation flips
+  useLayoutEffect(() => {
+    const shell = phoneShellRef.current;
+    if (!shell) return;
+    const top = shell.querySelector<HTMLElement>('[data-anchor="shell/top-bar"]');
+    const tab = shell.querySelector<HTMLElement>('[data-anchor="shell/tab-bar"]');
+    if (!top || !tab) return;
+    const write = () => {
+      shell.style.setProperty(
+        "--wb-phone-top-h",
+        `${Math.ceil(top.getBoundingClientRect().height)}px`,
+      );
+      shell.style.setProperty(
+        "--wb-phone-tab-h",
+        `${Math.ceil(tab.getBoundingClientRect().height)}px`,
+      );
+    };
+    write();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(write);
+    observer.observe(top);
+    observer.observe(tab);
+    return () => observer.disconnect();
+  }, [isPhone]);
   const [appearance, setAppearance] = useState<Appearance>(() => loadAppearance());
 
   useEffect(() => {
@@ -385,6 +422,7 @@ export function App() {
   const triageQuery = useQuery({
     queryKey: ["mockups", selected?.slug],
     queryFn: () => api.getMockups({ slug: selected?.slug ?? "" }),
+    // biome-ignore lint/complexity/useOptionalChain: the boolean form is load-bearing — `selected?.sections.mockups` evaluates to undefined with no project selected, and React Query treats enabled: undefined as enabled (the query would fire with an empty slug and 422)
     enabled: selected != null && selected.sections.mockups,
   });
   const triageCount =
@@ -392,6 +430,7 @@ export function App() {
   const artifactsTriageQuery = useQuery({
     queryKey: ["artifacts", selected?.slug],
     queryFn: () => api.getArtifacts({ slug: selected?.slug ?? "" }),
+    // biome-ignore lint/complexity/useOptionalChain: same as the mockups query above — undefined would read as enabled to React Query
     enabled: selected != null && selected.sections.artifacts,
   });
   const artifactsTriageCount =
@@ -463,6 +502,13 @@ export function App() {
     ) : (
       <HomeSection />
     );
+
+  // The routed content behind the error boundary
+  // (components/SectionBoundary): a section exception
+  // degrades to the boundary's fallback panel, never a
+  // blank viewer. Keyed by the route — navigating away
+  // remounts the boundary and clears a stuck fallback.
+  const boundedContent = <SectionBoundary key={JSON.stringify(route)}>{content}</SectionBoundary>;
 
   if (isPhone) {
     // Phone shell (mobile variant): top bar + optional
@@ -539,15 +585,14 @@ export function App() {
     }
     return (
       <div
+        ref={phoneShellRef}
         style={{
-          display: "flex",
-          flexDirection: "column",
-          // The visual viewport's height when the hook has
-          // synced it; 100dvh is the fallback where the API
-          // is absent (lib/viewport).
-          height: "var(--wb-app-height, 100dvh)",
-          overflow: "hidden",
-          overscrollBehavior: "none",
+          // Plain document flow (the git repo viewer's
+          // shape): no fixed height, no overflow box, no
+          // height custom property — the document scrolls
+          // and the bars, position:fixed to the viewport,
+          // float over it. Nothing here can be carried
+          // away, shrunk, or clipped by a viewport metric.
           background: "var(--wb-surface-canvas)",
           color: "var(--wb-content-primary)",
           fontFamily: "var(--wb-font-ui)",
@@ -556,6 +601,11 @@ export function App() {
         <header
           data-anchor="shell/top-bar"
           style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 30,
             display: "flex",
             alignItems: "center",
             gap: "var(--wb-space-8)",
@@ -619,24 +669,22 @@ export function App() {
         </header>
 
         <main
-          ref={phoneMainRef}
           data-anchor="shell/content"
           style={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: "auto",
-            // The shell's scroller: a boundary pull here
-            // must not chain to the host (pull-to-refresh).
-            overscrollBehavior: "none",
             width: "100%",
             minWidth: 0,
-            padding: "var(--wb-space-16)",
+            // Pad the content clear of the fixed bars:
+            // the space-16 breathing room plus each bar's
+            // measured height (fallbacks are the
+            // measured-typical sizes for the first frame).
+            padding:
+              "calc(var(--wb-space-16) + var(--wb-phone-top-h, 61px)) var(--wb-space-16) calc(var(--wb-space-16) + var(--wb-phone-tab-h, 57px))",
           }}
         >
           {route.view === "section" ? (
             <PhoneSectionNav slug={route.slug} current={route.section} />
           ) : null}
-          {content}
+          {boundedContent}
         </main>
 
         <PhoneTabBar active={phoneTab} projectHref={projectHref} inboxCount={inboxCount} />
@@ -891,7 +939,7 @@ export function App() {
             overscrollBehavior: "none",
           }}
         >
-          {content}
+          {boundedContent}
         </main>
       </div>
     </div>
