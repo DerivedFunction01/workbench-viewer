@@ -437,3 +437,8 @@ change.
   checkpoint publish; on merge the parent closes the
   closeout plan itself out under this rule and
   verifies the live feed shows zero flags.
+- Plan closeout enforcement MERGED to main 2026-10-25
+  (merge `bbda3ab`): gate green on the merged tree,
+  287 tests. Server restart makes the flag live; the
+  enforcement plan is closed out under its own rule in
+  the same pass.
