@@ -538,3 +538,8 @@ change.
   release sequence): merge by SHA, checkpoint
   publish (client change), audit of Overview at
   desktop and phone widths against section 22.
+- Overview plans-card removal MERGED to main
+  2026-10-25 (merge `8208106`; tracker append conflict
+  resolved keeping both entries): gate green on the
+  merged tree, 291 tests. Checkpoint publish follows.
+  The removal plan is closed out in the same pass.
