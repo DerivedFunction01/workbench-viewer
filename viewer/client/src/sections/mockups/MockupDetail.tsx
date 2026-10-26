@@ -33,7 +33,7 @@ import { normalizeText } from "../plans/relocation";
 import { FilePanel } from "./FilePanel";
 import { HistoryList, ReviewLog } from "./HistoryLog";
 import { EntryBadges, hasState, PreviewSummary, stateValues } from "./helpers";
-import type { EntryDetail, Envelope, FullEntry } from "./types";
+import type { EntryDetail, Envelope, FullEntry, MockupsFeedFull } from "./types";
 import { RULED_STATUSES } from "./types";
 
 type Disposition = "approve" | "needs-changes" | "stale";
@@ -143,6 +143,19 @@ export function MockupDetail({
     queryKey: ["entry", slug, entryId],
     queryFn: () => api.getEntry({ slug, entryId }),
   });
+  // The project's active feed — the same query the
+  // section list runs, so it shares that cache entry.
+  // It feeds the supersede picker (the entry's siblings,
+  // chosen by title) and the "Superseded by" title lookup.
+  const feedQuery = useQuery({
+    queryKey: ["mockups", slug, false],
+    queryFn: () => api.getMockups({ slug }),
+  });
+  const feedEnvelope = feedQuery.data as Envelope | undefined;
+  const feed: MockupsFeedFull | null =
+    feedEnvelope && feedEnvelope.status === 200 && feedEnvelope.payload
+      ? (feedEnvelope.payload as MockupsFeedFull)
+      : null;
   const detailEnvelope = detailQuery.data as Envelope | undefined;
   const detail =
     detailEnvelope && detailEnvelope.status === 200
@@ -312,6 +325,32 @@ export function MockupDetail({
   const latestReview = detail?.latest_review ?? null;
   const needsChanges = latestReview?.payload?.disposition === "needs-changes";
   const busy = actionMutation.isPending;
+
+  // Supersede candidates: the project's other entries
+  // from the active feed (archived entries are not in
+  // it). Options are labelled by title + ruled status —
+  // never by id; a shared title earns a created-date
+  // suffix so the choices stay distinguishable.
+  const supersedeCandidates = (feed?.entries ?? []).filter(
+    (candidate) => candidate.id !== entry.id,
+  );
+  const candidateTitleCounts = new Map<string, number>();
+  for (const candidate of supersedeCandidates) {
+    candidateTitleCounts.set(candidate.title, (candidateTitleCounts.get(candidate.title) ?? 0) + 1);
+  }
+  const candidateLabel = (candidate: FullEntry): string => {
+    const base = `${candidate.title} · ${ruledStatusLabel(candidate.status)}`;
+    return (candidateTitleCounts.get(candidate.title) ?? 0) > 1
+      ? `${base} · ${formatDate(candidate.created_at)}`
+      : base;
+  };
+  // "Superseded by" reads as a title when the target is
+  // in the active feed; the raw id is the fallback for a
+  // target the feed no longer carries (e.g. archived).
+  const supersededByTitle = entry.superseded_by
+    ? ((feed?.entries ?? []).find((candidate) => candidate.id === entry.superseded_by)?.title ??
+      null)
+    : null;
 
   // Component selection (§12): a plain click inside the
   // drill-in selects the nearest component — accent
@@ -642,7 +681,9 @@ export function MockupDetail({
               {entry.ruling_text ?? "—"}
               {entry.ruling_date ? ` (${entry.ruling_date})` : ""}
             </MetaRow>
-            <MetaRow label="Superseded by">{entry.superseded_by ?? "—"}</MetaRow>
+            <MetaRow label="Superseded by">
+              {entry.superseded_by ? (supersededByTitle ?? entry.superseded_by) : "—"}
+            </MetaRow>
             <MetaRow label="Created">{formatDateTime(entry.created_at)}</MetaRow>
             <MetaRow label="Updated">
               {formatDate(entry.updated_at)} · status changed {formatDate(entry.status_changed_at)}
@@ -870,45 +911,64 @@ export function MockupDetail({
                 <span>Accept drift on verify (the file changed since the last verify)</span>
               </label>
             ) : null}
-            <label style={{ display: "block", marginTop: "var(--wb-space-12)" }}>
-              <span style={labelStyle}>Supersede with entry id</span>
-              <span
-                style={{
-                  display: "flex",
-                  gap: "var(--wb-space-8)",
-                  marginTop: "var(--wb-space-4)",
-                }}
-              >
-                <input
-                  aria-label="Superseding entry id"
-                  type="text"
-                  value={supersedeTarget}
-                  onChange={(event) => setSupersedeTarget(event.target.value)}
-                  style={{
-                    flex: 1,
-                    minHeight: "38px",
-                    background: "var(--wb-surface-2)",
-                    color: "var(--wb-content-primary)",
-                    border: "1px solid var(--wb-border-default)",
-                    borderRadius: "var(--wb-button-radius)",
-                    padding: "0 var(--wb-space-8)",
-                  }}
-                />
-                <Button
-                  variant="danger"
-                  disabled={busy || supersedeTarget.trim() === ""}
-                  onClick={() =>
-                    runAction({
-                      verb: "supersede",
-                      new_id: supersedeTarget.trim(),
-                      ruling: ruling.trim() ? ruling.trim() : undefined,
-                    })
-                  }
-                >
-                  Supersede
-                </Button>
-              </span>
-            </label>
+            <div style={{ marginTop: "var(--wb-space-12)" }}>
+              <span style={labelStyle}>Supersede with</span>
+              {supersedeCandidates.length > 0 ? (
+                <>
+                  <select
+                    aria-label="Superseding entry"
+                    value={supersedeTarget}
+                    onChange={(event) => setSupersedeTarget(event.target.value)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      minHeight: "38px",
+                      marginTop: "var(--wb-space-4)",
+                      background: "var(--wb-surface-2)",
+                      color: "var(--wb-content-primary)",
+                      border: "1px solid var(--wb-border-default)",
+                      borderRadius: "var(--wb-button-radius)",
+                      padding: "0 var(--wb-space-8)",
+                    }}
+                  >
+                    <option value="" disabled>
+                      Choose the superseding entry…
+                    </option>
+                    {supersedeCandidates.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidateLabel(candidate)}
+                      </option>
+                    ))}
+                  </select>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "var(--wb-space-8)",
+                      flexWrap: "wrap",
+                      marginTop: "var(--wb-space-8)",
+                    }}
+                  >
+                    <Button
+                      variant="danger"
+                      disabled={busy || supersedeTarget.trim() === ""}
+                      onClick={() =>
+                        runAction({
+                          verb: "supersede",
+                          new_id: supersedeTarget.trim(),
+                          ruling: ruling.trim() ? ruling.trim() : undefined,
+                        })
+                      }
+                    >
+                      Supersede
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p style={{ margin: "var(--wb-space-4) 0 0", color: "var(--wb-content-muted)" }}>
+                  No other entries in this project to supersede with.
+                </p>
+              )}
+            </div>
           </Card>
 
           <div data-annotation-ui="true">

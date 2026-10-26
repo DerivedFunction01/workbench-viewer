@@ -17,7 +17,7 @@
 // project; switching project re-scopes them all.
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   type BoardPayload,
@@ -177,8 +177,6 @@ function PhoneTabBar({
       data-anchor="shell/tab-bar"
       aria-label="Primary"
       style={{
-        position: "sticky",
-        bottom: 0,
         zIndex: 20,
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",
@@ -296,6 +294,16 @@ function projectStatus(project: ProjectSummary): { word: string; degraded: boole
 export function App() {
   const route = useHashRoute();
   const isPhone = useIsPhone();
+  // Phone shell: <main> is the sole scroller (the document
+  // no longer scrolls), so a route change must reset it
+  // explicitly — the document scroller used to do this
+  // implicitly. The ref is only attached in the phone
+  // branch; on desktop this effect is a no-op.
+  const phoneMainRef = useRef<HTMLElement | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: route is the trigger, not an input — the effect fires on every navigation and reads only the ref
+  useEffect(() => {
+    phoneMainRef.current?.scrollTo(0, 0);
+  }, [route]);
   const [appearance, setAppearance] = useState<Appearance>(() => loadAppearance());
 
   useEffect(() => {
@@ -505,7 +513,8 @@ export function App() {
         style={{
           display: "flex",
           flexDirection: "column",
-          minHeight: "100dvh",
+          height: "100dvh",
+          overflow: "hidden",
           background: "var(--wb-surface-canvas)",
           color: "var(--wb-content-primary)",
           fontFamily: "var(--wb-font-ui)",
@@ -577,9 +586,12 @@ export function App() {
         </header>
 
         <main
+          ref={phoneMainRef}
           data-anchor="shell/content"
           style={{
             flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
             width: "100%",
             minWidth: 0,
             padding: "var(--wb-space-16)",

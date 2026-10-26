@@ -579,3 +579,35 @@ change.
   With the gate green at the tip, the history
   rewrite follows, carrying the Phase-1
   replacements through every commit.
+- Phone tab bar pinned (2026-10-25; plan
+  `.plans/finished/2026-10-25-phone-tab-bar-pin.md`;
+  merge `a71a060`): the owner reported the phone bottom
+  tab bar scrolling with the page in the published
+  artifact. The phone shell is now a fixed-height app
+  shell — root `height: 100dvh` with overflow hidden,
+  the content `<main>` is the sole scroller
+  (`overflowY: auto`), and the tab bar is an in-flow
+  sibling after the scroller, pinned by construction;
+  a route-keyed effect resets the scroller on
+  navigation. Probe at 390px scrolled for real: the
+  bar's bottom edge stayed at the viewport height
+  (844) before and after scrolling to the bottom,
+  `window.scrollY` never left 0, desktop geometry
+  byte-identical. Gate green on the merged tree; the
+  owner's phone remains the decisive check.
+- Supersede by title picker (2026-10-25; plan
+  `.plans/finished/2026-10-25-supersede-picker.md`;
+  merge `a6df84f`): the owner reported the Lifecycle
+  card's Supersede button rendering outside its
+  container and the control demanding a typed entry
+  id. The typed-id row is deleted — the card now
+  queries the project's own mockups feed and offers a
+  full-width select of sibling entries by title and
+  ruled status; the danger button sits in its own row
+  beneath, disabled until a choice, payload unchanged.
+  The "Superseded by" meta row resolves the id to the
+  target's title through the same feed (raw id only
+  when the target is outside the active feed). Probe:
+  39 candidates by title on the 40-entry feed, button
+  inside the card at desktop and 390px, no mutation
+  fired. Gate green on the merged tree.
