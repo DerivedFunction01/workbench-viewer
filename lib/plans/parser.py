@@ -48,6 +48,30 @@ DONE_WORDS = ("superseded", "complete", "completed", "done",
 DOING_WORDS = ("in progress", "in_progress")
 
 
+def declared_status(status_raw):
+    """The status a plan DECLARES: the leading status word
+    of its Status header, normalized — "complete" for
+    "complete (closed ...)", "in progress" for the
+    two-word form, markdown emphasis stripped. None when
+    the plan carries no Status header: it declares
+    nothing, and callers (the closeout check) draw no
+    conclusion from silence. A header leading with no
+    standard word yields that leading word, so a caller
+    can name what was declared."""
+    if status_raw is None:
+        return None
+    s = status_raw.strip().lower().strip("*").strip()
+    if not s:
+        return None
+    if s.startswith("in progress") \
+            or s.startswith("in_progress"):
+        return "in progress"
+    word = re.split(r"[\s(]", s, maxsplit=1)[0].strip("*_")
+    if word == "completed":
+        return "complete"
+    return word or None
+
+
 def status_bucket(status_raw, *, archived=False) -> str:
     """Board placement for a plan: todo | doing | done, from
     its header Status text (the plan files carry no per-step
