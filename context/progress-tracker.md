@@ -442,3 +442,10 @@ change.
   287 tests. Server restart makes the flag live; the
   enforcement plan is closed out under its own rule in
   the same pass.
+- Mobile Plans rows MERGED to main 2026-10-25 (merge
+  `ea86452`): phone rows are structurally stacked
+  (column, title full width, metadata beneath) instead
+  of relying on flex wrap. Gate green on the merged
+  tree. Checkpoint publish follows; the owner's device is
+  the decisive check (headless Chromium stacked even
+  before the fix).
