@@ -140,6 +140,108 @@ def peek_file(entry: dict, rel_raw: str, *,
             "captured_at": now_iso()}
 
 
+def _write_atomically(target: Path, new_raw: bytes) -> None:
+    """Replace target with new_raw, mode preserved, via a
+    temp file in the same directory (the guarded save's
+    write mechanics)."""
+    mode = stat.S_IMODE(target.stat().st_mode)
+    fd, tmp = tempfile.mkstemp(dir=str(target.parent),
+                               prefix=target.name + ".",
+                               suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(new_raw)
+        os.chmod(tmp, mode)
+        os.replace(tmp, target)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _check_content(content, base_sha256) -> bytes:
+    if not isinstance(content, str) \
+            or not isinstance(base_sha256, str):
+        raise FileError_(
+            400, "need {path, content, base_sha256}")
+    if "\x00" in content:
+        raise FileError_(400, "content must be text (no NULs)")
+    new_raw = content.encode("utf-8")
+    if len(new_raw) > PEEK_MAX_BYTES \
+            or len(content.splitlines()) > PEEK_MAX_LINES:
+        raise FileError_(413, "content exceeds the edit caps")
+    return new_raw
+
+
+def _check_target(root: Path, rel_raw, base_sha256: str,
+                  new_raw: bytes) -> tuple:
+    """The guarded save's target discipline, shared by the
+    entry save and the confined-file save: confinement,
+    secret refusal (before existence), symlink refusal,
+    binary/oversize refusal, and the sha compare-and-swap
+    (stale → 409, nothing written). Returns (target, rel,
+    sha_before)."""
+    rel = Path(rel_raw or "")
+    if rel.is_absolute() or not str(rel):
+        raise FileError_(400, "path must be root-relative")
+    if is_secret(rel):
+        raise FileError_(
+            403, "secret-shaped paths are never editable here")
+    probe = root
+    for part in rel.parts:
+        probe = probe / part
+        if os.path.islink(probe):
+            raise FileError_(403, "symlinks are not editable")
+    target = (root / rel).resolve()
+    if root not in target.parents and target != root:
+        raise FileError_(400, "path escapes the root")
+    if not target.is_file():
+        raise FileError_(404, "no such file")
+    raw = target.read_bytes()
+    if _is_binary(target, raw[:8192]):
+        raise FileError_(403, "binary files are not editable")
+    if len(raw) > PEEK_MAX_BYTES:
+        raise FileError_(403, "file is too large to edit")
+    sha_before = hashlib.sha256(raw).hexdigest()
+    if base_sha256 != sha_before:
+        raise FileError_(
+            409, "file changed on disk since it was opened",
+            current_sha256=sha_before)
+    return target, target.relative_to(root), sha_before
+
+
+def guarded_save_file(root, rel_raw: str, content,
+                      base_sha256, *, editing_enabled: bool,
+                      backup_root: Path,
+                      backup_key: str) -> dict:
+    """The guarded save for a confined text file that is
+    not a registry entry (plan files are the caller): the
+    entry save's exact discipline — editing flag, secret /
+    symlink / binary refusals, edit caps, sha
+    compare-and-swap, one-generation backup, atomic
+    replace — minus the registry history append (there is
+    no entry to land it on; the file is the record)."""
+    if not editing_enabled:
+        raise FileError_(
+            403, "file editing is disabled (server config "
+                 "file_editing_enabled)")
+    new_raw = _check_content(content, base_sha256)
+    root = Path(root).resolve()
+    target, rel, _sha_before = _check_target(
+        root, rel_raw, base_sha256, new_raw)
+    backup = Path(backup_root) / backup_key \
+        / (rel.as_posix() + ".bak")
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(target, backup)
+    _write_atomically(target, new_raw)
+    return {"path": rel.as_posix(),
+            "sha256": sha256_bytes(new_raw),
+            "size_bytes": len(new_raw),
+            "backup": str(backup)}
+
+
 def save_file(db_path, entry: dict, rel_raw: str, content,
               base_sha256, *, editing_enabled: bool,
               backup_root: Path, actor: str = "viewer") -> dict:
@@ -186,21 +288,7 @@ def save_file(db_path, entry: dict, rel_raw: str, content,
         / (rel.as_posix() + ".bak")
     backup.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(target, backup)
-    mode = stat.S_IMODE(target.stat().st_mode)
-    fd, tmp = tempfile.mkstemp(dir=str(target.parent),
-                               prefix=target.name + ".",
-                               suffix=".tmp")
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(new_raw)
-        os.chmod(tmp, mode)
-        os.replace(tmp, target)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    _write_atomically(target, new_raw)
     sha_after = sha256_bytes(new_raw)
     conn = reg.connect(db_path)
     try:

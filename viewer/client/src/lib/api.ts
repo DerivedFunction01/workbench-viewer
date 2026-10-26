@@ -27,6 +27,7 @@ export type { ApiRequest, ApiResponse } from "@hatch/space-sdk/client";
 
 export interface ProjectSections {
   mockups: boolean;
+  artifacts: boolean;
   todos: boolean;
   plans: boolean;
   registry_declared: boolean;
@@ -87,6 +88,37 @@ export interface MockupsFeed extends FeedEnvelope {
   reconcile: { status: string; problems: unknown[]; error: string | null } | null;
 }
 
+/** One resolvable question of a plan's open-questions
+ * section (plan syntax standard, the sentinel): the
+ * parser's record verbatim. `answer` is the recorded
+ * answer ("" = unanswered); `checked` mirrors the source
+ * task box (numbered/bullet items derive it from the
+ * answer). */
+export interface PlanQuestion {
+  id: string;
+  type: "choice" | "toggle" | "text";
+  text: string;
+  detail: string;
+  options: string[];
+  labels: string[];
+  recommended: string | null;
+  answer: string;
+  checked: boolean;
+  item_kind: "task" | "numbered" | "bullet";
+  line: number;
+  sentinel_line: number | null;
+  answer_line: number | null;
+}
+
+/** One malformed sentinel, reported by the parser: the
+ * question degrades to plain rendering and the break is
+ * surfaced here (0-based file line + the rule broken). */
+export interface PlanSentinelError {
+  line: number;
+  id: string | null;
+  reason: string;
+}
+
 export interface PlanSummary {
   path: string;
   title: string;
@@ -95,6 +127,9 @@ export interface PlanSummary {
   conforming: boolean;
   step_count: number;
   open_questions_count: number;
+  /** Resolvable questions carried by the summary (the
+   * parser's records; [] when the plan has none). */
+  questions?: PlanQuestion[];
   /** Declared subplan paths (`.plans/`-relative, §21);
    * carried by bundle summaries. */
   subplans?: string[];
@@ -141,6 +176,12 @@ export interface PlanSection {
   level: number;
   raw: string;
   blocks: PlanBlock[];
+  /** The flagged questions section only: the blocks no
+   * extracted question covers (prose, plain and malformed
+   * items, fences). When the Questions card shows, the
+   * reader renders these in place of `blocks`, so each
+   * question renders once and nothing else is dropped. */
+  leftover_blocks?: PlanBlock[];
   is_rulings: boolean;
   is_steps: boolean;
   is_open_questions: boolean;
@@ -178,6 +219,13 @@ export interface PlanDoc {
   step_count: number;
   open_questions: PlanOpenQuestion[];
   open_questions_count: number;
+  /** Resolvable questions (sentinel form) + the parse's
+   * malformed-sentinel report. */
+  questions: PlanQuestion[];
+  sentinel_errors: PlanSentinelError[];
+  /** sha256 of the plan file's exact bytes — the resolve
+   * write's compare-and-swap base. */
+  file_sha256: string;
   /** Declared subplan paths from `## Subplans` (§21),
    * in declaration order. */
   subplans: string[];
@@ -237,6 +285,10 @@ export interface ReviewItem {
   id: string;
   title: string;
   reasons: string[];
+  /** The entry's registry kind — the card opens in the
+   * collection that owns the kind (artifact → Artifacts,
+   * the design kinds → Mockups). */
+  kind?: string;
   project?: string;
   project_name?: string;
   [key: string]: unknown;

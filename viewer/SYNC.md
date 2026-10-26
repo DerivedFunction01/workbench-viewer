@@ -43,7 +43,11 @@ publish. So deploy is two steps by design:
 
 The `viewer/` tree's source files, as `viewer.sh` computes
 them: everything except `node_modules/`, `dist/`,
-`.bun-cache/`, and `*.db*` files. That includes
+`.bun-cache/`, and `*.db*` files. One exception: the
+`dist/` exclusion does not reach into `vendor/` — the
+vendored space SDK's `dist/` is its shipped, pinned form,
+the tree syncs whole as tracked, and the runtime must be
+able to reinstall the dependency from it. That includes
 `space.json`, `package.json`, `bun.lock`, `bunfig.toml`,
 the tsconfigs, `client/` (source + `build.mjs`), `server/`
 (source; `server/.generated/` is builder-generated in the

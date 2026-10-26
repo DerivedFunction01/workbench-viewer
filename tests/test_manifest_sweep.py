@@ -151,7 +151,21 @@ class TestSweep(unittest.TestCase):
             # plans dir exists, DB does not: Plans yes, rest no
             self.assertTrue(sections["plans"])
             self.assertFalse(sections["mockups"])
+            self.assertFalse(sections["artifacts"])
             self.assertTrue(sections["registry_declared"])
+
+    def test_artifacts_section_tracks_mockups(self):
+        """Artifacts rides the registry declaration (SPEC
+        §14.4): reported exactly when Mockups is."""
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            proj = write_project(ws / "p", "P")
+            (proj / "workbench").mkdir(exist_ok=True)
+            (proj / "workbench" / "registry.db").write_bytes(b"")
+            result = sweep([ws])
+            sections = result.projects[0].sections()
+            self.assertTrue(sections["mockups"])
+            self.assertTrue(sections["artifacts"])
 
 
 class TestSweepWorktreeDedupe(unittest.TestCase):

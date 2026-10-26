@@ -82,8 +82,10 @@ it by adding one small manifest file.
 
 ### Out of Scope
 
-- another-project — excluded by design (own maintenance system,
-  external to this workspace).
+- another-project — registered as a project like any other
+  (owner's ruling, 2026-10-26, reversing its earlier exclusion);
+  it keeps its own maintenance system, and the harness reads
+  its data files only.
 - Project *data* of any other kind: no pay figures, no repo
   browsing (that is the git repo viewer's job), no dashboards.
 - Scheduling the staleness check (a platform concern; `wb

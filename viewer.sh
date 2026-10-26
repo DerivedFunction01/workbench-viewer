@@ -24,6 +24,11 @@
 # lives at client/dist + server/dist (hashed names churn every
 # build), and *.tsbuildinfo.* is local typecheck state — neither is
 # source, and the builder regenerates dist in the runtime tree.
+# ONE exception: the dist exclusion does not reach into vendor/.
+# The vendored space SDK's dist/ is its shipped, pinned form —
+# tracked whole in git — and stripping it leaves the runtime
+# unable to reinstall the dependency (the 3a378f9 publish hit
+# exactly this). Everything under vendor/ syncs as tracked.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_VIEWER="$HERE/viewer"
@@ -34,7 +39,8 @@ manifest() {  # $1 = base dir; prints "sha256  relpath" lines, sorted
     [ -d "$base" ] || return 0
     ( cd "$base" || exit 0
       find . -type f \
-        -not -path '*/node_modules/*' -not -path '*/dist/*' \
+        -not -path '*/node_modules/*' \
+        -not \( -path '*/dist/*' -not -path './vendor/*' \) \
         -not -path '*/.bun-cache/*' -not -name '*.db*' \
         -not -name '*.tsbuildinfo.*' \
         -not -name 'app.db*' | sed 's|^\./||' ) | sort \
@@ -60,7 +66,8 @@ sync_tree() {  # $1 = src, $2 = dst
     local src="$1" dst="$2"
     mkdir -p "$dst"
     ( cd "$src" && find . -type f \
-        -not -path '*/node_modules/*' -not -path '*/dist/*' \
+        -not -path '*/node_modules/*' \
+        -not \( -path '*/dist/*' -not -path './vendor/*' \) \
         -not -path '*/.bun-cache/*' -not -name '*.db*' \
         -not -name '*.tsbuildinfo.*' \
         -not -name 'app.db*' -print0 ) \

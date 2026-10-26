@@ -17,9 +17,16 @@
 // Unknown routes land on the default view, never a blank
 // (ui-context). Parsing is pure so App stays declarative.
 
-export type SectionId = "overview" | "mockups" | "plans" | "todos" | "board";
+export type SectionId = "overview" | "mockups" | "artifacts" | "plans" | "todos" | "board";
 
-export const SECTION_IDS: SectionId[] = ["overview", "mockups", "plans", "todos", "board"];
+export const SECTION_IDS: SectionId[] = [
+  "overview",
+  "mockups",
+  "artifacts",
+  "plans",
+  "todos",
+  "board",
+];
 
 export type Route =
   | { view: "home" }

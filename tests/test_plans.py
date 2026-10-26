@@ -44,7 +44,8 @@ _REPO_CHECKOUT = Path(__file__).resolve().parent.parent.name
 
 if CORPUS is not None:
     WS = CORPUS
-    FOUNDING = WS / ".plans" / "2026-10-25-workbench-viewer-repo.md"
+    FOUNDING = (WS / _REPO_CHECKOUT / ".plans"
+                / "2026-10-25-workbench-viewer-repo.md")
     SUBPLAN09 = (WS / _OTHER_PROJECT / ".plans"
                  / "2026-10-25-living-workbench-storyboard.md")
     MASTER = (WS / _OTHER_PROJECT / ".plans"
@@ -445,13 +446,13 @@ class TestListing(unittest.TestCase):
         # the spec-extraction working dir is not plans
         self.assertFalse(any("spec-extraction/" in n
                              for n in names))
-        founding = parser.list_plans(WS / ".plans")
-        by_name = {s["path"]: s for s in founding}
+        viewer_plans = parser.list_plans(VIEWER_PLANS)
+        by_name = {s["path"]: s for s in viewer_plans}
         self.assertEqual(
             by_name["2026-10-25-workbench-viewer-repo.md"]
             ["status_bucket"], "doing")
         self.assertTrue(
-            any(s["archived"] for s in founding),
+            any(s["archived"] for s in viewer_plans),
             "finished/ plans should list as archived")
 
     def test_load_plan_confined(self):

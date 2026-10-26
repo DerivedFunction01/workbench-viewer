@@ -18,8 +18,15 @@ export type SegmentedControlProps<V extends string> = {
   className?: string;
 };
 
+// Wrap guarantee (contract: docs/component-contracts.md
+// #segmentedcontrol): no `whitespace-nowrap` — a segment's
+// label wraps INSIDE its pill, and `min-w-0` on the label
+// and the span lets the pill shrink to the fieldset's
+// width instead of painting past it. Short labels are
+// unaffected: they still render single-line exactly as
+// before.
 const SEGMENT_CLASSES = [
-  "inline-flex min-h-[30px] cursor-pointer items-center rounded-[var(--wb-radius-sm)] border border-transparent px-3 text-sm whitespace-nowrap",
+  "inline-flex max-w-full min-w-0 min-h-[30px] cursor-pointer items-center rounded-[var(--wb-radius-sm)] border border-transparent px-3 text-sm",
   "text-(--wb-content-secondary) hover:text-(--wb-content-primary)",
   "peer-checked:border-(--wb-border-default) peer-checked:bg-(--wb-surface-2) peer-checked:font-semibold peer-checked:text-(--wb-content-primary)",
   "peer-focus-visible:outline-2 peer-focus-visible:outline-solid peer-focus-visible:outline-offset-1 peer-focus-visible:outline-(--wb-focus-ring)",
@@ -58,7 +65,7 @@ export function SegmentedControl<V extends string>({
     >
       <legend className="sr-only">{ariaLabel}</legend>
       {options.map((opt) => (
-        <label key={opt.value} className="inline-flex">
+        <label key={opt.value} className="inline-flex max-w-full min-w-0">
           <input
             type="radio"
             name={name}

@@ -33,6 +33,35 @@ Split a step if it combines:
 If a change cannot be verified end to end quickly, the scope
 is too broad — split it.
 
+## Live work tracking
+
+Determined in `.plans/2026-10-25-live-work-tracking-spec.md`;
+the bundle is the unit of work.
+
+- Work lives in a bundle under `.plans/<date>-<slug>/`. Its
+  progress is tracked in todo files — one file per todo under
+  the bundle's `todos/`, front-matter `id` / `title` /
+  `status` / `feature` / `plan` / `plan_step` / `worktree` —
+  created and moved only through the harness (`wb bundle
+  new`, `wb todo new`, `wb todo set`). File todos supersede
+  the registry DB's todo table; new todos are files only.
+- Create the bundle's todos before starting, one per plan
+  step or work item, and move each status at the transition
+  (`todo` → `doing` → `done` / `blocked`) — not in a batch
+  at the end. A blocked todo carries its reason in its body
+  the moment it blocks.
+- Ships happen at checkpoints (a step's done-when,
+  gate-green), and the deploy is recorded in the relevant
+  todo — what shipped and when — so the board shows what is
+  live, not just what is coded.
+- A plan that completes is frozen (`Status: complete`) and
+  never edited again; the bundle archives whole to
+  `.plans/finished/` when its todos all close. Work beyond
+  a completed plan's scope goes into a followup plan or
+  bundle carrying only the remainder, and the older plan is
+  archived in the same pass, its Status line naming the
+  followup.
+
 ## Handling Missing Requirements
 
 - Do not invent product behavior not defined in the context
@@ -52,7 +81,8 @@ Do not modify unless explicitly instructed:
 - The `example-project` repo's `SPEC.md` and its
   `.plans/spec-extraction/` (another effort owns those).
 - The `example-project-legacy` repo (prototype — read-only
-  reference) and the `another-project` repo (excluded by design).
+  reference) and the `another-project` repo (registered by owner's ruling,
+  2026-10-26; untracked adoption footprint only).
 - In example-project, the ONLY file this harness's work
   may add is `workbench.yaml` (its adoption manifest); v2
   commits are the owner's separately.

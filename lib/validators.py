@@ -33,7 +33,13 @@ def _finding(validator, entry_id, message):
 def check_state_schema(schema):
     """None if well-formed, else a problem string. Schema
     shape: {field: {"type": toggle|select|text|number,
-    "options": [...] (select), "default": ...}}"""
+    "options": [...] (select), "default": ...}}. Three
+    optional, kind-agnostic keys ride on any field spec:
+    "question" (the prompt text), "recommended" (one of the
+    field's options for a select, a boolean for a toggle,
+    a value of the field's type otherwise), and
+    "option_notes" (a map from option value to explanation
+    text)."""
     if not isinstance(schema, dict):
         return "schema must be an object of field specs"
     for name, spec in schema.items():
@@ -45,6 +51,36 @@ def check_state_schema(schema):
                     f"{STATE_FIELD_TYPES}")
         if t == "select" and not spec.get("options"):
             return f"field {name!r}: select needs options"
+        question = spec.get("question")
+        if question is not None and not isinstance(question, str):
+            return f"field {name!r}: question must be text"
+        if "recommended" in spec:
+            rec = spec["recommended"]
+            if t == "select" and rec not in spec.get("options", []):
+                return (f"field {name!r}: recommended must be "
+                        f"one of its options")
+            if t == "toggle" and not isinstance(rec, bool):
+                return (f"field {name!r}: recommended must be "
+                        f"true/false for a toggle")
+            if t == "number" and (isinstance(rec, bool)
+                                  or not isinstance(rec, (int, float))):
+                return (f"field {name!r}: recommended must be "
+                        f"a number")
+            if t == "text" and not isinstance(rec, str):
+                return f"field {name!r}: recommended must be text"
+        notes = spec.get("option_notes")
+        if notes is not None:
+            if not isinstance(notes, dict):
+                return (f"field {name!r}: option_notes must be "
+                        f"an object of option -> explanation")
+            options = spec.get("options") or []
+            for key, text in notes.items():
+                if key not in options:
+                    return (f"field {name!r}: option_notes key "
+                            f"{key!r} is not one of its options")
+                if not isinstance(text, str):
+                    return (f"field {name!r}: option_notes "
+                            f"values must be text")
     return None
 
 
@@ -71,18 +107,46 @@ def check_state_values(schema, state):
 # Uniformity subset (runs on the canonical / approve paths)
 # ----------------------------------------------------------------
 
+def _question_completeness(entry_id, schema) -> list:
+    """Question-completeness (SPEC §10, kind artifact): a
+    field that declares a question must carry a
+    recommendation — the answer act rules against the
+    marked default. Recommendation VALIDITY (in-options
+    etc.) is check_state_schema's job; this checks
+    presence."""
+    findings = []
+    if not isinstance(schema, dict):
+        return findings
+    for name, spec in schema.items():
+        if isinstance(spec, dict) and "question" in spec \
+                and "recommended" not in spec:
+            findings.append(_finding(
+                "uniformity", entry_id,
+                f"field {name!r}: question without a "
+                f"recommendation"))
+    return findings
+
+
 def uniformity_findings_for(entry: dict, layout) -> list:
-    """Uniformity findings for ONE entry. layout is the
-    (entries_dir, archive_dir) pair (unused except for shape
-    parity with project validation)."""
+    """Uniformity findings for ONE entry, scoped per kind
+    (SPEC §10): the design kinds run the design discipline;
+    kind artifact runs question-completeness instead and
+    skips the design discipline, keeping the schema and
+    presence checks. layout is the (entries_dir,
+    archive_dir) pair (unused except for shape parity with
+    project validation)."""
     findings = []
     eid = entry["id"]
+    is_artifact = entry.get("kind") == "artifact"
     if entry.get("state_schema") is not None:
         problem = check_state_schema(entry["state_schema"])
         if problem:
             findings.append(_finding(
                 "uniformity", eid,
                 f"state schema not well-formed: {problem}"))
+        elif is_artifact:
+            findings.extend(_question_completeness(
+                eid, entry["state_schema"]))
     if entry.get("source_kind") != "entry-dir":
         return findings
     entry_dir = Path(entry["entry_dir"]) \
@@ -98,17 +162,19 @@ def uniformity_findings_for(entry: dict, layout) -> list:
             findings.append(_finding(
                 "uniformity", eid,
                 f"main file missing: {main_file}"))
-        elif main.suffix.lower() in (".html", ".htm"):
+        elif not is_artifact \
+                and main.suffix.lower() in (".html", ".htm"):
             text = main.read_text(encoding="utf-8",
                                   errors="replace")
             findings.extend(_html_discipline(eid, text))
-    for path in sorted(entry_dir.rglob("*")):
-        if path.is_file() and _VARIANT_SUFFIX.search(path.name):
-            findings.append(_finding(
-                "uniformity", eid,
-                f"variant-suffix file (variants belong in "
-                f"state, not files): "
-                f"{path.relative_to(entry_dir)}"))
+    if not is_artifact:
+        for path in sorted(entry_dir.rglob("*")):
+            if path.is_file() and _VARIANT_SUFFIX.search(path.name):
+                findings.append(_finding(
+                    "uniformity", eid,
+                    f"variant-suffix file (variants belong in "
+                    f"state, not files): "
+                    f"{path.relative_to(entry_dir)}"))
     return findings
 
 

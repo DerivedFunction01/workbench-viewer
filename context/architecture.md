@@ -272,6 +272,16 @@ this repo with different values).
   project's entries dir; the DB holds metadata, pointers, the
   main-file fingerprint (`content_sha256`), the declared
   state schema, and the current internal state — never blobs.
+- **Artifact items share the registry**: the Artifacts
+  section is a sibling collection beside Mockups,
+  discriminated by `kind = artifact` in the same `entries`
+  table — no second store, no schema change. The split is
+  at the feed: each collection's feed serves only its own
+  kinds, while the export fold stays whole. An artifact
+  item's questions are its declared `state_schema`, its
+  answers are `state_json` bound by a review disposition,
+  and its preview renders its main file in a sandboxed
+  iframe over the guarded peek path.
 - **Server state** (`state/` here): instance lock, logs,
   one-generation edit backups, health file. Runtime only.
 
@@ -310,6 +320,10 @@ stays entry-pure).
 `POST /api/projects/<slug>/entries/<id>/action`
 (`{verb, ...}` → lib/ mutation, actor=viewer) ·
 `GET /api/projects/<slug>/plans` · `GET /api/projects/<slug>/plan?path=` ·
+`POST /api/projects/<slug>/plan/resolve`
+(`{path, base_sha256, answers}` → the plan file's sentinel
+questions answered in place via lib composition + the
+guarded save) ·
 `GET /api/projects/<slug>/todos` · `GET /api/todos` ·
 `POST /api/projects/<slug>/todos` (`{verb, ...}`) · `GET /api/board`.
 

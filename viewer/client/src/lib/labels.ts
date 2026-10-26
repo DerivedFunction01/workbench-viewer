@@ -36,6 +36,7 @@ const PLAN_BUCKET_LABELS: Record<string, string> = {
 
 const KIND_LABELS: Record<string, string> = {
   mockup: "Mockup",
+  artifact: "Artifact",
   plan: "Plan",
   todo: "Todo",
   review: "Review",
@@ -44,6 +45,7 @@ const KIND_LABELS: Record<string, string> = {
 const SECTION_LABELS: Record<string, string> = {
   overview: "Overview",
   mockups: "Mockups",
+  artifacts: "Artifacts",
   plans: "Plans",
   todos: "Todos",
   board: "Board",

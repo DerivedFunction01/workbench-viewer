@@ -17,6 +17,7 @@ export const anchor = {
   planList: "plans/plan-list",
   planReader: "plans/plan-reader",
   planHeader: "plans/plan-header",
+  questionsPanel: "plans/questions-panel",
   section: (heading: string) => `plans/section-${slugify(heading)}`,
   step: (n: number) => `plans/step-${n}`,
   table: (heading: string, index: number) => `plans/table-${slugify(heading)}-${index}`,

@@ -41,6 +41,8 @@ import {
   sectionHref,
   settingsHref,
 } from "./lib/routing";
+import { useAppViewportHeight } from "./lib/viewport";
+import { ArtifactsSection } from "./sections/Artifacts";
 import { BoardSection } from "./sections/Board";
 import { HomeSection } from "./sections/Home";
 import { InboxSection } from "./sections/Inbox";
@@ -245,45 +247,51 @@ function PhoneSectionNav({ slug, current }: { slug: string; current: SectionId }
         marginBottom: "var(--wb-space-16)",
       }}
     >
-      {(["overview", "mockups", "plans", "todos", "board"] as SectionId[]).map((section) => {
-        const isCurrent = section === current;
-        return (
-          <a
-            key={section}
-            href={sectionHref(slug, section)}
-            aria-current={isCurrent ? "page" : undefined}
-            style={{
-              flex: "1 1 0",
-              minWidth: 0,
-              minHeight: "38px",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "var(--wb-space-8) 2px",
-              borderRadius: "var(--wb-radius-md)",
-              border: isCurrent ? "1px solid var(--wb-border-default)" : "1px solid transparent",
-              background: isCurrent ? "var(--wb-surface-1)" : "transparent",
-              boxShadow: isCurrent ? "var(--wb-shadow-overlay)" : "none",
-              color: isCurrent ? "var(--wb-content-primary)" : "var(--wb-content-secondary)",
-              fontSize: "var(--wb-font-size-xs)",
-              lineHeight: "var(--wb-line-height-xs)",
-              fontWeight: isCurrent ? 700 : 500,
-              textDecoration: "none",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {sectionLabel(section)}
-          </a>
-        );
-      })}
+      {(["overview", "mockups", "artifacts", "plans", "todos", "board"] as SectionId[]).map(
+        (section) => {
+          const isCurrent = section === current;
+          return (
+            <a
+              key={section}
+              href={sectionHref(slug, section)}
+              aria-current={isCurrent ? "page" : undefined}
+              style={{
+                flex: "1 1 0",
+                minWidth: 0,
+                minHeight: "38px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "var(--wb-space-8) 2px",
+                borderRadius: "var(--wb-radius-md)",
+                border: isCurrent ? "1px solid var(--wb-border-default)" : "1px solid transparent",
+                background: isCurrent ? "var(--wb-surface-1)" : "transparent",
+                boxShadow: isCurrent ? "var(--wb-shadow-overlay)" : "none",
+                color: isCurrent ? "var(--wb-content-primary)" : "var(--wb-content-secondary)",
+                fontSize: "var(--wb-font-size-xs)",
+                lineHeight: "var(--wb-line-height-xs)",
+                fontWeight: isCurrent ? 700 : 500,
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {sectionLabel(section)}
+            </a>
+          );
+        },
+      )}
     </nav>
   );
 }
 
 function projectStatus(project: ProjectSummary): { word: string; degraded: boolean } {
-  const anySection = project.sections.mockups || project.sections.todos || project.sections.plans;
+  const anySection =
+    project.sections.mockups ||
+    project.sections.artifacts ||
+    project.sections.todos ||
+    project.sections.plans;
   if (anySection) return { word: "ok", degraded: false };
   if (project.sections.registry_declared || project.sections.plans_declared) {
     return { word: "manifest only", degraded: false };
@@ -294,6 +302,13 @@ function projectStatus(project: ProjectSummary): { word: string; degraded: boole
 export function App() {
   const route = useHashRoute();
   const isPhone = useIsPhone();
+  // Keep --wb-app-height synced with the visual viewport
+  // (lib/viewport): the phone shell below sizes from it,
+  // because the host webview's layout viewport — what dvh
+  // measures — can be taller than the visible area. One
+  // document root serves both presentations, so the hook
+  // installs here, before the phone/desktop branch.
+  useAppViewportHeight();
   // Phone shell: <main> is the sole scroller (the document
   // no longer scrolls), so a route change must reset it
   // explicitly — the document scroller used to do this
@@ -374,6 +389,13 @@ export function App() {
   });
   const triageCount =
     (triageQuery.data?.payload as unknown as MockupsFeed | null)?.triage.length ?? null;
+  const artifactsTriageQuery = useQuery({
+    queryKey: ["artifacts", selected?.slug],
+    queryFn: () => api.getArtifacts({ slug: selected?.slug ?? "" }),
+    enabled: selected != null && selected.sections.artifacts,
+  });
+  const artifactsTriageCount =
+    (artifactsTriageQuery.data?.payload as unknown as MockupsFeed | null)?.triage.length ?? null;
   const doingCount =
     board != null
       ? (board.todos.doing ?? []).length +
@@ -395,6 +417,7 @@ export function App() {
 
   const navBadge = (section: SectionId): number | null => {
     if (section === "mockups") return triageCount;
+    if (section === "artifacts") return artifactsTriageCount;
     if (section === "board") return doingCount;
     return null;
   };
@@ -420,6 +443,12 @@ export function App() {
         <OverviewSection slug={route.slug} projectName={selected?.name ?? route.slug} />
       ) : route.section === "mockups" ? (
         <MockupsSection slug={route.slug} projectName={selected?.name ?? route.slug} />
+      ) : route.section === "artifacts" ? (
+        <ArtifactsSection
+          slug={route.slug}
+          projectName={selected?.name ?? route.slug}
+          item={route.item}
+        />
       ) : route.section === "plans" ? (
         <PlansSection
           slug={route.slug}
@@ -513,8 +542,12 @@ export function App() {
         style={{
           display: "flex",
           flexDirection: "column",
-          height: "100dvh",
+          // The visual viewport's height when the hook has
+          // synced it; 100dvh is the fallback where the API
+          // is absent (lib/viewport).
+          height: "var(--wb-app-height, 100dvh)",
           overflow: "hidden",
+          overscrollBehavior: "none",
           background: "var(--wb-surface-canvas)",
           color: "var(--wb-content-primary)",
           fontFamily: "var(--wb-font-ui)",
@@ -592,6 +625,9 @@ export function App() {
             flex: 1,
             minHeight: 0,
             overflowY: "auto",
+            // The shell's scroller: a boundary pull here
+            // must not chain to the host (pull-to-refresh).
+            overscrollBehavior: "none",
             width: "100%",
             minWidth: 0,
             padding: "var(--wb-space-16)",
@@ -613,6 +649,7 @@ export function App() {
       style={{
         display: "flex",
         minHeight: "100vh",
+        overscrollBehavior: "none",
         background: "var(--wb-surface-canvas)",
         color: "var(--wb-content-primary)",
         fontFamily: "var(--wb-font-ui)",
@@ -738,7 +775,7 @@ export function App() {
           </div>
           {selected ? (
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {(["overview", "mockups", "plans", "todos", "board"] as SectionId[]).map(
+              {(["overview", "mockups", "artifacts", "plans", "todos", "board"] as SectionId[]).map(
                 (section) => {
                   const active = route.view === "section" && route.section === section;
                   const badge = navBadge(section);
@@ -851,6 +888,7 @@ export function App() {
             maxWidth: "1600px",
             margin: "0 auto",
             padding: "var(--wb-page-padding)",
+            overscrollBehavior: "none",
           }}
         >
           {content}

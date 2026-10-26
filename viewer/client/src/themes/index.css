@@ -90,10 +90,19 @@
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+html {
+  overscroll-behavior: none;
+}
+
 body {
   font-family: var(--wb-font-ui);
   background: var(--wb-surface-canvas);
   color: var(--wb-content-primary);
+  overscroll-behavior: none;
+}
+
+.hatch-space-root {
+  overscroll-behavior: none;
 }
 
 .num {

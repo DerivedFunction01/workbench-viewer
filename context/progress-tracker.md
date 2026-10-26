@@ -611,3 +611,92 @@ change.
   39 candidates by title on the 40-entry feed, button
   inside the card at desktop and 390px, no mutation
   fired. Gate green on the merged tree.
+- Vendor sync carve-out (2026-10-25; plan
+  `.plans/finished/2026-10-25-vendor-sync-carve-out.md`):
+  viewer.sh's `*/dist/*` sync exclusion silently
+  stripped the vendored space SDK's own dist/ — 233 of
+  its 236 files — from every deploy, leaving the runtime
+  with a 3-file vendor the dependency cannot reinstall
+  from (the failure the 3a378f9 publish hit and repaired
+  by hand in the space). The dist predicate now excludes
+  a path only when it is not under vendor/; SYNC.md's
+  sync-set paragraph states the exception. Proof: status
+  showed exactly the 233 missing vendor files as drift
+  and nothing else (build-output dists stay excluded);
+  after deploy the runtime vendor holds all 236 files,
+  sha-verified, trees in sync. Gate green.
+- Plan questions resolvable in the viewer (2026-10-26;
+  plan `.plans/2026-10-25-plan-questions-resolvable-in-viewer.md`,
+  STILL IN PROGRESS — see the open act below; merge
+  `172f6fb`): a plan's `## Open questions` items may
+  carry a `wb-question` sentinel (grammar + worked
+  examples in the plan syntax standard; the
+  `coding_plan` skill carries the authoring rule). The
+  parser extracts question records (byte-exact corpus
+  round-trip unbroken; malformed sentinels degrade to
+  plain render + a `sentinel_errors` report, never a
+  conforming-flag flip); the plans feed + plan payload
+  carry `questions` (+ `file_sha256`); POST
+  `/api/projects/<slug>/plan/resolve` composes the
+  answers via the parser and writes through a new
+  lib guarded save for confined non-entry files
+  (editing flag, sha CAS 409, backup, atomic replace —
+  the server's write surface stays the two sanctioned
+  things). The Plans reader renders a Questions card
+  (choice segmented with the recommended option
+  badged, toggle with author labels, text input; one
+  Resolve posts the whole set; a 409 is a reload
+  prompt, never a silent overwrite). The plan's four
+  recommendations are the build defaults. Proof: 314
+  unittest cases green (29 new: parser/apply_answers +
+  real-HTTP resolve incl. byte-exact write, stale-base
+  409, editing-disabled 403), bun helper tests 7/7,
+  anchor audit 21 sites 0 failures, gate green on the
+  branch and the merged tree; live server (commit
+  `172f6fb`) serves both dogfood plans' questions with
+  `file_editing_enabled` now TRUE in the deployed
+  config. Source deployed to the runtime (backup
+  `workbench-viewer.bak-20261026032259`, trees in
+  sync) but NOT yet published — no builder CLI on this
+  box; the publish + both-themes/both-modes audit run
+  through the builder interface. REMAINING OWNER ACT:
+  resolve the determination's four questions in the
+  viewer (`.plans/2026-10-25-workbench-artifacts-alongside-mockups.md`,
+  sentinel form, all unanswered); the plan completes
+  when the file on disk shows them checked + answered.
+- Live-corpus test paths reconciled (2026-10-25): the
+  plan-file reconciliation moved the founding plan from
+  the workspace root's `.plans/` into this repo's
+  `.plans/`; the env-gated corpus tests in
+  `tests/test_plans.py` still derived it from the old
+  location (3 errors with `WB_LIVE_CORPUS` set, invisible
+  to the normal gate, which skips them). `FOUNDING` now
+  derives through this repo's checkout like
+  `VIEWER_PLANS`, and `test_list_v2_plans` lists
+  `VIEWER_PLANS` for its founding assertions. Verified:
+  the full suite (314 tests) passes with
+  `WB_LIVE_CORPUS` set, the three named tests
+  individually green, and the standard gate green.
+- Artifacts collection LANDED (2026-10-25): a sibling
+  Artifacts collection beside Mockups, per the ruling in
+  repo-home spec §23 — same entries table and lifecycle,
+  new kind `artifact`, the collection boundary drawn at
+  the feed. Per-kind uniformity (question completeness
+  for artifacts, design discipline for mockups), a
+  sandboxed scriptless preview over the peek path, the
+  Board's review lane unioned across both collections
+  with cards routing by kind, and a sibling
+  ArtifactDetail over the shared detail blocks. The
+  pilot — "Deferred and Gates, Explained" — is
+  registered in the companion project's registry as an
+  entry-dir artifact with its questions declared in its
+  state schema, unanswered (answering it is the owner's
+  act); the answer loop was proven end to end on a
+  throwaway item, archived after. The plan's two open
+  questions (archive guard, Mockups drill-in parity)
+  remain open, untouched. Merged `71b0a1e`, gate green
+  on the merged tree.
+- **Phone scroll hardening LANDED** (plan 2026-10-26-phone-scroll-hardening; branch build/phone-scroll-hardening merged): overscroll-behavior none on the whole scroll chain (html, body, the SDK wrapper, shell roots, the main scroller - the global rules live in the token generator, regenerated), and the phone shell's height is driven by window.visualViewport via --wb-app-height on the document root (100dvh fallback; desktop consumes nothing and is geometrically unchanged, 24/24 parity measures). Probe record scrollfix: computed styles + a stubbed-viewport run (shell and tab bar follow the visible height live). Pull-to-refresh and the host viewport divergence cannot be reproduced in the harness - the owner's phone is the decisive check. Plan closed to .plans/finished/.
+- **Artifact question rows LANDED** (plan 2026-10-26-artifact-question-rows; branch build/artifact-question-rows merged): a state-schema field declaring a question now renders as a decision block - select questions become full-width option rows (native radio semantics) carrying the option label, the recommended badge (the ONLY statement of the recommendation), and the option's note as the row's secondary text; no notes block under a question; the field label rides as an eyebrow. Non-question rows stack on phone; SegmentedControl carries the wrap guarantee (a label wraps inside its pill; a pill never exceeds its container). Contracts + SPEC 5.1/14.4 + ui-context state the each-fact-once rule. Probe (toggleq): baseline spilled to 513px at a 360px viewport on 12 of 13 pilot questions; after, max edge 319px and exactly one "recommended" per field. Plan closed to .plans/finished/.
+- **another-project REGISTERED** (owner's ruling, 2026-10-26, reversing the by-design exclusion): its manifest + registry were created from the main chat on entirely untracked files on its side (its tracked tree and gate untouched, overlay rule unchanged); the live sweep now serves 3 projects and its plans feed serves its existing plans as-is (pre-standard, no backfill). AGENTS.md amended in 5282096; SPEC SS0 and the context files aligned in this commit.
+- **Questions single-render fix LANDED** (plan 2026-10-25-questions-single-render; branch build/questions-single-render merged): the parser carries ONE questions-heading rule (normalized heading starts with "open questions") for the section flag AND both extractions, first match only - a suffixed heading ("Open questions for ...") now mounts the card; the reader renders the Questions card exactly once, in place of the flagged section's covered content, with uncovered lines (prose, plain items, malformed sentinels, fences) preserved as leftover blocks rendered as markdown. The plan-syntax standard's Open questions section states the suffix + first-match + replace rules. Probe record questions-fix 12/12 PASS; plan closed to .plans/finished/.

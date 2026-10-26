@@ -327,7 +327,12 @@ component is coded; the standing rules here bind that work:
   (switch for booleans, segmented for enums, slider/stepper
   for numbers), current value. Switch = pill track, accent
   when on. Controls live in a labeled panel, never
-  scattered over the preview.
+  scattered over the preview. A key whose spec declares a
+  question renders as a decision block instead: eyebrow
+  label, prompt, and — for a select — full-width option
+  rows carrying the recommended badge and the option's
+  explanation inside the row, each fact stated once
+  (contract: docs/component-contracts.md#statecontrols).
 - **Empty states:** empty is a state, not an error — a
   sunken well, one line ("No mockups match these filters",
   "Nothing awaiting review"), styled as content. Error

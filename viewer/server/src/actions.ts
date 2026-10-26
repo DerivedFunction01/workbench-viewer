@@ -19,6 +19,7 @@ import { companionAddress, unreachableMessage } from "./config";
 
 const projectSections = z.looseObject({
   mockups: z.boolean(),
+  artifacts: z.boolean(),
   todos: z.boolean(),
   plans: z.boolean(),
   registry_declared: z.boolean(),
@@ -173,6 +174,19 @@ export const Actions = {
     },
   }),
 
+  getArtifacts: defineAction({
+    request: z.object({ slug: z.string().min(1), archived: z.boolean().optional() }),
+    response: feedResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const suffix = args.archived ? "?archived=1" : "";
+      return callServer<z.infer<typeof feedEnvelope>>(
+        ctx,
+        `/api/projects/${enc(args.slug)}/artifacts${suffix}`,
+      );
+    },
+  }),
+
   getEntry: defineAction({
     request: entryArg,
     // The entry-detail payload ({entry, files, history,
@@ -273,6 +287,24 @@ export const Actions = {
         ctx,
         `/api/projects/${enc(args.slug)}/plan?path=${enc(args.path)}`,
       );
+    },
+  }),
+
+  resolvePlanQuestions: defineAction({
+    request: z.object({
+      slug: z.string().min(1),
+      path: z.string().min(1),
+      baseSha256: z.string().min(1),
+      answers: z.record(z.string(), z.string()),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/projects/${enc(args.slug)}/plan/resolve`, "POST", {
+        path: args.path,
+        base_sha256: args.baseSha256,
+        answers: args.answers,
+      });
     },
   }),
 

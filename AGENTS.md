@@ -43,9 +43,13 @@ relevant file before continuing.
   they build, test, and run with the viewer absent. This repo
   never imports project code; it reads project *data files*
   (registry DBs, plan markdown, manifests) only.
-- **another-project is EXCLUDED.** It has its own maintenance system
-  and was external to this workspace. Never register it, never
-  sweep it in, never retrofit it. Its absence is by design.
+- **another-project is REGISTERED (owner's ruling, 2026-10-26 —
+  reverses the earlier exclusion).** It keeps its own maintenance
+  system; the harness reads its data files only, exactly as for
+  any project. Its adoption footprint is entirely untracked
+  local files on its side (manifest + registry data), so its
+  tracked tree and its gate are untouched, and nothing in that
+  repo depends on this harness (overlay rule unchanged).
 - **One mutation path.** All registry/todo writes go through
   `lib/` — the `wb` CLI and the server call the same lib
   functions. The server contains **no SQL**. Hand-editing a
@@ -58,6 +62,14 @@ relevant file before continuing.
 - **Ruled vs derived.** A mockup's `status` changes only via a
   mutation carrying a ruling note. Staleness is computed at read
   time and never written over a ruling.
+- **Live work tracking.** Work is tracked in bundle todo files
+  under `.plans/` (one file per todo, created and moved only
+  through the `wb bundle` / `wb todo` verbs), never in chat and
+  never in the registry DB. Plans freeze on completion and
+  archive to `.plans/finished/`; a remainder rides a followup
+  plan, never an open finished plan. Detail:
+  `context/ai-workflow-rules.md` and the live-work-tracking
+  spec in `.plans/`.
 - **Stdlib only** for `lib/` and `server/` (Python). The repo
   venv (built by `init_venv.py`, uv-managed Python 3.11) is the
   launch path — never system python.

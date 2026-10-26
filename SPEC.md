@@ -37,8 +37,22 @@ and loose to-dos until nobody can say which mockup is
 canonical, which plan is in flight, or what is blocked. The
 Workbench Viewer fixes that by structure: one always-on
 companion server reads every opt-in project's own data files
-and serves ONE artifact with four sections — **Mockups,
-Plans, Todos, Board**.
+and serves ONE artifact with five sections — **Mockups,
+Artifacts, Plans, Todos, Board**.
+
+The Artifacts section is a sibling collection beside
+Mockups: a separate item type (kind `artifact`, §4.1) for
+material that is not a mockup but still awaits or records
+an owner disposition — ruling explainers, decision sheets,
+approval exhibits. The admittance test is disposition
+alone: an item belongs in the collection iff it awaits or
+records an owner ruling. Deliverables, outputs, and pure
+reference documents are never registered — they are
+project data, not disposition material. The collection
+rides the same per-project registry, the same lifecycle,
+and the same review machinery as Mockups; only its feed,
+its preview, and its uniformity checks are its own (§8.5,
+§10).
 
 Goals:
 
@@ -60,11 +74,13 @@ Out of scope:
 
 - Any project's application data: no pay figures, no repo
   browsing (that is the git repo viewer's job), no project
-  dashboards. The four sections are the boundary — the
+  dashboards. The five sections are the boundary — the
   viewer renders work and design state, never project data.
-- **another-project is excluded by design** — its own maintenance
-  system, external to this workspace; never registered,
-  never retrofitted; its absence is not an omission.
+- **another-project is registered (owner's ruling, 2026-10-26 —
+  reverses the earlier exclusion)** — it keeps its own maintenance
+  system; the harness reads its data files only, as for any
+  project; its adoption footprint is entirely untracked local
+  files on its side.
 - Scheduling: the harness emits job definitions
   (`wb print-schedule`); running them is a platform concern.
 - Tracked goals: they stay in the Goals tab and are not
@@ -233,7 +249,7 @@ the newer state, never a silent overwrite. Stdlib `sqlite3`
 only. Every lib function takes an explicit db path, so tests
 run on temp fixtures and no caller depends on ambient state.
 
-### 4.1 `entries` — one row per mockup
+### 4.1 `entries` — one row per entry
 
 (schema `user_version` 1)
 
@@ -241,7 +257,14 @@ run on temp fixtures and no caller depends on ambient state.
   entries or archive dir. Slugs are stable identity; titles
   are display only.
 - `title`; `kind` (`mockup` | `prototype` | `test-route` |
-  `component-variant` | `storyboard`).
+  `component-variant` | `storyboard` | `artifact`). The
+  first five are the design kinds, browsed in the Mockups
+  section; `artifact` is the disposition-sheet kind,
+  browsed in the sibling Artifacts section (§8.5). The
+  kind column is the only discriminator — every lifecycle
+  function operates on any row regardless of kind, and the
+  collection boundary is drawn at the feed (§7), never in
+  the schema.
 - `status` — the RULED status (§5); `gate` — for hard-gate
   entries, the named blocker.
 - `ruling_text`, `ruling_date` — the ruling, in brief
@@ -355,6 +378,35 @@ Rules:
   link is what distinguishes superseded from merely dead.
 - "Stale" is NOT in this vocabulary (§5.2).
 
+For kind `artifact` (§8.5) the same vocabulary reads
+against the item's question set, which is its declared
+`state_schema`; selections are its `state_json`, and the
+answer act is a review disposition binding the answer
+set's `state_sha256` (approval binds to state, §1):
+
+- `unexplored` — questions open; no answer recorded.
+- `canonical` — answered: the recorded answer set is the
+  ruling of record.
+- `implemented` — the answers have been transcribed /
+  applied in the owning project.
+- `deferred`, `hard-gate`, `abandoned` — as above.
+
+Rendering of the question set is the StateControls
+decision-block form (docs/component-contracts.md#statecontrols):
+a select question's options render as full-width rows,
+and each option's explanation lives inside its row —
+stated once, with the recommended badge in the same
+row; no explanation or recommendation is repeated
+under the control.
+
+Durability rule for this kind: registry data is untracked
+and prunable by design, so an answer set is not done
+until it is transcribed into the owning project's durable
+records; the item's `spec_ref` / `plan_ref` names the
+transcription target. Only after transcription does the
+item move to `implemented`, then archive, then prunable.
+A message about an item is a ping, never the record.
+
 ### 5.2 Derived staleness
 
 Computed at read time (viewer, `wb stale`, export) from:
@@ -441,7 +493,11 @@ API (the feeds the artifact consumes):
   `POST /api/projects/<slug>/entries/<id>/action`
   (`{verb, ...}` → lib/ mutation, actor=viewer)
 - `GET /api/projects/<slug>/plans` ·
-  `GET /api/projects/<slug>/plan?path=`
+  `GET /api/projects/<slug>/plan?path=` ·
+  `POST /api/projects/<slug>/plan/resolve`
+  (`{path, base_sha256, answers}` → sentinel-question
+  answers written into the plan file via the guarded
+  save)
 - `GET /api/projects/<slug>/todos` · `GET /api/todos` ·
   `POST /api/projects/<slug>/todos` (`{verb, ...}`)
 - `GET /api/board`
@@ -492,7 +548,7 @@ scan failure reports "unknown", never mass-flags.
 - Every save is recorded in the entry's history
   (actor=viewer).
 
-## 8. The artifact — one viewer, four sections
+## 8. The artifact — one viewer, five sections
 
 A single self-contained artifact serves every project and
 every entry (§1.8). It reaches the server over a raw
@@ -573,12 +629,37 @@ sources:
   the house plan format and v1 does not invent it (a
   step-marker convention is a future extension, out of
   scope). Derived — read-only on the board.
-- **Review queue** — mockups awaiting disposition (§8.1),
-  as their own lane. Derived — read-only on the board.
+- **Review queue** — registry entries awaiting
+  disposition (§8.1, §8.5) across both collections, as
+  their own lane. Each card carries its entry's kind and
+  opens in its own collection. Derived — read-only on the
+  board.
 
 Acting on a derived card opens its source (the plan, the
 review item), where the action lives. The board shows no
 card whose source record does not exist (§1.6).
+
+### 8.5 Artifacts
+
+Per project: the sibling collection beside Mockups —
+entries of kind `artifact` only (§4.1), served by their
+own feed. An item is admitted iff it awaits or records an
+owner disposition (§0); its questions are its declared
+state schema, rendered as controls beside its preview,
+and answering is a review disposition binding the answer
+set's state hash (§5.1). The detail stage renders the
+item's main file as a live preview: a sandboxed,
+scriptless iframe fed by the guarded file-peek path (§7)
+— hosted artifacts are never embedded and entry content
+is never executed; content the peek refuses (truncated,
+binary, withheld) falls back to the recorded-state
+summary with the reason shown. Per-item messages anchor
+to the entry exactly as for mockups; exhibit annotations
+are not offered on artifact items (the sandboxed frame
+cannot be selected into). View modes are list + drill-in
+only — the storyboard and contact-sheet modes stay
+Mockups-only. Supersede pickers scope to the item's own
+collection; the lib supersede operation stays kind-blind.
 
 ## 9. Mockup authoring + promotion
 
@@ -621,11 +702,24 @@ The v1 registry checks:
   well-formed, and declared state values conform to it;
   standard frame; kit/token usage only; no variant files;
   no explanatory prose in exhibits.
+- Artifact question-completeness (kind `artifact` only):
+  state schema declared and well-formed, and every field
+  that declares a question carries a valid recommendation
+  (one of the field's options, or a boolean for a toggle).
 
-An entry failing the uniformity validators cannot
-transition to canonical — the approve / set-status path
-runs them (§6), so a non-uniform mockup cannot be approved
-by accident.
+Uniformity scopes per kind. The design discipline (§9)
+binds the design kinds; kind `artifact` binds
+question-completeness instead — an explainer page is prose
+with its own styling by design, so the frame, kit/token,
+variant-file, and prose checks do not run on it. Both
+kinds keep the schema well-formedness and entry-dir /
+main-file presence checks. Validators never fork per
+project — the scope is the kind, everywhere.
+
+An entry failing the uniformity validators for its kind
+cannot transition to canonical — the approve / set-status
+path runs them (§6), so a non-uniform entry cannot be
+approved by accident.
 
 ## 11. Fundamentals (approved 2026-10-25, with amendments)
 
@@ -835,7 +929,7 @@ todos live in the registry DB (§4.3); board sources are
 exactly the three in §8.4; mockup registry data is
 untracked in the adopting project (§2); the server is
 always-on (§7); review happens in the viewer (§8.1);
-another-project is excluded (§0); fundamentals are approved and
+another-project is registered (§0); fundamentals are approved and
 wired in (§11), including multiple palette themes (not
 just green) and the themes-folder CSS organization with
 its fallback.
@@ -870,6 +964,10 @@ for one project.)
   `state_schema` / `state_json` (per-entry declared state,
   §14.4), `spec_ref` / `plan_ref` / link references, and
   files under the entry dir.
+- The `artifact` kind value (§4.1) is this escape valve in
+  use: a whole sibling collection (§8.5) entered through
+  one new kind value and a feed split, with no schema
+  change, no `user_version` bump, and no project fork.
 
 ### 14.2 The uniformity test
 
@@ -889,6 +987,13 @@ result, in every adopting repo. Channels: **V** = viewer,
 **C** = `wb` CLI, **S** = the same lib/ mutation served by
 the server (V and S are one path, §1.1).
 
+The browse, review, lifecycle, state, and files
+interactions in this catalogue apply to both collections
+— Mockups and Artifacts. Each collection's feed serves
+only its own kinds (§4.1), so per-collection counts,
+filters, and triage stay honest; the gestures over an
+entry are identical whichever collection it lives in.
+
 Discover & orient:
 
 - List the swept projects; switch project context; rescan
@@ -899,7 +1004,7 @@ Discover & orient:
 - Combined cross-project views (todos, board) with the
   project always labeled. **[V]**
 
-Browse & inspect mockups:
+Browse & inspect entries (both collections):
 
 - List entries; filter by ruled status, kind, archived,
   staleness, triage reason; open one entry. **[V/C]**
@@ -987,12 +1092,21 @@ over:
 - Each entry's declared `state_schema`: the SET of controls
   differs per entry; the control TYPES, their rendering,
   and the edit → re-render → approval-coverage behaviour
-  are uniform.
+  are uniform. Rendering includes the question form: a
+  field declaring a `question` renders as a decision
+  block whose select options are full-width rows carrying
+  the recommended badge and the option's explanation
+  inside the row — each fact stated once — for every
+  entry in every project.
 - Per-project staleness thresholds (`thresholds.json`, §5.2):
   values differ; the verdict mechanics do not.
 - Which sections a manifest declares (§2): an absent
   section is uniformly absent, never a project-specific
   substitute.
+- The Artifacts collection (§8.5) rides the manifest's
+  `registry` declaration: it exists exactly where Mockups
+  exists, under the same declaration — it has no manifest
+  key of its own.
 
 ### 14.5 What is NOT uniform (by design)
 

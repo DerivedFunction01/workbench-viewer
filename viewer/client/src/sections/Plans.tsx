@@ -43,6 +43,8 @@ import { anchor } from "./plans/anchors";
 import { ChangesPanel, WorktreeChanges } from "./plans/ChangesPanel";
 import { groupBundles, type PlanGroupEntry, type PlanGrouping } from "./plans/grouping";
 import { BlockView, MarkdownBlock, StepBlock } from "./plans/PlanBody";
+import { QuestionsPanel } from "./plans/QuestionsPanel";
+import { sectionPresentation } from "./plans/questions";
 import { normalizeText } from "./plans/relocation";
 import {
   DegradedBanner,
@@ -724,6 +726,10 @@ function PlanReader({
             const showSteps = section.is_steps && !stepsRendered && doc.steps.length > 0;
             if (showSteps) stepsRendered = true;
             const sectionAnchor = anchor.section(section.heading);
+            const { blocks: sectionBlocks, showQuestions } = sectionPresentation(
+              section,
+              doc.questions.length,
+            );
             return (
               <div key={section.heading}>
                 <div
@@ -777,7 +783,7 @@ function PlanReader({
                           paddingLeft: "var(--wb-space-16)",
                         }}
                       >
-                        {section.blocks.map((block) => (
+                        {sectionBlocks.map((block) => (
                           <BlockView
                             key={blockKey(block.raw)}
                             block={block}
@@ -787,7 +793,7 @@ function PlanReader({
                         ))}
                       </div>
                     ) : (
-                      section.blocks.map((block) => (
+                      sectionBlocks.map((block) => (
                         <BlockView
                           key={blockKey(block.raw)}
                           block={block}
@@ -800,6 +806,9 @@ function PlanReader({
                   {railAside(sectionAnchor)}
                 </div>
                 {activeArmed?.hostAnchor === sectionAnchor ? composer : null}
+                {showQuestions ? (
+                  <QuestionsPanel key={doc.file_sha256} slug={slug} path={path} doc={doc} />
+                ) : null}
               </div>
             );
           })}

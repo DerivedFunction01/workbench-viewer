@@ -26,8 +26,16 @@ bootstrap plan):
     `## Implementation steps`) or after a bare `Steps:` line.
 Numbered lists elsewhere (goals, open questions) are NOT
 steps: steps are only read inside a steps region.
+  - Resolvable questions (plan syntax standard): an item in
+    an open-questions section may carry a `wb-question`
+    sentinel comment with its structured form; well-formed
+    sentinels join the payload as `questions` records and
+    malformed ones are reported in `sentinel_errors` — the
+    question itself still renders as plain markdown, and
+    sentinel lines never fold into an item's text.
 """
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -227,6 +235,18 @@ def _is_steps_heading(heading: str) -> bool:
     return bool(heading) and "step" in heading.lower()
 
 
+def _is_questions_heading(heading: str) -> bool:
+    """The one questions-section rule (plan syntax
+    standard): the normalized heading — the partition
+    already trimmed it; casefolded here — starts with
+    "open questions", so "Open questions for the owner"
+    is the questions section and "Plan open questions"
+    is not. The section flag and both extractions (sentinel
+    questions, task-list open questions) hang off this
+    predicate and no other."""
+    return heading.casefold().startswith("open questions")
+
+
 def _unfenced(lines):
     """The lines outside fenced blocks: quoted examples in
     a section (a fenced sample task list, say) are not the
@@ -248,7 +268,15 @@ def _extract_open_questions(body_lines):
     task items yields [], never an error."""
     items = []
     current = None
+    in_sentinel = False
     for line in _unfenced(body_lines):
+        if line.strip() == _SENTINEL_OPEN:
+            in_sentinel = True
+            continue
+        if in_sentinel:
+            if line.strip() == _SENTINEL_CLOSE:
+                in_sentinel = False
+            continue
         m = _TASK_ITEM_RE.match(line)
         if m:
             current = {"text": m.group(2).strip(),
@@ -257,6 +285,271 @@ def _extract_open_questions(body_lines):
         elif current is not None and line.strip():
             current["text"] += "\n" + line.strip()
     return items
+
+
+_SENTINEL_OPEN = "<!-- wb-question"
+_SENTINEL_CLOSE = "-->"
+_QUESTION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_QUESTION_TYPES = ("choice", "toggle", "text")
+_QUESTION_FIELDS = {"id", "type", "options", "labels",
+                    "recommended", "answer"}
+_NUMBERED_ITEM_RE = re.compile(r"^(\d+)[.)]\s+(.*)$")
+
+
+def _split_values(raw: str) -> list:
+    return [v.strip() for v in raw.split("|")]
+
+
+def _validate_sentinel(fields: dict, *, item, seen_ids: set,
+                       sentinel_line: int):
+    """Validate one sentinel's field map against the
+    grammar (plan syntax standard, Resolvable questions).
+    Returns (record | None, errors): every broken rule is
+    an error, and any error means no record — the question
+    degrades to plain rendering. `fields` maps key → value
+    with duplicates already collapsed to a marker error by
+    the caller via the `_dupes` key."""
+    errors = []
+
+    def err(reason):
+        errors.append({"line": sentinel_line,
+                       "id": fields.get("id"),
+                       "reason": reason})
+
+    for key in fields.get("_dupes", []):
+        err(f"duplicate field: {key}")
+    for key in fields:
+        if not key.startswith("_") \
+                and key not in _QUESTION_FIELDS:
+            err(f"unknown field: {key}")
+    qid = fields.get("id")
+    if qid is None:
+        err("missing field: id")
+    elif not _QUESTION_ID_RE.match(qid):
+        err(f"id is not a slug: {qid!r}")
+    elif qid in seen_ids:
+        err(f"duplicate question id: {qid}")
+    qtype = fields.get("type")
+    if qtype is None:
+        err("missing field: type")
+    elif qtype not in _QUESTION_TYPES:
+        err(f"unknown question type: {qtype!r}")
+    if "answer" not in fields:
+        err("missing field: answer")
+    answer = fields.get("answer", "")
+    options = labels = None
+    recommended = fields.get("recommended")
+    if qtype == "choice":
+        if "options" not in fields:
+            err("choice question has no options field")
+        else:
+            options = _split_values(fields["options"])
+            if len(options) < 2:
+                err("choice needs at least two options")
+            if any(not v for v in options):
+                err("options must not contain empty values")
+            if len(set(options)) != len(options):
+                err("options must not repeat a value")
+        if "labels" in fields:
+            err("labels is only valid for toggle questions")
+        if recommended is not None and options is not None \
+                and recommended not in options:
+            err("recommended is not one of the options")
+        if answer and options is not None \
+                and answer not in options:
+            err("answer is not one of the options")
+    elif qtype == "toggle":
+        if "labels" not in fields:
+            err("toggle question has no labels field")
+        else:
+            labels = _split_values(fields["labels"])
+            if len(labels) != 2:
+                err("toggle needs exactly two labels")
+            if any(not v for v in labels):
+                err("labels must not be empty")
+        if "options" in fields:
+            err("options is only valid for choice questions")
+        if recommended is not None and labels is not None \
+                and recommended not in labels:
+            err("recommended is not one of the labels")
+        if answer and labels is not None \
+                and answer not in labels:
+            err("answer is not one of the labels")
+    elif qtype == "text":
+        for key in ("options", "labels", "recommended"):
+            if key in fields:
+                err(f"{key} is not valid for text questions")
+    if item["kind"] == "task":
+        if item["checked"] != bool(answer):
+            err("checkbox and answer disagree: a checked "
+                "item needs a recorded answer, an answered "
+                "item must be checked")
+    if errors:
+        return None, errors
+    seen_ids.add(qid)
+    record = {
+        "id": qid,
+        "type": qtype,
+        "text": item["text"],
+        "detail": "\n".join(item["detail"]),
+        "options": options,
+        "labels": labels,
+        "recommended": recommended,
+        "answer": answer,
+        "checked": item["checked"] if item["kind"] == "task"
+                   else bool(answer),
+        "item_kind": item["kind"],
+        "line": item["line"],
+        "sentinel_line": sentinel_line,
+        "answer_line": fields["_answer_line"],
+    }
+    return record, []
+
+
+def _extract_questions(body_lines, line_offset: int,
+                       seen_ids: set):
+    """Sentinel-bearing questions of one open-questions
+    section (plan syntax standard, Resolvable questions).
+    An item is a task-list item in the canonical form;
+    numbered and plain-bullet items are the tolerated
+    legacy attachment. Items sit at the section's first
+    item's indentation — deeper list lines are the item's
+    own continuation and fold into its detail. Fenced
+    regions are examples: no items, no sentinels. A
+    sentinel validates the moment it closes; a valid one
+    appends its question record, a broken one appends
+    sentinel_errors and the question stays plain.
+    Returns (questions, sentinel_errors, covered):
+    covered is the set of absolute line numbers a valid
+    question item consumed — its first line, the detail
+    lines folded in before its sentinel, and the
+    sentinel's own lines. The caller renders everything
+    else in the section as leftover markdown, so a valid
+    question renders exactly once (in the Questions
+    card) and nothing else is dropped."""
+    questions = []
+    errors = []
+    covered = set()
+    current = None
+    item_indent = None
+    in_fence = False
+    i = 0
+    while i < len(body_lines):
+        line = body_lines[i]
+        abs_line = line_offset + i
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            i += 1
+            continue
+        if in_fence:
+            i += 1
+            continue
+        if line.strip() == _SENTINEL_OPEN:
+            start = abs_line
+            raw_fields = []
+            j = i + 1
+            closed = False
+            while j < len(body_lines):
+                inner = body_lines[j]
+                if _FENCE_RE.match(inner):
+                    break
+                if inner.strip() == _SENTINEL_CLOSE:
+                    closed = True
+                    break
+                raw_fields.append(inner)
+                j += 1
+            sentinel_lines = [line_offset + k
+                              for k in range(i, j + 1)] \
+                if closed else []
+            if current is None:
+                errors.append({
+                    "line": start, "id": None,
+                    "reason": "stray sentinel: no question "
+                              "item above it in the section"})
+            elif current["sentinel"] is not None:
+                errors.append({
+                    "line": start,
+                    "id": current["sentinel"].get("id"),
+                    "reason": "second sentinel on one "
+                              "question item"})
+            elif not closed:
+                errors.append({
+                    "line": start, "id": None,
+                    "reason": "unterminated sentinel: no "
+                              "closing --> line"})
+            else:
+                fields = {}
+                dupes = []
+                malformed = None
+                for k, raw in enumerate(raw_fields):
+                    if not raw.strip():
+                        malformed = "blank line inside the " \
+                                    "sentinel"
+                        break
+                    if "=" not in raw:
+                        malformed = f"sentinel line is not " \
+                                    f"key=value: {raw.strip()!r}"
+                        break
+                    key, _, value = raw.partition("=")
+                    key = key.strip()
+                    if key in fields:
+                        dupes.append(key)
+                    fields[key] = value.strip()
+                    if key == "answer":
+                        fields["_answer_line"] = \
+                            line_offset + i + 1 + k
+                if malformed is not None:
+                    errors.append({"line": start, "id": None,
+                                   "reason": malformed})
+                else:
+                    if dupes:
+                        fields["_dupes"] = dupes
+                    current["sentinel"] = fields
+                    record, errs = _validate_sentinel(
+                        fields, item=current,
+                        seen_ids=seen_ids,
+                        sentinel_line=start)
+                    errors.extend(errs)
+                    if record is not None:
+                        questions.append(record)
+                        covered.update(current["lines"])
+                        covered.update(sentinel_lines)
+            i = j + 1 if closed else len(body_lines)
+            continue
+        indent = len(line) - len(line.lstrip())
+        task = _TASK_ITEM_RE.match(line)
+        numbered = _NUMBERED_ITEM_RE.match(line) \
+            if not task else None
+        bullet = _BULLET_RE.match(line) \
+            if not task and not numbered else None
+        is_item = (task or numbered or bullet) is not None \
+            and (item_indent is None or indent == item_indent)
+        if is_item:
+            if item_indent is None:
+                item_indent = indent
+            if task:
+                kind = "task"
+                text = task.group(2).strip()
+                checked = task.group(1).lower() == "x"
+            elif numbered:
+                kind = "numbered"
+                text = numbered.group(2).strip()
+                checked = False
+            else:
+                kind = "bullet"
+                text = bullet.group(1).strip()
+                checked = False
+            current = {"kind": kind, "text": text,
+                       "checked": checked, "detail": [],
+                       "line": abs_line, "sentinel": None,
+                       "lines": [abs_line]}
+            i += 1
+            continue
+        if current is not None and line.strip():
+            current["detail"].append(line.strip())
+            current["lines"].append(abs_line)
+        i += 1
+    return questions, errors, covered
 
 
 def _extract_subplans(body_lines):
@@ -348,32 +641,56 @@ def parse_plan(text: str, *, path: str = "") -> dict:
             break
     steps = []
     open_questions = []
+    questions = []
+    sentinel_errors = []
+    seen_question_ids = set()
+    questions_section_seen = False
     subplans = []
     critical_files = []
     out_sections = []
+    section_offset = len(header_lines)
     for sec in sections:
         body_lines = sec["lines"][1:]
+        body_offset = section_offset + 1
+        section_offset += len(sec["lines"])
         sec_steps = []
         if _is_steps_heading(sec["heading"]) or any(
                 _STEPS_INTRO_RE.match(ln.strip())
                 for ln in body_lines):
             sec_steps = _extract_steps(body_lines)
             steps.extend(sec_steps)
-        is_open_questions = \
-            sec["heading"].lower() == "open questions"
+        # One questions section per plan: the first
+        # section matching the one heading rule is flagged
+        # and extracted from; a later match is ordinary.
+        is_open_questions = False
+        if not questions_section_seen \
+                and _is_questions_heading(sec["heading"]):
+            is_open_questions = True
+            questions_section_seen = True
         is_subplans = sec["heading"].lower() == "subplans"
         is_critical_files = \
             sec["heading"].lower() == "critical files"
+        sec_leftover_blocks = None
         if is_open_questions:
             open_questions.extend(
                 _extract_open_questions(body_lines))
+            sec_questions, sec_errors, sec_covered = \
+                _extract_questions(
+                    body_lines, body_offset, seen_question_ids)
+            questions.extend(sec_questions)
+            sentinel_errors.extend(sec_errors)
+            leftover_lines = [
+                ln for idx, ln in enumerate(body_lines)
+                if body_offset + idx not in sec_covered]
+            sec_leftover_blocks = _split_fences(
+                leftover_lines)
         if is_subplans:
             subplans.extend(
                 _extract_subplans(body_lines))
         if is_critical_files:
             critical_files.extend(
                 _extract_critical_files(body_lines))
-        out_sections.append({
+        out_section = {
             "heading": sec["heading"],
             "level": sec["level"],
             "raw": "\n".join(sec["lines"]),
@@ -383,7 +700,15 @@ def parse_plan(text: str, *, path: str = "") -> dict:
             "is_open_questions": is_open_questions,
             "is_subplans": is_subplans,
             "is_critical_files": is_critical_files,
-        })
+        }
+        if sec_leftover_blocks is not None:
+            # The reader renders these in place of `blocks`
+            # when the Questions card shows, so a valid
+            # question renders once and nothing else in
+            # the section is dropped.
+            out_section["leftover_blocks"] = \
+                sec_leftover_blocks
+        out_sections.append(out_section)
     conforming = status_raw is not None
     return {
         "path": path,
@@ -398,6 +723,8 @@ def parse_plan(text: str, *, path: str = "") -> dict:
         "step_count": len(steps),
         "open_questions": open_questions,
         "open_questions_count": len(open_questions),
+        "questions": questions,
+        "sentinel_errors": sentinel_errors,
         "subplans": subplans,
         "critical_files": critical_files,
         "mermaid_count": sum(
@@ -427,6 +754,7 @@ def _summary(doc: dict, rel: str, archived: bool,
         "conforming": doc["conforming"],
         "step_count": doc["step_count"],
         "open_questions_count": doc["open_questions_count"],
+        "questions": doc["questions"],
         "subplans_count": len(doc["subplans"]),
         "mermaid_count": doc["mermaid_count"],
         "archived": archived,
@@ -464,10 +792,69 @@ def load_plan(plans_dir, rel: str) -> dict:
     if plans_dir not in target.parents or target.suffix != ".md":
         raise ValueError(f"plan path escapes the plans dir: "
                          f"{rel!r}")
-    doc = parse_plan(target.read_text(encoding="utf-8"),
-                     path=rel)
+    raw = target.read_bytes()
+    doc = parse_plan(raw.decode("utf-8"), path=rel)
     archived = rel.startswith("finished/")
     doc["status_bucket"] = status_bucket(doc["status_raw"],
                                          archived=archived)
     doc["archived"] = archived
+    doc["file_sha256"] = hashlib.sha256(raw).hexdigest()
     return doc
+
+
+def apply_answers(text: str, answers: dict) -> str:
+    """Compose a resolution into plan source: for each
+    {question id: answer}, fill the sentinel's `answer`
+    field and — for a task-list item — check its box.
+    Every other byte is preserved: the edit replaces whole
+    lines located by a fresh parse of the given text, and
+    split/join on "\\n" is the identity. Raises ValueError
+    naming the problem (unknown id, an answer the
+    question's type refuses, an empty answer) and changes
+    nothing — the caller writes only on success."""
+    if not isinstance(answers, dict) or not answers:
+        raise ValueError("answers must be a non-empty map "
+                         "of question id to answer")
+    doc = parse_plan(text)
+    by_id = {q["id"]: q for q in doc["questions"]}
+    lines = text.split("\n")
+    edits = {}
+    for qid, answer in answers.items():
+        q = by_id.get(qid)
+        if q is None:
+            raise ValueError(f"unknown question id: {qid!r}")
+        if not isinstance(answer, str) \
+                or not answer.strip():
+            raise ValueError(
+                f"answer for {qid} must be non-empty text")
+        if "\n" in answer:
+            raise ValueError(
+                f"answer for {qid} must be a single line")
+        answer = answer.strip()
+        if q["type"] == "choice" \
+                and answer not in q["options"]:
+            raise ValueError(
+                f"answer for {qid} must be one of its "
+                f"options, got {answer!r}")
+        if q["type"] == "toggle" \
+                and answer not in q["labels"]:
+            raise ValueError(
+                f"answer for {qid} must be one of its "
+                f"labels, got {answer!r}")
+        aline = q["answer_line"]
+        raw = lines[aline]
+        indent = raw[:len(raw) - len(raw.lstrip())]
+        edits[aline] = f"{indent}answer={answer}"
+        if q["item_kind"] == "task":
+            iline = q["line"]
+            item_line = lines[iline]
+            m = re.match(r"^(\s*- \[)([ xX])(\])", item_line)
+            if m is None:
+                raise ValueError(
+                    f"question {qid}: its item line no "
+                    f"longer parses as a task item")
+            edits[iline] = item_line[:m.start(2)] + "x" \
+                + item_line[m.end(2):]
+    for idx, new_line in edits.items():
+        lines[idx] = new_line
+    return "\n".join(lines)

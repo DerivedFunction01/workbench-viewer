@@ -211,6 +211,69 @@ class TestUniformityGate(Fixture):
                            ruling="r", layout=self.layout)
 
 
+class TestArtifactKind(Fixture):
+    """Kind artifact (Artifacts collection): the lifecycle
+    is kind-blind, but uniformity scopes per kind — the
+    design discipline does not bind a disposition sheet,
+    and question-completeness binds it instead (SPEC §10).
+    """
+    PROSE_HTML = ("<html><body><p style='color: #cc0000'>"
+                  "A long explanation, styled its own way."
+                  "</p></body></html>\n")
+    SCHEMA = {"decision": {"type": "select",
+                           "options": ["go", "hold"],
+                           "question": "Proceed?",
+                           "recommended": "go",
+                           "option_notes": {"go": "unblocks"}}}
+
+    def _plant(self, slug, kind, schema):
+        e = self.add(slug, kind=kind, state_schema=schema)
+        main = Path(e["entry_dir"]) / "mock.html"
+        main.write_text(self.PROSE_HTML)
+        reg.verify_entry(self.db, slug, accept_drift=True)
+        return e
+
+    def test_add_accepts_artifact_refuses_unknown_kind(self):
+        e = self.add("sheet", kind="artifact")
+        self.assertEqual(e["kind"], "artifact")
+        with self.assertRaises(reg.RegistryError):
+            self.add("other", kind="widget")
+
+    def test_artifact_canonical_despite_design_discipline(self):
+        self._plant("sheet", "artifact", self.SCHEMA)
+        ok = reg.set_status(self.db, "sheet", "canonical",
+                            ruling="answered",
+                            layout=self.layout)
+        self.assertEqual(ok["status"], "canonical")
+
+    def test_artifact_approve_despite_design_discipline(self):
+        self._plant("sheet", "artifact", self.SCHEMA)
+        reg.review_entry(self.db, "sheet", "approve",
+                         actor="viewer", layout=self.layout)
+        latest = reg.latest_review(self.db, "sheet")
+        self.assertEqual(latest["payload"]["disposition"],
+                         "approve")
+
+    def test_same_file_refused_for_design_kind(self):
+        self._plant("mock", "mockup", None)
+        with self.assertRaises(reg.UniformityRefused):
+            reg.set_status(self.db, "mock", "canonical",
+                           ruling="looks fine",
+                           layout=self.layout)
+        with self.assertRaises(reg.UniformityRefused):
+            reg.review_entry(self.db, "mock", "approve",
+                             actor="viewer", layout=self.layout)
+
+    def test_question_without_recommendation_refused(self):
+        bare = {"decision": {"type": "select",
+                             "options": ["go", "hold"],
+                             "question": "Proceed?"}}
+        self._plant("sheet", "artifact", bare)
+        with self.assertRaises(reg.UniformityRefused):
+            reg.set_status(self.db, "sheet", "canonical",
+                           ruling="answered", layout=self.layout)
+
+
 class TestStateAndApproval(Fixture):
     SCHEMA = {"density": {"type": "select",
                           "options": ["cozy", "compact"]},

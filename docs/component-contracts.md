@@ -340,7 +340,9 @@ look like this; text inside the track.
 Purpose: one choice from a small enum, rendered as a
 segmented track. The shared primitive under ModeControl,
 PaletteSelect (few-option form), DensityToggle, filter
-segmenteds, and StateControls `select` fields.
+segmenteds, and StateControls non-question `select`
+fields (a `select` field that declares a `question`
+renders option rows instead — see #statecontrols).
 Semantics: NATIVE radio inputs (visually hidden, labels
 styled as segments) in a `<fieldset>` whose `<legend>`
 is the control's label — the
@@ -349,6 +351,14 @@ stop per group, ←/→ move + select, the checked segment
 carries the segment styling via `peer-checked`, and the
 focus ring renders on the segment via
 `peer-focus-visible`.
+
+Wrap guarantee: a segment's label wraps INSIDE its pill
+— there is no `nowrap` anywhere in this control — and a
+pill never exceeds the fieldset's width (the label and
+the segment carry `min-width: 0`, the label also
+`max-width: 100%`). A too-long label grows its pill
+taller, never wider than the track. Short labels are
+unaffected: they render single-line exactly as before.
 
 Props:
 
@@ -380,7 +390,9 @@ min-height 30px inside a ≥38px control row, padding
 
 Never: more than 5 options (use a select — see
 PaletteSelect); icons without text labels; multi-select
-(that is Chip's pressable form or checkboxes, not this).
+(that is Chip's pressable form or checkboxes, not this);
+a segment label forced onto one line (`nowrap`) — see
+the wrap guarantee above.
 
 ## ModeControl — appearance setting (shell contract)
 
@@ -777,6 +789,9 @@ type StateFieldSpec = {
   default?: unknown;
   label?: string;       // display override; default = humanized key
   min?: number; max?: number; step?: number;  // number only
+  question?: string;    // decision prompt — the field renders as a decision block (SPEC §5.1)
+  recommended?: unknown; // the recommended value (toggle/select/text/number)
+  option_notes?: Record<string, string>; // per-option explanations, select only
 };
 type StateSchema = Record<string, StateFieldSpec>;
 type StateValues = Record<string, boolean | string | number>;
@@ -791,8 +806,9 @@ type StateControlsProps = {
 };
 ```
 
-Control mapping (one row per key, in schema order:
-label left, control right):
+Control mapping (fields WITHOUT a question: one row per
+key, in schema order — label left, control right; on
+phone the row stacks: label above, control full width):
 
 | Field type | Control | Notes |
 |---|---|---|
@@ -800,6 +816,31 @@ label left, control right):
 | select | `SegmentedControl` if ≤4 options, else native `<select>` | value must be one of `options` |
 | number | stepper: ghost `Button` − / + around a numeric input | respects `min`/`max`/`step`; typed input commits on change |
 | text | text input | commits on change |
+
+Question fields — DECISION BLOCKS. A field whose spec
+declares a `question` renders as a decision block, not a
+label/control row: the field's short label as a small
+muted eyebrow, the question as the prompt, then the
+control — there is no side-by-side label column. For a
+`select` question the control is a fieldset of
+full-width OPTION ROWS (native radios, the
+SegmentedControl semantics: one Tab stop per group,
+arrows move + select) at ANY option count. Each row
+carries, in one unit: the option label (wrapping
+freely, never `nowrap`), a "· recommended" badge on the
+recommended option, and the option's `option_notes`
+text as the row's secondary text; the selected row
+takes the checked-segment styling (1px
+`--wb-border-default`, `--wb-surface-2`, semibold
+label). EACH FACT IS STATED ONCE: the badge lives in
+the row and the explanation lives in the row — NO notes
+block and NO recommended line render under a select
+question. Toggle questions render prompt + `Toggle` +
+the Recommended line; text/number questions render
+prompt + control + the Recommended line. (For
+non-question fields the mapping table above is
+unchanged, including the notes block under a select
+that declares `option_notes` without a question.)
 
 **Invalid schema ⇒ honest error, never a crash.** The
 component validates defensively at render (schema not an
@@ -819,6 +860,9 @@ Appearance matrix (panel + controls):
 | panel | `--wb-surface-2` | 1px `--wb-border-default`, radius `--wb-panel-radius`, padding `--wb-panel-padding` | — |
 | panel heading | — | — | 12px uppercase `--wb-content-secondary` |
 | row label | — | — | `--wb-content-primary`, 14px |
+| question eyebrow | — | — | 12px uppercase semibold `--wb-content-muted` |
+| question option row / unselected | transparent | none | `--wb-content-secondary` |
+| question option row / selected | `--wb-surface-2` | 1px `--wb-border-default` | `--wb-content-primary` (semibold label) |
 | select (>4) / text / number input / default | `--wb-surface-2` | 1px `--wb-border-default`, radius `--wb-button-radius` | `--wb-content-primary` |
 | input / hover | `--wb-surface-2` | 1px `--wb-border-strong` | `--wb-content-primary` |
 | input / focus-visible | `--wb-surface-2` + ring `--wb-focus-ring` | 1px `--wb-border-default` | `--wb-content-primary` |
@@ -828,7 +872,10 @@ Appearance matrix (panel + controls):
 Never: a control type outside the four above (a schema
 asking for one is an invalid schema — error row, not a
 new control); controls scattered outside the panel;
-mutating `values` (events out only).
+mutating `values` (events out only); stating an option,
+its explanation, or "recommended" twice for one field
+(e.g. a pill plus a notes block under it); a `nowrap`
+option label anywhere in a question block.
 
 ## Specimen — the kit specimen harness (not a section component)
 

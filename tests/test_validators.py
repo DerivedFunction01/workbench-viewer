@@ -72,5 +72,38 @@ class TestValidators(unittest.TestCase):
         self.assertIn("uniformity", names)
 
 
+class TestQuestionSchema(unittest.TestCase):
+    """The question / recommended / option_notes field-spec
+    keys (kind-agnostic, SPEC §14.4): validity is
+    check_state_schema's job."""
+
+    def test_recommended_outside_options_refused(self):
+        self.assertIsNotNone(val.check_state_schema(
+            {"d": {"type": "select", "options": ["a", "b"],
+                   "question": "Which?",
+                   "recommended": "zzz"}}))
+
+    def test_recommended_toggle_must_be_boolean(self):
+        self.assertIsNotNone(val.check_state_schema(
+            {"t": {"type": "toggle", "question": "On?",
+                   "recommended": "yes"}}))
+        self.assertIsNone(val.check_state_schema(
+            {"t": {"type": "toggle", "question": "On?",
+                   "recommended": True}}))
+
+    def test_option_notes_keys_must_be_options(self):
+        self.assertIsNotNone(val.check_state_schema(
+            {"d": {"type": "select", "options": ["a"],
+                   "option_notes": {"zzz": "why"}}}))
+        self.assertIsNone(val.check_state_schema(
+            {"d": {"type": "select", "options": ["a"],
+                   "question": "Which?", "recommended": "a",
+                   "option_notes": {"a": "why"}}}))
+
+    def test_question_must_be_text(self):
+        self.assertIsNotNone(val.check_state_schema(
+            {"d": {"type": "text", "question": 42}}))
+
+
 if __name__ == "__main__":
     unittest.main()

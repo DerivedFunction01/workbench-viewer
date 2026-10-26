@@ -30,7 +30,7 @@ from .util import now_iso, sha256_file, state_sha256
 STATUSES = ("canonical", "implemented", "deferred",
             "unexplored", "hard-gate", "abandoned")
 KINDS = ("mockup", "prototype", "test-route",
-         "component-variant", "storyboard")
+         "component-variant", "storyboard", "artifact")
 SOURCE_KINDS = ("entry-dir", "artifact-slug", "external")
 TODO_STATUSES = ("todo", "doing", "done")
 REVIEW_DISPOSITIONS = ("approve", "needs-changes", "stale")

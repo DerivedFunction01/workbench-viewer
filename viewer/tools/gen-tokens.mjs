@@ -234,7 +234,16 @@ const indexCss =
   "\n@theme {\n" +
   themeLines.join("\n") +
   "\n}\n" +
-  "\nbody {\n  font-family: var(--wb-font-ui);\n  background: var(--wb-surface-canvas);\n  color: var(--wb-content-primary);\n}\n" +
+  // Scroll chain (phone scroll hardening): a boundary pull
+  // on the shell's inner scroller must never chain to the
+  // host — in the artifact webview that chain is what
+  // triggers pull-to-refresh. overscroll-behavior is not
+  // inherited, so every element that can sit in the chain
+  // refuses it: html, body, and the SDK shell wrapper here;
+  // the App shell roots and <main> elements carry it inline.
+  "\nhtml {\n  overscroll-behavior: none;\n}\n" +
+  "\nbody {\n  font-family: var(--wb-font-ui);\n  background: var(--wb-surface-canvas);\n  color: var(--wb-content-primary);\n  overscroll-behavior: none;\n}\n" +
+  "\n.hatch-space-root {\n  overscroll-behavior: none;\n}\n" +
   '\n.num {\n  font-feature-settings: "tnum";\n}\n' +
   '\n.mono {\n  font-family: var(--wb-font-mono);\n  font-feature-settings: "zero";\n}\n' +
   // Task lists (plan syntax standard): marked already emits

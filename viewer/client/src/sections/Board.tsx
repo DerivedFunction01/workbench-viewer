@@ -14,7 +14,7 @@ import { useState } from "react";
 import { Button } from "../components/Button";
 import { Lane } from "../components/Lane";
 import { api, type BoardPayload, type BoardPlan, type ReviewItem, type TodoItem } from "../lib/api";
-import { todoStatusLabel } from "../lib/labels";
+import { kindLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
 import { anchor } from "./plans/anchors";
@@ -245,10 +245,19 @@ export function BoardSection({
       draggable={false}
       onOpen={() => {
         if (item.project) {
-          window.location.hash = sectionHref(item.project, "mockups", item.id);
+          // Each card opens in its own collection: an
+          // artifact item lands on its Artifacts detail,
+          // a design-kind entry on Mockups (SPEC §8.4).
+          const section = item.kind === "artifact" ? "artifacts" : "mockups";
+          window.location.hash = sectionHref(item.project, section, item.id);
         }
       }}
-      footer={<>{(item.reasons ?? []).join(" · ") || "awaiting review"} · derived</>}
+      footer={
+        <>
+          {kindLabel(item.kind ?? "mockup")} ·{" "}
+          {(item.reasons ?? []).join(" · ") || "awaiting review"} · derived
+        </>
+      }
     />
   );
 

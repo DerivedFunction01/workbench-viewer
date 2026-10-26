@@ -134,7 +134,16 @@ def entry_detail(db_path, entry_id) -> dict:
     }
 
 
-def mockups_feed(project, *, archived: bool) -> dict:
+DESIGN_KINDS = tuple(k for k in reg.KINDS if k != "artifact")
+ARTIFACT_KINDS = ("artifact",)
+
+
+def _entries_feed(project, *, archived: bool, kinds) -> dict:
+    """One collection's feed over the shared registry: the
+    collection boundary is the kind filter — entries and
+    triage serve only the given kinds, while the export and
+    the reconcile block stay whole-store (entry dirs share
+    one tree)."""
     m = project.manifest
     base = {"slug": project.slug, "name": project.name,
             "degraded": False}
@@ -153,16 +162,18 @@ def mockups_feed(project, *, archived: bool) -> dict:
         data = export_mod.build_export(m.registry,
                                        project=project.slug)
         entries = [e for e in data["entries"]
-                   if bool(e["archived"]) == archived]
+                   if bool(e["archived"]) == archived
+                   and e["kind"] in kinds]
         triage = []
         for e in data["entries"]:
-            if e["archived"]:
+            if e["archived"] or e["kind"] not in kinds:
                 continue
             reasons = staleness.triage_reasons(
                 e, e["derived"],
                 reg.latest_review(m.registry, e["id"]))
             if reasons:
                 triage.append({"id": e["id"], "title": e["title"],
+                               "kind": e["kind"],
                                "reasons": reasons})
         return {**base, "available": True, "entries": entries,
                 "triage": triage,
@@ -172,6 +183,16 @@ def mockups_feed(project, *, archived: bool) -> dict:
         return degraded({**base, "available": True,
                          "entries": [], "triage": [],
                          "reconcile": None}, e)
+
+
+def mockups_feed(project, *, archived: bool) -> dict:
+    return _entries_feed(project, archived=archived,
+                         kinds=DESIGN_KINDS)
+
+
+def artifacts_feed(project, *, archived: bool) -> dict:
+    return _entries_feed(project, archived=archived,
+                         kinds=ARTIFACT_KINDS)
 
 
 def todos_feed(project) -> dict:
@@ -272,14 +293,17 @@ def board_feed() -> dict:
                  "feature": bundle.get("feature"),
                  "project": project.slug,
                  "project_name": project.name})
-        mf = mockups_feed(project, archived=False)
-        if mf["degraded"]:
-            errors.append({"slug": project.slug,
-                           "reason": mf["reason"]})
-        for item in mf.get("triage", []):
-            review_queue.append(
-                {**item, "project": project.slug,
-                 "project_name": project.name})
+        for feed in (mockups_feed(project, archived=False),
+                     artifacts_feed(project, archived=False)):
+            if feed["degraded"]:
+                errors.append({"slug": project.slug,
+                               "reason": feed["reason"]})
+            # The two collections' kinds are disjoint, so the
+            # union cannot double-count an item.
+            for item in feed.get("triage", []):
+                review_queue.append(
+                    {**item, "project": project.slug,
+                     "project_name": project.name})
     return {"todos": lanes, "plans": plan_cards,
             "review_queue": review_queue, "errors": errors,
             "sweep_errors": result.errors}
@@ -727,6 +751,65 @@ def todo_action(project, body: dict) -> dict:
     return {"todo": todo}
 
 
+def plan_resolve(project, body: dict) -> dict:
+    """POST /api/projects/<slug>/plan/resolve — the
+    resolvable-questions write (plan syntax standard):
+    the owner answers a plan's sentinel questions and the
+    answers land in the plan file itself. The composition
+    is lib's (plan_parser.apply_answers — box checked,
+    answer filled, every other byte preserved); the write
+    is the guarded save (lib/files.guarded_save_file —
+    editing flag, sha compare-and-swap, atomic replace).
+    This layer validates the request shape and maps lib
+    outcomes to statuses; it holds no write logic of its
+    own and touches no registry."""
+    m = project.manifest
+    if m.plans is None or not m.plans.is_dir():
+        raise ApiError(409, "project declares no plans dir")
+    rel = body.get("path")
+    base_sha256 = body.get("base_sha256")
+    answers = body.get("answers")
+    if not isinstance(rel, str) or not rel:
+        raise ApiError(400, "resolve needs a plan \"path\"")
+    if not isinstance(base_sha256, str):
+        raise ApiError(400, "resolve needs \"base_sha256\"")
+    if not isinstance(answers, dict) or not answers:
+        raise ApiError(400, "resolve needs a non-empty "
+                            "\"answers\" map")
+    try:
+        doc = plan_parser.load_plan(m.plans, rel)
+    except (ValueError, FileNotFoundError) as e:
+        raise ApiError(404, str(e))
+    if not doc["questions"]:
+        raise ApiError(400, "plan carries no resolvable "
+                            "questions")
+    if base_sha256 != doc["file_sha256"]:
+        raise ApiError(
+            409, "plan changed on disk since it was opened",
+            current_sha256=doc["file_sha256"])
+    try:
+        new_text = plan_parser.apply_answers(doc["markdown"],
+                                             answers)
+    except ValueError as e:
+        raise ApiError(400, str(e))
+    backup_root = cfgmod.state_dir(CFG) \
+        / CFG["edit_backups_dir"]
+    try:
+        result = files_mod.guarded_save_file(
+            m.plans, rel, new_text, doc["file_sha256"],
+            editing_enabled=CFG["file_editing_enabled"],
+            backup_root=backup_root,
+            backup_key=project.slug)
+    except files_mod.FileError_ as e:
+        raise ApiError(e.status, str(e),
+                       **{k: v for k, v in e.payload.items()
+                          if k != "error"})
+    return {"path": rel, "sha256": result["sha256"],
+            "resolved": sorted(answers),
+            "backup": result["backup"],
+            "captured_at": now_iso()}
+
+
 # ----------------------------------------------------------------
 # HTTP layer
 # ----------------------------------------------------------------
@@ -871,6 +954,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(
                     200, mockups_feed(project,
                                       archived=archived))
+            if len(parts) == 4 and parts[3] == "artifacts":
+                archived = query.get("archived") == "1"
+                return self._send(
+                    200, artifacts_feed(project,
+                                        archived=archived))
             if len(parts) == 4 and parts[3] == "plans":
                 return self._send(200, plans_feed(project))
             if len(parts) == 4 and parts[3] == "plan":
@@ -947,6 +1035,14 @@ class Handler(BaseHTTPRequestHandler):
             project = self._project_or_404(parts[2])
             return self._send(200,
                               todo_action(project, self._body()))
+        if len(parts) == 5 and parts[0] == "api" \
+                and parts[1] == "projects" \
+                and parts[3] == "plan" \
+                and parts[4] == "resolve":
+            project = self._project_or_404(parts[2])
+            return self._send(200,
+                              plan_resolve(project,
+                                           self._body()))
         if len(parts) == 6 and parts[0] == "api" \
                 and parts[1] == "projects" \
                 and parts[3] == "entries" \

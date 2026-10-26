@@ -271,6 +271,77 @@ class TestFeeds(ServerCase):
         self.assertEqual(queue_projects, {"alpha", "beta"})
 
 
+class TestArtifactsFeed(ServerCase):
+    """The Artifacts collection (kind artifact): each
+    collection's feed serves only its own kinds — entries
+    and triage — and the board's review queue unions both,
+    each item carrying its kind, exactly once."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        db = cls.alpha / "workbench" / "registry.db"
+        layout = (cls.alpha / "workbench" / "entries",
+                  cls.alpha / "workbench" / "archive")
+        entry = reg.add_entry(db, layout, "sheet-q",
+                              title="Sheet Q", kind="artifact",
+                              main_file="index.html")
+        main = Path(entry["entry_dir"]) / "index.html"
+        main.write_text("<h1>Open questions</h1>\n",
+                        encoding="utf-8")
+        reg.verify_entry(db, "sheet-q", accept_drift=True)
+
+    def test_artifacts_feed_carries_only_the_artifact(self):
+        status, feed = self.req(
+            "GET", "/api/projects/alpha/artifacts")
+        self.assertEqual(status, 200)
+        self.assertTrue(feed["available"])
+        self.assertEqual([e["id"] for e in feed["entries"]],
+                         ["sheet-q"])
+        self.assertEqual(feed["entries"][0]["kind"],
+                         "artifact")
+        self.assertEqual([t["id"] for t in feed["triage"]],
+                         ["sheet-q"])
+        self.assertEqual(feed["triage"][0]["kind"],
+                         "artifact")
+
+    def test_mockups_feed_excludes_the_artifact(self):
+        status, feed = self.req(
+            "GET", "/api/projects/alpha/mockups")
+        self.assertEqual(status, 200)
+        self.assertEqual([e["id"] for e in feed["entries"]],
+                         ["tile-a"])
+        self.assertEqual([t["id"] for t in feed["triage"]],
+                         ["tile-a"])
+        self.assertEqual(feed["triage"][0]["kind"], "mockup")
+
+    def test_board_review_queue_unions_both_collections(self):
+        status, board = self.req("GET", "/api/board")
+        self.assertEqual(status, 200)
+        mine = [i for i in board["review_queue"]
+                if i["project"] == "alpha"]
+        by_id = {i["id"]: i for i in mine}
+        self.assertEqual(sorted(by_id), ["sheet-q", "tile-a"])
+        self.assertEqual(by_id["sheet-q"]["kind"], "artifact")
+        self.assertEqual(by_id["tile-a"]["kind"], "mockup")
+        self.assertEqual(
+            len([i for i in mine if i["id"] == "sheet-q"]), 1)
+        # answered out of triage: a ruling moves it to
+        # canonical, and the queue no longer carries it
+        db = self.alpha / "workbench" / "registry.db"
+        layout = (self.alpha / "workbench" / "entries",
+                  self.alpha / "workbench" / "archive")
+        reg.set_status(db, "sheet-q", "canonical",
+                       ruling="answered", layout=layout)
+        status, board = self.req("GET", "/api/board")
+        self.assertEqual(status, 200)
+        self.assertNotIn("sheet-q", [i["id"] for i in
+                                     board["review_queue"]])
+        status, feed = self.req(
+            "GET", "/api/projects/alpha/artifacts")
+        self.assertEqual(feed["triage"], [])
+
+
 class TestContainment(ServerCase):
     def test_locked_db_degrades_only_that_project(self):
         beta_db = self.beta / "workbench" / "registry.db"
