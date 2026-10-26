@@ -58,7 +58,7 @@ function MessageMeta({ message }: { message: MessageItem }) {
         flexWrap: "wrap",
       }}
     >
-      <span style={{ fontWeight: 600 }}>{message.author === "owner" ? "the owner" : "Muse"}</span>
+      <span style={{ fontWeight: 600 }}>{message.author === "owner" ? "Owner" : "Muse"}</span>
       <span style={metaStyle}>{messageStateLabel(message.state)}</span>
       <span style={metaStyle}>{message.project_slug ?? "workspace-wide"}</span>
       {message.anchor_type !== "none" ? (

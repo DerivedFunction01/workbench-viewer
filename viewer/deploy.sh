@@ -28,7 +28,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-RUNTIME="${VIEWER_RUNTIME_DIR:-../ts-spaces/workbench-viewer}"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$HERE/../../ts-spaces/workbench-viewer}"
 HATCHLET="${HATCHLET:-hatchlet}"
 
 SKIP_GATE=0

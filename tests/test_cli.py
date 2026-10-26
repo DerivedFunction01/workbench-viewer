@@ -58,7 +58,7 @@ class CliWalk(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn("ruling", r.stderr.lower())
         self.wb(*p, "set-status", "alpha", "canonical",
-                "--ruling", "the owner approved")
+                "--ruling", "Owner approved")
         self.wb(*p, "add", "alpha-v2", "--title", "Alpha v2")
         self.wb(*p, "supersede", "alpha", "alpha-v2",
                 "--ruling", "v2 replaces it")

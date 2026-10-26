@@ -27,15 +27,18 @@ decision, in this order:
    meaningful implementation change)
 
 The founding plan is
-`2026-10-25-workbench-viewer-repo.md` (in the workspace
-`.plans/` folder); the
-workbench data model it inherits is specified in example-project-legacy
-v2's subplan 09 (Part B). If implementation changes the
-architecture, scope, or standards in the context files, update
-the relevant file before continuing.
+`2026-10-25-workbench-viewer-repo.md`; the workbench data
+model it inherits is specified in example-project's subplan
+09 (Part B). If implementation changes the architecture,
+scope, or standards in the context files, update the
+relevant file before continuing.
 
 ## Hard rules
 
+- **Portability.** Tracked files never contain the owner's
+  name, another repo's name, or paths outside this repo.
+  Paths resolve repo-relative or through documented
+  environment variables, so a fresh clone works anywhere.
 - **Overlay rule.** Project repos never depend on this harness:
   they build, test, and run with the viewer absent. This repo
   never imports project code; it reads project *data files*

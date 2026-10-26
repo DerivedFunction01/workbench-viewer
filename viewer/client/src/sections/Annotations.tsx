@@ -86,7 +86,7 @@ export function useAnnotationThreads(slug: string, anchorRef: string) {
 }
 
 export function authorLabelOf(author: string): string {
-  return author === "owner" ? "the owner" : author === "Muse" ? "Muse" : author;
+  return author === "owner" ? "Owner" : author === "Muse" ? "Muse" : author;
 }
 
 /** The mono anchor label for a thread root: `text ·

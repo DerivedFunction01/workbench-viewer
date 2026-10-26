@@ -9,9 +9,10 @@
 #   viewer.sh deploy [--force] repo -> runtime: drift guard, backup,
 #                              copy
 #
-# Runtime dir defaults to the workbench-viewer folder under the
-# workspace's ts-spaces dir and can be overridden with
-# VIEWER_RUNTIME_DIR (restore tests use a scratch dir).
+# Runtime dir defaults to the workbench-viewer folder in a
+# sibling ts-spaces tree (../ts-spaces, relative to this repo)
+# and can be overridden with VIEWER_RUNTIME_DIR (restore tests
+# use a scratch dir).
 #
 # The sync set is the viewer/ tree's source files only: node_modules,
 # dist, *.db*, .bun-cache and other runtime/build artefacts are NEVER
@@ -26,7 +27,7 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_VIEWER="$HERE/viewer"
-RUNTIME="${VIEWER_RUNTIME_DIR:-../ts-spaces/workbench-viewer}"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$HERE/../ts-spaces/workbench-viewer}"
 
 manifest() {  # $1 = base dir; prints "sha256  relpath" lines, sorted
     local base="$1"

@@ -11,7 +11,7 @@ and callers may cache briefly.
 A manifest that fails to parse does not kill the sweep: it is
 reported in `errors` so the failure is visible (the /health
 habit — answer "why doesn't it see my repo?" from data).
-another-project carries no manifest and is therefore invisible —
+another workspace repo carries no manifest and is therefore invisible —
 excluded by design, not by a special case here.
 
 Project identity is the REPO, not the directory (repo-home

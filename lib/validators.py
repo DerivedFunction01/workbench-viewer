@@ -1,4 +1,4 @@
-"""The validator registry (another-project's ALL_SCANNERS shape, at
+"""The validator registry (the ALL_SCANNERS shape, at
 workbench scale): small validator functions collected in one
 ALL_VALIDATORS tuple; `wb validate` runs them and reports
 named findings. A finding is {validator, entry, message}.
