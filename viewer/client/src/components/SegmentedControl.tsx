@@ -38,13 +38,23 @@ export function SegmentedControl<V extends string>({
   return (
     <fieldset
       className={[
-        "m-0 inline-flex min-h-[38px] items-center gap-1 border-0 p-1 [@media(pointer:coarse)]:min-h-[44px]",
+        "m-0 inline-flex min-h-[38px] flex-wrap items-center gap-1 border-0 p-1 [@media(pointer:coarse)]:min-h-[44px]",
         disabled ? "opacity-55" : "",
         className ?? "",
       ]
         .filter(Boolean)
         .join(" ")}
-      style={{ backgroundColor: "var(--wb-surface-sunken)", borderRadius: "var(--wb-radius-sm)" }}
+      // A segmented control never paints outside its
+      // container: clamped to the box and wrapping between
+      // pills when the options outrun it (at 390px: the
+      // Changes worktree picker, the Inbox state filter).
+      // Inert whenever the options fit on one line, as on
+      // the desktop canvas.
+      style={{
+        backgroundColor: "var(--wb-surface-sunken)",
+        borderRadius: "var(--wb-radius-sm)",
+        maxWidth: "100%",
+      }}
     >
       <legend className="sr-only">{ariaLabel}</legend>
       {options.map((opt) => (

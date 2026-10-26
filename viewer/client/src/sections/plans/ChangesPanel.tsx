@@ -28,6 +28,7 @@ import {
   type IgnoredChangedEntry,
   type WorktreesPayload,
 } from "../../lib/api";
+import { useIsPhone } from "../../lib/responsive";
 import { EmptyWell, ErrorWell, metaStyle, SkeletonWell } from "../shared";
 import { anchor } from "./anchors";
 
@@ -223,10 +224,14 @@ function countsLabel(entry: { additions: number; deletions: number }): string {
 }
 
 export function DiffFileGroup({ file }: { file: DiffFileEntry }) {
+  const isPhone = useIsPhone();
   return (
     <details open style={groupBoxStyle} data-anchor={anchor.changesFile(file.path)}>
-      <summary style={summaryStyle}>
-        <span className="mono" style={{ fontWeight: 600 }}>
+      <summary style={isPhone ? { ...summaryStyle, flexWrap: "wrap" } : summaryStyle}>
+        <span
+          className="mono"
+          style={{ fontWeight: 600, overflowWrap: isPhone ? "anywhere" : undefined }}
+        >
           {file.path}
         </span>
         {file.old_path ? (
@@ -310,6 +315,7 @@ function PeekBody({ peek }: { peek: DiffPeek }) {
 }
 
 export function UntrackedGroup({ items }: { items: DiffPeek[] }) {
+  const isPhone = useIsPhone();
   if (items.length === 0) return null;
   return (
     <section data-anchor={anchor.changesUntracked} style={{ marginTop: "var(--wb-space-16)" }}>
@@ -318,8 +324,10 @@ export function UntrackedGroup({ items }: { items: DiffPeek[] }) {
       </h3>
       {items.map((item) => (
         <details key={item.path} style={groupBoxStyle}>
-          <summary style={summaryStyle}>
-            <span className="mono">{item.path}</span>
+          <summary style={isPhone ? { ...summaryStyle, flexWrap: "wrap" } : summaryStyle}>
+            <span className="mono" style={{ overflowWrap: isPhone ? "anywhere" : undefined }}>
+              {item.path}
+            </span>
             <span style={metaStyle}>
               {item.is_dir ? "directory" : formatBytes(item.size_bytes)}
             </span>
@@ -350,6 +358,7 @@ function IgnoredRow({
   worktree: string | null;
   entry: IgnoredChangedEntry;
 }) {
+  const isPhone = useIsPhone();
   const [open, setOpen] = useState(false);
   const query = useQuery({
     queryKey: ["diff-peek", slug, worktree, entry.path],
@@ -367,7 +376,13 @@ function IgnoredRow({
         flexWrap: "wrap",
       }}
     >
-      <span className="mono" style={{ fontSize: "var(--wb-font-size-sm)" }}>
+      <span
+        className="mono"
+        style={{
+          fontSize: "var(--wb-font-size-sm)",
+          overflowWrap: isPhone ? "anywhere" : undefined,
+        }}
+      >
         {entry.path}
       </span>
       <span style={metaStyle}>{formatBytes(entry.size_bytes)}</span>

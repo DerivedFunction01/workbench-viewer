@@ -19,6 +19,7 @@ import { StateControls, type StateValues } from "../../components/StateControls"
 import { api, type TextSelection } from "../../lib/api";
 import { formatDate, formatDateTime, formatShortHash } from "../../lib/format";
 import { kindLabel, ruledStatusLabel } from "../../lib/labels";
+import { useIsPhone } from "../../lib/responsive";
 import {
   AnnotationComposer,
   AnnotationList,
@@ -120,6 +121,7 @@ export function MockupDetail({
   onMutated: () => void;
 }) {
   const queryClient = useQueryClient();
+  const isPhone = useIsPhone();
   const [frameMode, setFrameMode] = useState<"light" | "dark">("light");
   const [palette, setPalette] = useState("olive");
   const [comment, setComment] = useState("");
@@ -497,12 +499,16 @@ export function MockupDetail({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "7fr 5fr",
+          // Phone: one column — the stage (with its
+          // composer and pinned threads) first, then the
+          // card column stacked under it (§20: the drill-in
+          // carries its per-exhibit annotation list).
+          gridTemplateColumns: isPhone ? "1fr" : "7fr 5fr",
           gap: "var(--wb-space-24)",
           alignItems: "start",
         }}
       >
-        <div style={{ position: "sticky", top: "var(--wb-space-16)" }}>
+        <div style={isPhone ? undefined : { position: "sticky", top: "var(--wb-space-16)" }}>
           <div data-palette={palette} data-mode={frameMode}>
             <Frame
               anchor="mockups/exhibit-stage"
