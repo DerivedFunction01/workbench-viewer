@@ -21,10 +21,8 @@ import { Card } from "../components/Card";
 import {
   type ActiveResolution,
   api,
-  type BundleItem,
   type HomePayload,
   type HomeRow,
-  type PlansFeed,
   type WorktreesPayload,
 } from "../lib/api";
 import { formatDate, formatRelative } from "../lib/format";
@@ -32,14 +30,7 @@ import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";
 import { AnchoredComment } from "./inbox/AnchoredComment";
 import { ChangesPanel } from "./plans/ChangesPanel";
-import {
-  EmptyWell,
-  ErrorWell,
-  listRowStyle,
-  metaStyle,
-  SkeletonWell,
-  sectionTitleStyle,
-} from "./shared";
+import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "./shared";
 import { ActivePlanLine, ProvenanceMark, WorktreeChildren, WorktreeMeta } from "./worktreeViews";
 
 function ShowcaseCard({
@@ -56,8 +47,8 @@ function ShowcaseCard({
       <Card anchor="overview/showcase" title="Active plan">
         <EmptyWell>
           No active plan in the main checkout. Declare one with{" "}
-          <span className="mono">wb activate &lt;bundle&gt;</span> when work starts, or pick from
-          the plan list below.
+          <span className="mono">wb activate &lt;bundle&gt;</span> when work starts, or pick one in
+          the Plans section.
         </EmptyWell>
         {showcase?.note ? (
           <p style={{ color: "var(--wb-danger)", margin: "var(--wb-space-8) 0 0" }}>
@@ -224,67 +215,6 @@ function WorktreesCard({
   );
 }
 
-function PlanList({
-  slug,
-  bundles,
-  showcasePath,
-}: {
-  slug: string;
-  bundles: BundleItem[];
-  showcasePath: string | null;
-}) {
-  const active = bundles.filter((b) => !b.archived);
-  if (active.length === 0) {
-    return <EmptyWell>No plans in this project yet.</EmptyWell>;
-  }
-  return (
-    <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-      {active.map((bundle) => {
-        const plan = bundle.plan;
-        const isShowcase = plan != null && plan.path === showcasePath;
-        const inner = (
-          <>
-            <span style={{ flex: 1 }}>
-              {plan ? plan.title : bundle.id}
-              {isShowcase ? <span style={{ color: "var(--wb-accent)" }}> · showcase</span> : null}
-              {bundle.kind === "bundle" ? (
-                <span style={{ color: "var(--wb-content-muted)" }}> · bundle</span>
-              ) : null}
-            </span>
-            {plan ? (
-              <>
-                <span style={metaStyle}>{planBucketLabel(plan.status_bucket)}</span>
-                <span style={metaStyle}>
-                  <span className="num">{plan.step_count}</span> steps
-                </span>
-                <span style={metaStyle}>
-                  {formatDate(plan.modified)} {formatRelative(plan.modified)}
-                </span>
-              </>
-            ) : (
-              <span style={metaStyle}>
-                <span className="num">{bundle.open_count}</span> open of{" "}
-                <span className="num">{bundle.todo_count}</span> todos
-              </span>
-            )}
-          </>
-        );
-        return (
-          <li key={bundle.path}>
-            {plan ? (
-              <a href={sectionHref(slug, "plans", plan.path)} style={listRowStyle}>
-                {inner}
-              </a>
-            ) : (
-              <div style={listRowStyle}>{inner}</div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 export function OverviewSection({ slug, projectName }: { slug: string; projectName: string }) {
   const homeQuery = useQuery({
     queryKey: ["home"],
@@ -295,11 +225,6 @@ export function OverviewSection({ slug, projectName }: { slug: string; projectNa
     queryKey: ["worktrees", slug],
     queryFn: () => api.getWorktrees({ slug }),
   });
-  const plansQuery = useQuery({
-    queryKey: ["plans", slug],
-    queryFn: () => api.getPlans({ slug }),
-  });
-
   if (homeQuery.isPending) return <SkeletonWell label={`overview for ${projectName}`} />;
   if (homeQuery.isError || !homeQuery.data.payload) {
     return (
@@ -313,7 +238,6 @@ export function OverviewSection({ slug, projectName }: { slug: string; projectNa
   const row = home.projects.find((p) => p.slug === slug) ?? null;
   const worktreesPayload =
     (worktreesQuery.data?.payload as unknown as WorktreesPayload | null) ?? null;
-  const plansFeed = (plansQuery.data?.payload as unknown as PlansFeed | null) ?? null;
   const showcase = row?.showcase ?? null;
 
   return (
@@ -343,22 +267,6 @@ export function OverviewSection({ slug, projectName }: { slug: string; projectNa
       >
         <ShowcaseCard slug={slug} projectName={projectName} showcase={showcase} />
         <WorktreesCard slug={slug} payload={worktreesPayload} fallback={row} />
-        <Card anchor="overview/plans" title="Plans">
-          {plansQuery.isPending ? (
-            <SkeletonWell label="plans" />
-          ) : plansFeed == null ? (
-            <ErrorWell
-              section="Plans"
-              message={plansQuery.data?.error ?? "the plans feed did not answer."}
-            />
-          ) : (
-            <PlanList
-              slug={slug}
-              bundles={plansFeed.bundles}
-              showcasePath={showcase?.plan?.path ?? null}
-            />
-          )}
-        </Card>
         <Card anchor="overview/strip" title="Todos & review">
           {row == null ? (
             <EmptyWell>This project is not in the current sweep.</EmptyWell>
@@ -381,6 +289,15 @@ export function OverviewSection({ slug, projectName }: { slug: string; projectNa
                       .map(([status, n]) => ` · ${n} ${todoStatusLabel(status).toLowerCase()}`)
                       .join("")
                   : ""}
+              </a>
+              <a
+                href={sectionHref(slug, "plans")}
+                style={{ color: "var(--wb-accent)", textDecoration: "none" }}
+              >
+                Plans ·{" "}
+                <span className="num">
+                  {(row.plans.counts.todo ?? 0) + (row.plans.counts.doing ?? 0)}
+                </span>
               </a>
               <a
                 href={sectionHref(slug, "mockups")}
