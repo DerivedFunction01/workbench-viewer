@@ -506,3 +506,10 @@ change.
   proof of the former legacy paths, and closing the
   alias-removal todo `t-01M5TNR7V99D3P2ENBA85N0W2F`
   with the removal evidence.
+- API unification Step 8 RELEASED 2026-10-25 (parent):
+  merged to main, gate green on the merged tree,
+  companion restarted; live proof — /api/health 200,
+  former legacy paths (/health, /config, /projects,
+  /board) return the router's 404. Bundle todo
+  t-01M5TNR7V99D3P2ENBA85N0W2F closed with this
+  evidence. The /api surface is now the only surface.
