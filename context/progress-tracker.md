@@ -543,3 +543,23 @@ change.
   resolved keeping both entries): gate green on the
   merged tree, 291 tests. Checkpoint publish follows.
   The removal plan is closed out in the same pass.
+- Sanitization under the owner's portability ruling
+  (2026-10-25): no tracked file may carry the owner's
+  name, another repo's name, or paths outside this
+  repo, so a fresh clone works anywhere. Applied at
+  the tip: the other projects take generic example
+  names, owner attribution becomes "the owner" (the
+  message author handle is renamed with it across
+  lib, server, client, and tests), runtime paths
+  resolve repo-relative to the repo, the one
+  host-absolute dependency is vendored under
+  viewer/vendor/, and the published artifact is
+  named generically in prose. A guard test
+  (tests/test_external_references.py) scans every
+  tracked file for the forbidden strings, and
+  AGENTS.md now carries the rule as a hard rule.
+  The same replacements are carried through the
+  full history by rewrite: commit SHAs in the
+  entries above predate the rewrite and are
+  superseded. The pre-rewrite history is preserved
+  on the local pre-sanitize-backup branch.
