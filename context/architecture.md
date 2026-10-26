@@ -106,8 +106,8 @@ workbench-viewer/
     config.py                the settings seam (file+env)
     server.py                routing, feeds, guarded writes,
                              mutation endpoints (no SQL)
-    healthcheck.py           /api/health probe (watchdog's
-                             check; release-N /health fallback)
+    healthcheck.py           /api/health probe (the
+                             watchdog's check)
   ops/                       AS BUILT
     workbench-viewer-server.service.template
     install-unit.sh
@@ -314,11 +314,10 @@ stays entry-pure).
 `POST /api/projects/<slug>/todos` (`{verb, ...}`) · `GET /api/board`.
 
 The whole HTTP surface lives under `/api`. The 15 legacy
-unprefixed patterns are served as exact aliases — internal
-dispatch to the same handlers, never redirects — for one
-published checkpoint cycle after the unification; the
-following cycle removes them (the unification plan's
-Step 8, tracked as an open bundle todo).
+unprefixed patterns were served as exact aliases for one
+published checkpoint cycle after the unification and were
+removed in the following cycle (the unification plan's
+Step 8); they now return 404.
 
 Per-project failure containment: every project feed is built
 independently; a locked or broken DB degrades only that

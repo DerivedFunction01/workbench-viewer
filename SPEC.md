@@ -447,11 +447,10 @@ API (the feeds the artifact consumes):
 - `GET /api/board`
 
 The whole HTTP surface lives under `/api`. The 15 legacy
-unprefixed patterns are served as exact aliases — internal
-dispatch to the same handlers, never redirects — for one
-published checkpoint cycle after the unification; the
-following cycle removes them (the unification plan's
-Step 8, tracked as an open bundle todo).
+unprefixed patterns were served as exact aliases for one
+published checkpoint cycle after the unification and were
+removed in the following cycle (the unification plan's
+Step 8); they now return 404.
 
 Conventions: request input is validated and parsed before
 any logic runs. Success payloads carry `captured_at`;
