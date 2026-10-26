@@ -126,16 +126,41 @@ function BundleRow({
 }) {
   const isPhone = useIsPhone();
   const plan = bundle.plan;
-  // Phone: the title takes its own full-width line and the
-  // nowrap meta (status · steps · date) wraps beneath it —
-  // on one line the meta squeezes the title into a ~160px
-  // column. Desktop's single line is untouched.
+  // Phone (the owner, 2026-10-25): the row stacks — the title
+  // takes the full row width on its own line(s) and the
+  // metadata line renders beneath it. A column direction
+  // stacks deterministically; the earlier flex-wrap +
+  // 100%-basis title still reached his phone side by side,
+  // the title squeezed into a narrow column (screenshot,
+  // 2026-10-25). Desktop's single line is untouched.
   const rowStyle: React.CSSProperties = isPhone
-    ? { ...listRowStyle, flexWrap: "wrap" }
+    ? { ...listRowStyle, flexDirection: "column", alignItems: "stretch" }
     : listRowStyle;
+  const meta = plan ? (
+    <>
+      <span style={metaStyle}>{planBucketLabel(plan.status_bucket)}</span>
+      <span style={metaStyle}>
+        <span className="num">{plan.step_count}</span> steps
+      </span>
+      {subplansCount ? (
+        <span style={metaStyle}>
+          <span className="num">{subplansCount}</span>{" "}
+          {subplansCount === 1 ? "subplan" : "subplans"}
+        </span>
+      ) : null}
+      <span style={metaStyle}>
+        {formatDate(plan.modified)} {formatRelative(plan.modified)}
+      </span>
+    </>
+  ) : (
+    <span style={metaStyle}>
+      <span className="num">{bundle.open_count}</span> open of{" "}
+      <span className="num">{bundle.todo_count}</span> todos
+    </span>
+  );
   const inner = (
     <>
-      <span style={isPhone ? { flex: "1 1 100%" } : { flex: 1 }}>
+      <span style={isPhone ? undefined : { flex: 1 }}>
         {bundleTitle(bundle)}
         {plan && !plan.conforming ? (
           <span style={{ color: "var(--wb-content-secondary)" }}> · source format</span>
@@ -145,27 +170,19 @@ function BundleRow({
         ) : null}
         <ChecklistStrip todos={bundle.todos} />
       </span>
-      {plan ? (
-        <>
-          <span style={metaStyle}>{planBucketLabel(plan.status_bucket)}</span>
-          <span style={metaStyle}>
-            <span className="num">{plan.step_count}</span> steps
-          </span>
-          {subplansCount ? (
-            <span style={metaStyle}>
-              <span className="num">{subplansCount}</span>{" "}
-              {subplansCount === 1 ? "subplan" : "subplans"}
-            </span>
-          ) : null}
-          <span style={metaStyle}>
-            {formatDate(plan.modified)} {formatRelative(plan.modified)}
-          </span>
-        </>
-      ) : (
-        <span style={metaStyle}>
-          <span className="num">{bundle.open_count}</span> open of{" "}
-          <span className="num">{bundle.todo_count}</span> todos
+      {isPhone ? (
+        <span
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "var(--wb-space-12)",
+          }}
+        >
+          {meta}
         </span>
+      ) : (
+        meta
       )}
     </>
   );
@@ -202,6 +219,7 @@ function BundleGroupRow({
   grouping: PlanGrouping;
   entry: PlanGroupEntry;
 }) {
+  const isPhone = useIsPhone();
   const hasNested = entry.children.length > 0 || entry.missing.length > 0;
   return (
     <BundleRow slug={slug} bundle={entry.bundle} subplansCount={entry.resolvedCount}>
@@ -226,8 +244,19 @@ function BundleGroupRow({
           ))}
           {entry.missing.map((declaredPath) => (
             <li key={`missing-${declaredPath}`}>
-              <div style={{ ...listRowStyle, color: "var(--wb-content-muted)" }}>
-                <span className="mono" style={{ flex: 1 }}>
+              <div
+                style={
+                  isPhone
+                    ? {
+                        ...listRowStyle,
+                        flexDirection: "column",
+                        alignItems: "stretch",
+                        color: "var(--wb-content-muted)",
+                      }
+                    : { ...listRowStyle, color: "var(--wb-content-muted)" }
+                }
+              >
+                <span className="mono" style={isPhone ? { overflowWrap: "anywhere" } : { flex: 1 }}>
                   {declaredPath}
                 </span>
                 <span style={metaStyle}>missing</span>
