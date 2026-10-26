@@ -731,74 +731,6 @@ def todo_action(project, body: dict) -> dict:
 # HTTP layer
 # ----------------------------------------------------------------
 
-# Legacy route aliases (API unification, release N — TEMPORARY).
-# Each entry maps one legacy method/path pattern to its
-# canonical /api pattern. Dispatch canonicalizes through this
-# map before routing: internal dispatch to the same handler,
-# never a redirect, so the status, body, and POST payload are
-# the canonical handler's own. The inventory is exact — same
-# method, same segment count, every literal equal; a `<name>`
-# pattern segment binds the path segment at its position. No
-# prefix matching, no extra segments. This map lives for
-# exactly one published checkpoint cycle: Step 8 of the
-# unification plan removes it in release N+1 (bundle todo
-# t-01M5TNR7V99D3P2ENBA85N0W2F). The frozen inventory is
-# mirrored by tests/test_server_route_unification.py.
-LEGACY_ROUTE_ALIASES = [
-    ("GET", ("health",), ("api", "health")),
-    ("GET", ("config",), ("api", "config")),
-    ("GET", ("projects",), ("api", "projects")),
-    ("GET", ("board",), ("api", "board")),
-    ("GET", ("todos",), ("api", "todos")),
-    ("GET", ("projects", "<slug>", "mockups"),
-     ("api", "projects", "<slug>", "mockups")),
-    ("GET", ("projects", "<slug>", "plans"),
-     ("api", "projects", "<slug>", "plans")),
-    ("GET", ("projects", "<slug>", "plan"),
-     ("api", "projects", "<slug>", "plan")),
-    ("GET", ("projects", "<slug>", "todos"),
-     ("api", "projects", "<slug>", "todos")),
-    ("GET", ("projects", "<slug>", "entries", "<entry_id>"),
-     ("api", "projects", "<slug>", "entries", "<entry_id>")),
-    ("GET", ("projects", "<slug>", "entries", "<entry_id>",
-             "file"),
-     ("api", "projects", "<slug>", "entries", "<entry_id>",
-      "file")),
-    ("POST", ("projects", "rescan"),
-     ("api", "projects", "rescan")),
-    ("POST", ("projects", "<slug>", "todos"),
-     ("api", "projects", "<slug>", "todos")),
-    ("POST", ("projects", "<slug>", "entries", "<entry_id>",
-              "action"),
-     ("api", "projects", "<slug>", "entries", "<entry_id>",
-      "action")),
-    ("POST", ("projects", "<slug>", "entries", "<entry_id>",
-              "file"),
-     ("api", "projects", "<slug>", "entries", "<entry_id>",
-      "file")),
-]
-
-
-def _canonicalize(method, parts):
-    """Rewrite an exact legacy path to its canonical /api
-    segments through LEGACY_ROUTE_ALIASES. Returns the parts
-    unchanged when no alias matches (canonical paths and
-    unknown paths pass through as-is)."""
-    for alias_method, legacy, canonical in LEGACY_ROUTE_ALIASES:
-        if alias_method != method or len(legacy) != len(parts):
-            continue
-        bound = {}
-        for pattern, segment in zip(legacy, parts):
-            if pattern.startswith("<"):
-                bound[pattern] = segment
-            elif pattern != segment:
-                break
-        else:
-            return [bound.get(segment, segment)
-                    for segment in canonical]
-    return parts
-
-
 class Handler(BaseHTTPRequestHandler):
     server_version = f"WorkbenchViewer/{VERSION}"
     protocol_version = "HTTP/1.1"
@@ -868,7 +800,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route_get(self):
         parts, query = self._parts()
-        parts = _canonicalize("GET", parts)
         if parts == ["api", "health"]:
             result = get_sweep()
             uptime = (datetime.now(timezone.utc)
@@ -986,7 +917,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route_post(self):
         parts, _query = self._parts()
-        parts = _canonicalize("POST", parts)
         if parts == ["api", "messages"]:
             return self._send(200,
                               message_create(self._body()))

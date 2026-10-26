@@ -1,14 +1,14 @@
-"""API route unification conformance (release N): the
-frozen legacy-alias inventory, the exact canonicalization
-matcher, canonical/alias HTTP equivalence, and the
-served-without-alias tripwire.
+"""API route unification conformance (release N+1): the
+legacy aliases are REMOVED. The server carries no alias
+map and no canonicalization pass; every former legacy
+pattern returns the router's own 404 over HTTP while its
+canonical counterpart still succeeds, and the
+served-without-alias tripwire now covers every stripped
+candidate with no exclusions.
 
-The alias inventory below INTENTIONALLY duplicates
-server/server.py's LEGACY_ROUTE_ALIASES: changing or
-deleting one server entry must fail this suite. Aliases
-live for exactly one published checkpoint cycle; Step 8
-of the unification plan empties this inventory and turns
-the equivalence tests into 404 proofs.
+Release N's frozen alias inventory survives below only as
+the 404 proof matrix: the 15 patterns that were unified,
+each of which must stay dead.
 """
 
 import json
@@ -35,9 +35,12 @@ from lib import registry as reg  # noqa: E402
 
 import server as server_mod  # noqa: E402
 
-# The frozen inventory: (method, legacy segments, canonical
-# segments). Mirrors server.LEGACY_ROUTE_ALIASES exactly.
-EXPECTED_ALIASES = [
+# The 15 patterns unified in release N: (method, former
+# legacy segments, canonical segments). In release N this
+# list mirrored server.LEGACY_ROUTE_ALIASES exactly; Step 8
+# removed the server map, and the list is now only the
+# record of what must stay dead.
+FORMER_LEGACY_PATTERNS = [
     ("GET", ("health",), ("api", "health")),
     ("GET", ("config",), ("api", "config")),
     ("GET", ("projects",), ("api", "projects")),
@@ -71,8 +74,8 @@ EXPECTED_ALIASES = [
       "file")),
 ]
 
-# The 12 patterns that were already canonical before this
-# pass; they never had legacy forms.
+# The 12 patterns that were already canonical before the
+# unification pass; they never had legacy forms.
 PRE_EXISTING_API = [
     ("GET", ("api", "home")),
     ("GET", ("api", "projects", "<slug>", "worktrees")),
@@ -90,7 +93,7 @@ PRE_EXISTING_API = [
 
 CANONICAL_PATTERNS = (
     [(method, canonical)
-     for method, _, canonical in EXPECTED_ALIASES]
+     for method, _, canonical in FORMER_LEGACY_PATTERNS]
     + PRE_EXISTING_API)
 
 SAMPLE = {"<slug>": "alpha", "<entry_id>": "tile-a",
@@ -106,83 +109,21 @@ def path_of(pattern, sample=None):
     return "/" + "/".join(instantiate(pattern, sample))
 
 
-class TestAliasInventory(unittest.TestCase):
-    def test_server_map_matches_frozen_inventory(self):
-        actual = [(method, tuple(legacy), tuple(canonical))
-                  for method, legacy, canonical
-                  in server_mod.LEGACY_ROUTE_ALIASES]
-        self.assertEqual(actual, EXPECTED_ALIASES)
+class TestAliasMachineryRemoved(unittest.TestCase):
+    """The expected alias inventory is empty by
+    construction: the server module exposes no alias map
+    and no canonicalization pass, under either name."""
 
-    def test_inventory_is_exactly_fifteen(self):
-        self.assertEqual(len(EXPECTED_ALIASES), 15)
-        self.assertEqual(
-            len(server_mod.LEGACY_ROUTE_ALIASES), 15)
+    def test_server_has_no_alias_map(self):
+        self.assertFalse(
+            hasattr(server_mod, "LEGACY_ROUTE_ALIASES"))
 
-
-class TestCanonicalize(unittest.TestCase):
-    def canon(self, method, parts):
-        return server_mod._canonicalize(method, list(parts))
-
-    def test_every_legacy_pattern_rewrites(self):
-        for method, legacy, canonical in EXPECTED_ALIASES:
-            with self.subTest(method=method, legacy=legacy):
-                self.assertEqual(
-                    self.canon(method, instantiate(legacy)),
-                    instantiate(canonical))
-
-    def test_placeholders_bind_by_position(self):
-        parts = self.canon(
-            "GET", ["projects", "beta", "entries", "x-9"])
-        self.assertEqual(
-            parts, ["api", "projects", "beta", "entries",
-                    "x-9"])
-
-    def test_every_canonical_pattern_passes_through(self):
-        for method, pattern in CANONICAL_PATTERNS:
-            with self.subTest(method=method, pattern=pattern):
-                parts = instantiate(pattern)
-                self.assertEqual(
-                    self.canon(method, parts), parts)
-
-    def test_changed_literal_does_not_rewrite(self):
-        self.assertEqual(self.canon("GET", ["healthz"]),
-                         ["healthz"])
-        self.assertEqual(
-            self.canon("GET", ["projects", "alpha", "mockup"]),
-            ["projects", "alpha", "mockup"])
-        self.assertEqual(
-            self.canon("POST", ["projects", "rescans"]),
-            ["projects", "rescans"])
-
-    def test_missing_segment_does_not_rewrite(self):
-        self.assertEqual(self.canon("POST", ["projects"]),
-                         ["projects"])  # no bare POST alias
-        self.assertEqual(
-            self.canon("GET", ["projects", "alpha"]),
-            ["projects", "alpha"])
-        self.assertEqual(
-            self.canon("GET", ["projects", "alpha", "entries"]),
-            ["projects", "alpha", "entries"])
-
-    def test_extra_segment_does_not_rewrite(self):
-        self.assertEqual(self.canon("GET", ["health", "x"]),
-                         ["health", "x"])
-        self.assertEqual(
-            self.canon(
-                "GET", ["projects", "alpha", "mockups", "x"]),
-            ["projects", "alpha", "mockups", "x"])
-
-    def test_swapped_method_does_not_rewrite(self):
-        self.assertEqual(self.canon("POST", ["health"]),
-                         ["health"])
-        self.assertEqual(
-            self.canon("GET", ["projects", "rescan"]),
-            ["projects", "rescan"])
-        self.assertEqual(
-            self.canon("GET", ["projects", "alpha", "todos"]),
-            ["api", "projects", "alpha", "todos"])
-        self.assertEqual(
-            self.canon("POST", ["board"]), ["board"])
+    def test_server_has_no_canonicalization_pass(self):
+        self.assertFalse(hasattr(server_mod, "_canonicalize"))
+        source = (REPO / "server" / "server.py").read_text(
+            encoding="utf-8")
+        self.assertNotIn("LEGACY_ROUTE_ALIASES", source)
+        self.assertNotIn("_canonicalize", source)
 
 
 PLAN = """# Fixture plan
@@ -199,20 +140,6 @@ Status: draft
 
 MOCK = ('<style>:root{--ink:#111}</style>'
         '<h1 style="color:var(--ink)">A</h1>\n')
-
-# Volatile response fields: equal-route comparisons ignore
-# only these (plan: normalize captured_at, health uptime_s).
-VOLATILE_KEYS = {"captured_at", "uptime_s"}
-
-
-def normalize(payload):
-    if isinstance(payload, dict):
-        return {key: normalize(value)
-                for key, value in payload.items()
-                if key not in VOLATILE_KEYS}
-    if isinstance(payload, list):
-        return [normalize(value) for value in payload]
-    return payload
 
 
 def free_port() -> int:
@@ -313,19 +240,32 @@ class RouteServerCase(unittest.TestCase):
         return type(self).req_raw(method, path, body)
 
 
-class TestAliasEquivalence(RouteServerCase):
-    """Every legacy pattern answers through its alias with
-    the canonical handler's own status and payload."""
+class TestFormerLegacyPaths404(RouteServerCase):
+    """Every former legacy pattern is dead: the router's
+    own 404, never a handler response — while its canonical
+    counterpart still reaches its handler."""
 
-    def assert_equivalent(self, method, canonical_path,
-                          legacy_path, body=None):
-        c_status, c_payload = self.req(method, canonical_path,
-                                       body)
-        a_status, a_payload = self.req(method, legacy_path,
-                                       body)
-        self.assertEqual(a_status, c_status)
-        self.assertEqual(normalize(a_payload),
-                         normalize(c_payload))
+    def assert_router_404(self, method, path, body=None):
+        status, payload = self.req(method, path, body)
+        self.assertEqual(status, 404)
+        self.assertTrue(
+            payload.get("error", "").startswith("no route"),
+            f"{method} {path} reached a handler: {payload!r}")
+
+    def assert_canonical_ok(self, method, path, body=None):
+        status, _ = self.req(method, path, body)
+        self.assertEqual(status, 200)
+
+    def assert_canonical_reached(self, method, path,
+                                 body=None):
+        # The handler answered — possibly with a refusal —
+        # rather than the router's "no route" 404.
+        status, payload = self.req(method, path, body)
+        self.assertFalse(
+            status == 404
+            and payload.get("error", "").startswith("no route"),
+            f"{method} {path} did not reach its handler: "
+            f"{status} {payload!r}")
 
     def test_collection_gets(self):
         for canonical, legacy in [
@@ -335,7 +275,8 @@ class TestAliasEquivalence(RouteServerCase):
                 ("/api/board", "/board"),
                 ("/api/todos", "/todos")]:
             with self.subTest(path=legacy):
-                self.assert_equivalent("GET", canonical, legacy)
+                self.assert_canonical_ok("GET", canonical)
+                self.assert_router_404("GET", legacy)
 
     def test_parameterized_gets(self):
         plan_q = "?path=2026-10-25-fixture-plan.md"
@@ -355,55 +296,81 @@ class TestAliasEquivalence(RouteServerCase):
                  "/projects/alpha/entries/tile-a/file"
                  "?path=mock.html")]:
             with self.subTest(path=legacy):
-                self.assert_equivalent("GET", canonical, legacy)
+                self.assert_canonical_ok("GET", canonical)
+                self.assert_router_404("GET", legacy)
 
     def test_posts(self):
-        self.assert_equivalent("POST", "/api/projects/rescan",
-                               "/projects/rescan")
-        # Invalid verbs are refused identically without
-        # changing state on either path.
-        self.assert_equivalent(
+        self.assert_canonical_ok("POST", "/api/projects/rescan")
+        self.assert_router_404("POST", "/projects/rescan")
+        # Invalid verbs are refused by the canonical handler
+        # without changing state; the legacy path reaches
+        # nothing at all.
+        self.assert_canonical_reached(
             "POST", "/api/projects/alpha/todos",
-            "/projects/alpha/todos", {"verb": "bogus"})
-        self.assert_equivalent(
+            {"verb": "bogus"})
+        self.assert_router_404(
+            "POST", "/projects/alpha/todos", {"verb": "bogus"})
+        self.assert_canonical_reached(
             "POST",
             "/api/projects/alpha/entries/tile-a/action",
+            {"verb": "bogus"})
+        self.assert_router_404(
+            "POST",
             "/projects/alpha/entries/tile-a/action",
             {"verb": "bogus"})
-        # Editing is disabled in this fixture: the save route
-        # refuses identically (403) and writes nothing.
+        # Editing is disabled in this fixture: the canonical
+        # save route refuses (403) and writes nothing; the
+        # legacy path is a router 404.
         peek_status, peek = self.req(
             "GET",
             "/api/projects/alpha/entries/tile-a/file"
             "?path=mock.html")
         self.assertEqual(peek_status, 200)
-        self.assert_equivalent(
+        save = {"path": "mock.html", "content": "changed",
+                "base_sha256": peek["sha256"]}
+        status, _ = self.req(
             "POST",
-            "/api/projects/alpha/entries/tile-a/file",
-            "/projects/alpha/entries/tile-a/file",
-            {"path": "mock.html", "content": "changed",
-             "base_sha256": peek["sha256"]})
+            "/api/projects/alpha/entries/tile-a/file", save)
+        self.assertEqual(status, 403)
+        self.assert_router_404(
+            "POST",
+            "/projects/alpha/entries/tile-a/file", save)
+
+    def test_near_misses_stay_404(self):
+        # The release N matcher's old negative space —
+        # changed literals, missing or extra segments,
+        # swapped methods — was never routed and stays
+        # unrouted now that the matcher itself is gone.
+        for method, path in [
+                ("GET", "/healthz"),
+                ("GET", "/projects/alpha/mockup"),
+                ("POST", "/projects/rescans"),
+                ("GET", "/projects/alpha"),
+                ("POST", "/projects"),
+                ("GET", "/health/x"),
+                ("GET", "/projects/alpha/mockups/x"),
+                ("POST", "/health"),
+                ("GET", "/projects/rescan"),
+                ("POST", "/board")]:
+            with self.subTest(method=method, path=path):
+                self.assert_router_404(method, path)
 
 
 class TestServedWithoutAliasTripwire(RouteServerCase):
     """Legacy-shaped candidates derived by stripping /api
-    from every canonical pattern: any candidate outside the
-    frozen alias inventory must be a router 404. A candidate
-    that reaches a handler answers with a different status
-    or a handler error body, never the router's own
-    'no route' 404 — so a route ever served without an alias
-    entry fails here. Mutation probes use invalid inputs, so
-    even a failure of this guard changes no state."""
+    from every canonical pattern: with the aliases removed
+    there are no exclusions — every candidate must be the
+    router's own 'no route' 404. A candidate that reaches a
+    handler answers with a different status or a handler
+    error body, so a route ever served outside the canonical
+    namespace fails here. Mutation probes use invalid
+    inputs, so even a failure of this guard changes no
+    state."""
 
     def test_no_route_served_without_alias(self):
-        alias_keys = {(method, legacy)
-                      for method, legacy, _
-                      in EXPECTED_ALIASES}
         probed = 0
         for method, canonical in CANONICAL_PATTERNS:
             legacy = tuple(canonical[1:])
-            if (method, legacy) in alias_keys:
-                continue  # a frozen alias: served on purpose
             probed += 1
             path = path_of(legacy)
             body = None
@@ -421,10 +388,10 @@ class TestServedWithoutAliasTripwire(RouteServerCase):
                         "no route"),
                     f"{method} {path} reached a handler: "
                     f"{payload!r}")
-        # The 12 pre-existing /api patterns all strip to a
-        # candidate; the 15 unified patterns strip exactly to
-        # the alias inventory and are excluded above.
-        self.assertEqual(probed, len(PRE_EXISTING_API))
+        # All 27 canonical patterns strip to a candidate —
+        # the 15 unified patterns included, now that their
+        # aliases are gone.
+        self.assertEqual(probed, len(CANONICAL_PATTERNS))
 
 
 # A legacy route literal in caller source: a quote directly
@@ -437,10 +404,10 @@ LEGACY_LITERAL_RE = re.compile(
 
 
 class TestControlledCallerScan(unittest.TestCase):
-    """Controlled callers speak canonical paths only
-    (Step 5): the bridge actions carry no legacy route
-    literal at all, and the healthcheck's single legacy
-    literal is its explicitly bounded release N fallback."""
+    """Controlled callers speak canonical paths only: the
+    bridge actions carry no legacy route literal, and the
+    healthcheck has no legacy literal at all since Step 8
+    removed its bounded release N fallback."""
 
     def test_bridge_actions_have_no_legacy_literal(self):
         source = (REPO / "viewer" / "server" / "src"
@@ -448,15 +415,11 @@ class TestControlledCallerScan(unittest.TestCase):
         self.assertEqual(LEGACY_LITERAL_RE.findall(source),
                          [])
 
-    def test_healthcheck_legacy_literal_is_only_the_fallback(
-            self):
+    def test_healthcheck_has_no_legacy_literal(self):
         source = (REPO / "server" / "healthcheck.py").read_text(
             encoding="utf-8")
-        # Found tokens are quote + legacy segment (the regex
-        # lookahead leaves the closing quote unconsumed): the
-        # fallback's one "/health literal, and nothing else.
         self.assertEqual(LEGACY_LITERAL_RE.findall(source),
-                         ['"/health'])
+                         [])
         self.assertIn('"/api/health"', source)
 
 
