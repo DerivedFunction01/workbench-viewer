@@ -1,0 +1,12 @@
+# Staging — the designated pre-home for workbench items that do
+# not have a proper home yet: plans, bundles, mocks, and
+# artifacts whose canonical project does not exist yet (above
+# all, a plan whose work creates a new repo). Items graduate
+# to their canonical project by the recorded procedure in
+# README.md; the graduation log is GRADUATIONS.md.
+name: Staging
+slug: staging
+registry: workbench/registry.db
+plans: .plans
+mockups: workbench/entries
+archive: workbench/archive

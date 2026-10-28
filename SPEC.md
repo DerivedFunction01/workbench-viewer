@@ -217,6 +217,19 @@ the full procedure lives in its README. New work that will
 create its own repo starts staged and graduates when the
 repo exists.
 
+The staging project stays separate, with its own git repo;
+it is not part of this repository. This repo carries its
+seed files under `templates/staging/` (manifest, README,
+graduations log, ignore rules) so a fresh clone of the
+harness holds everything needed to recreate it.
+`ops/bootstrap-staging.sh`, run on setup, materializes the
+seed as the sibling staging project — its own `git init`
+with a founding commit, plus the registry via `wb init` —
+when the project does not exist yet, and is a no-op when
+it does. Only the seed is carried here; staging's live
+data (plans, registry, entries) stays in the staging
+project itself, per the rule that data never migrates.
+
 ## 3. Discovery — the sweep
 
 Discovery is a config-driven sweep. No per-repo path is ever
