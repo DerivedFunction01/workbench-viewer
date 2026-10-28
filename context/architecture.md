@@ -4,7 +4,7 @@
 
 | Layer    | Technology                              | Role |
 | -------- | --------------------------------------- | ---- |
-| Core     | Python 3.11, stdlib only                | `lib/` — sweep, registry, todos, plan parser, validators, staleness |
+| Core     | Python 3.11, stdlib only (one ruled exception: DuckDB for dataset peeks, lazily imported) | `lib/` — sweep, registry, todos, plan parser, validators, staleness |
 | CLI      | Python (argparse), thin caller          | `wb` — every verb is a lib/ call |
 | Server   | Python stdlib `http.server`, loopback   | Feeds + guarded writes; holds **no SQL** |
 | Artifact | TypeScript space: React 19 + Tailwind CSS v4 (client) + actions + privileged raw-socket bridge | The one viewer UI — frontend fundamentals DECIDED (SPEC §11; frozen layout below) |
@@ -240,6 +240,7 @@ error. Keys:
 | `plans` | no | plan-files directory (Plans + Board) |
 | `mockups` | no | entries dir; default: `entries` beside the registry |
 | `archive` | no | archive dir; default: `archive` beside the registry |
+| `registration` | no | adoption posture; `as-is` = the plan corpus registered as found (pre-standard, no backfill), so the doctor treats its `plan-status` findings as informational. Absent = full adoption |
 
 All paths are relative to the repo root and must not escape
 it. Absent `registry` → no Mockups/Todos sections; absent

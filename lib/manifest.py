@@ -16,8 +16,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 KNOWN_KEYS = ("name", "slug", "registry", "plans", "mockups",
-              "archive")
+              "archive", "registration")
 PATH_KEYS = ("registry", "plans", "mockups", "archive")
+
+# The registration postures a manifest may declare. Absent
+# (the default) is a full adoption: the project's plan
+# corpus is held to the plan standard. `as-is` records
+# that the project registered its corpus as found — its
+# plans predate the standard and are not backfilled — so
+# the doctor treats its plan-status findings as
+# informational (computed, never in the finding set).
+REGISTRATION_AS_IS = "as-is"
 
 
 class ManifestError(ValueError):
@@ -34,6 +43,16 @@ class Manifest:
     mockups: Path | None = None
     archive: Path | None = None
     declared: dict = field(default_factory=dict)
+
+    @property
+    def registered_as_is(self) -> bool:
+        """True when the manifest declares
+        `registration: as-is` — the project registered
+        its plan corpus as found (pre-standard, no
+        backfill). Posture is per-project data, read from
+        the project's own manifest, never a name in code."""
+        return self.declared.get("registration") \
+            == REGISTRATION_AS_IS
 
     @property
     def db_path(self) -> Path | None:

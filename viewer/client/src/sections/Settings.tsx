@@ -19,6 +19,7 @@ import { ModeControl } from "../components/ModeControl";
 import { PaletteSelect } from "../components/PaletteSelect";
 import type { Appearance, Density, Mode } from "../lib/preferences";
 import { PALETTE_OPTIONS } from "../lib/preferences";
+import { ReposTrackingPanel } from "./settings/ReposTrackingPanel";
 import { SettingsPanels } from "./settings/SettingsPanels";
 import { sectionTitleStyle } from "./shared";
 
@@ -98,6 +99,7 @@ export function SettingsSection({
         />
       </div>
       <SettingsPanels />
+      <ReposTrackingPanel />
     </section>
   );
 }

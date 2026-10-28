@@ -13,6 +13,12 @@
 //   #/p/<slug>/todos             and may itself contain slashes)
 //   #/p/<slug>/board
 //   #/board                     the cross-project board
+//   #/repos                     the repo census (absorption
+//                               plan, step 8) — app-level,
+//                               like the board
+//   #/repos/<id>                one repo; the id is a
+//                               workspace-relative path and
+//                               may itself contain slashes
 //
 // Unknown routes land on the default view, never a blank
 // (ui-context). Parsing is pure so App stays declarative.
@@ -33,7 +39,8 @@ export type Route =
   | { view: "settings" }
   | { view: "inbox" }
   | { view: "section"; slug: string; section: SectionId; item: string | null }
-  | { view: "board-all" };
+  | { view: "board-all" }
+  | { view: "repos"; repoId: string | null };
 
 export function parseRoute(hash: string): Route {
   const raw = hash.replace(/^#/, "");
@@ -42,6 +49,10 @@ export function parseRoute(hash: string): Route {
   if (parts[0] === "settings" && parts.length === 1) return { view: "settings" };
   if (parts[0] === "inbox" && parts.length === 1) return { view: "inbox" };
   if (parts[0] === "board" && parts.length === 1) return { view: "board-all" };
+  if (parts[0] === "repos") {
+    const repoId = parts.length > 1 ? parts.slice(1).map(decodeURIComponent).join("/") : null;
+    return { view: "repos", repoId };
+  }
   if (parts[0] === "p" && parts.length >= 3) {
     const slug = decodeURIComponent(parts[1] ?? "");
     const section = parts[2] as SectionId;
@@ -72,6 +83,13 @@ export function inboxHref(): string {
 export function sectionHref(slug: string, section: SectionId, item?: string | null): string {
   const base = `#/p/${encodeURIComponent(slug)}/${section}`;
   return item ? `${base}/${item.split("/").map(encodeURIComponent).join("/")}` : base;
+}
+
+/** The repo census, or one repo within it (the id's
+ * segments are encoded individually, like a plans item). */
+export function reposHref(repoId?: string | null): string {
+  if (!repoId) return "#/repos";
+  return `#/repos/${repoId.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 /** The project a route is scoped to, when it has one. */

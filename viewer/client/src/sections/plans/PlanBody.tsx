@@ -17,7 +17,9 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useId, useMemo, useState } from "react";
 import type { PlanBlock, PlanStep } from "../../lib/api";
+import { highlightCode, highlightWithLanguage } from "../../lib/highlight";
 import { anchor } from "./anchors";
+import { codePlaceholderRe, extractCode } from "./codefences";
 import { extractMath, mathPlaceholderRe, renderMath } from "./math";
 
 const proseStyle: React.CSSProperties = {
@@ -40,19 +42,24 @@ const codeStyle: React.CSSProperties = {
 
 export function MarkdownBlock({ text, sectionHeading }: { text: string; sectionHeading: string }) {
   const prepared = useMemo(() => {
-    const extracted = extractMath(text);
+    const codeExtracted = extractCode(text);
+    const extracted = extractMath(codeExtracted.text);
     const raw = marked.parse(extracted.text, { async: false }) as string;
     let tableIndex = 0;
     const anchored = raw.replace(/<table>/g, () => {
       tableIndex += 1;
       return `<table data-anchor="${anchor.table(sectionHeading, tableIndex)}">`;
     });
-    return { html: DOMPurify.sanitize(anchored), spans: extracted.spans };
+    return {
+      html: DOMPurify.sanitize(anchored),
+      spans: extracted.spans,
+      codeSpans: codeExtracted.spans,
+    };
   }, [text, sectionHeading]);
   const [html, setHtml] = useState(prepared.html);
   useEffect(() => {
     setHtml(prepared.html);
-    if (prepared.spans.length === 0) return;
+    if (prepared.spans.length === 0 && prepared.codeSpans.length === 0) return;
     let live = true;
     (async () => {
       let out = prepared.html;
@@ -69,6 +76,22 @@ export function MarkdownBlock({ text, sectionHeading }: { text: string; sectionH
           // Unparseable math keeps its source text, the
           // degradation the syntax standard specifies.
         }
+      }
+      for (let i = 0; i < prepared.codeSpans.length; i++) {
+        const span = prepared.codeSpans[i] as (typeof prepared.codeSpans)[number];
+        const inner = span.lang
+          ? ((await highlightWithLanguage(span.code, span.lang)) ??
+            (await highlightCode(span.code)))
+          : await highlightCode(span.code);
+        // No highlight (unknown grammar, below the
+        // relevance floor): the placeholder stays — its
+        // text is the source.
+        if (inner == null) continue;
+        const fragment = DOMPurify.sanitize(
+          `<pre class="wb-codeblock"><code>${inner}</code></pre>`,
+        );
+        if (!fragment.includes("wb-codeblock")) continue;
+        out = out.replace(codePlaceholderRe(i), () => fragment);
       }
       if (live) setHtml(out);
     })();
@@ -158,6 +181,31 @@ function MermaidDiagram({
   );
 }
 
+/** A structured code block from the parsed document,
+ * with the shared highlight treatment (the block's own
+ * declared language first, auto-detect behind it); a
+ * block that cannot be highlighted renders plain — never
+ * a hole. */
+function CodeBlock({ text, lang }: { text: string; lang?: string }) {
+  const [html, setHtml] = useState<string | null>(null);
+  useEffect(() => {
+    setHtml(null);
+    let live = true;
+    (async () => {
+      const out = lang
+        ? ((await highlightWithLanguage(text, lang)) ?? (await highlightCode(text)))
+        : await highlightCode(text);
+      if (live) setHtml(out);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [text, lang]);
+  if (html == null) return <pre style={codeStyle}>{text}</pre>;
+  // biome-ignore lint/security/noDangerouslySetInnerHtml: highlight.js escapes the source text itself; its output is span markup only (the shared highlight pattern)
+  return <pre style={codeStyle} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 export function BlockView({
   block,
   sectionHeading,
@@ -177,7 +225,7 @@ export function BlockView({
     );
   }
   if (block.type === "code") {
-    return <pre style={codeStyle}>{block.text ?? ""}</pre>;
+    return <CodeBlock text={block.text ?? ""} lang={block.lang} />;
   }
   return <MarkdownBlock text={block.text ?? ""} sectionHeading={sectionHeading} />;
 }

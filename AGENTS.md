@@ -75,7 +75,11 @@ relevant file before continuing.
   launch path — never system python.
 - **The server's write surface is exactly two things:** guarded
   file saves (sha-checked, config-gated, default OFF) and lib/
-  mutations. Nothing else writes.
+  mutations. Nothing else writes. Guarded saves cover entry
+  files, plan files, and — under the absorption plan
+  (2026-10-28) — repo files, behind the same gate plus the
+  secret-confirm rule; what the client offers follows the
+  plan's editing-scope answer.
 - **Git:** local commits per completed plan step, author
   `DL <>` via per-command `-c user.name`/`-c user.email` flags.
   No pushes, no remotes, unless the owner rules otherwise.

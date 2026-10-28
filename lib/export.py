@@ -23,7 +23,7 @@ from pathlib import Path
 from . import registry as reg
 from .staleness import (entry_staleness, load_thresholds,
                         approval_coverage)
-from .util import canonical_json
+from .util import canonical_json, write_text
 
 
 def build_export(db_path, *, project=None, now=None) -> dict:
@@ -86,7 +86,7 @@ def regenerate(db_path, *, project=None) -> Path:
     out = db_path.with_name("registry.json")
     data = build_export(db_path, project=project)
     tmp = out.with_suffix(".json.tmp")
-    tmp.write_text(canonical_text(data), encoding="utf-8")
+    write_text(tmp, canonical_text(data))
     tmp.replace(out)
     return out
 

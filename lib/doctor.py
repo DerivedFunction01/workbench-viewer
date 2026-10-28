@@ -18,11 +18,11 @@ set changes under --post, one digest message through
 lib/messages.py — the one message path.
 
 Check families:
-  plan-closeout        a flat plan's declared Status
+  plan-closeout        a plan file's declared Status
                        contradicts its filing (the bundles
                        module's closeout derivation)
-  plan-status          a plan with no Status header, or a
-                       declared value outside the
+  plan-status          a plan file with no Status header,
+                       or a declared value outside the
                        recognized vocabulary
   plan-missing-child   a declared subplan path that does
                        not resolve to a file
@@ -48,9 +48,26 @@ Check families:
                        folder location disagree, where the
                        validator suite did not already
                        report that entry
+
+Plan-file scope: plan-status and plan-closeout govern
+PLAN FILES only — see _is_plan_file for the
+classification, limb by limb. Run records, report-genre
+documents that declare no Status, and determination /
+living-reference documents are out of scope for both
+checks; every other check is unaffected.
+
+Informational posture: a project whose manifest declares
+`registration: as-is` registered its plan corpus as
+found (pre-standard, no backfill). Its plan-status
+findings are computed and then discarded — they never
+enter the finding set the printer, the run-state diff,
+or the digest consumes. plan-closeout is NOT downgraded:
+a filing contradiction is a contradiction in any
+posture.
 """
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,6 +77,7 @@ from . import staleness as stale_mod
 from . import validators as val_mod
 from .plans import bundles as bundle_parser
 from .plans.parser import declared_status
+from .util import write_text
 
 # The plan syntax standard's Status vocabulary (draft,
 # approved, in progress, complete, superseded) plus the
@@ -90,16 +108,28 @@ def finding_key(finding):
 # Plan / todo family
 # ----------------------------------------------------------------
 
-def _plan_ref_exists(root, plans_dir, ref) -> bool:
+def _plan_ref_exists(root, plans_dir, ref, todo_rel=None) -> bool:
     """A todo's plan reference resolves the way it is
     written in the corpus: project-root-relative
-    (`.plans/<file>`) or plans-dir-relative. A plan that
-    was closed out after the todo was written now lives
-    under `<plans_dir>/finished/` at the same relative
-    path — flat plans and whole bundles alike — so that
-    spelling resolves too. A reference naming a plan in
-    neither tree does not resolve."""
-    for candidate in (root / ref, plans_dir / ref):
+    (`.plans/<file>`), plans-dir-relative, or
+    bundle-relative — a bundle todo naming its own
+    bundle's plan by bare filename (`plan: plan.md`)
+    resolves against the bundle home, the directory
+    holding the todo's `todos/` folder, in the active
+    tree or under `finished/` alike (the todo's own
+    location already reflects a closeout move). A plan
+    that was closed out after the todo was written now
+    lives under `<plans_dir>/finished/` at the same
+    relative path — flat plans and whole bundles alike —
+    so that spelling resolves too. A reference naming a
+    plan in no form does not resolve."""
+    candidates = [root / ref, plans_dir / ref]
+    if todo_rel:
+        parts = Path(todo_rel).parts
+        if len(parts) >= 3 and parts[-2] == "todos":
+            candidates.append(
+                plans_dir / Path(*parts[:-2]) / ref)
+    for candidate in candidates:
         if candidate.is_file():
             return True
         try:
@@ -109,6 +139,68 @@ def _plan_ref_exists(root, plans_dir, ref) -> bool:
         if (plans_dir / "finished" / relative).is_file():
             return True
     return False
+
+
+# ----------------------------------------------------------------
+# Plan-file scope for the filing checks
+# ----------------------------------------------------------------
+
+# Declared Status words that mark a determination /
+# living-reference document rather than a work plan: the
+# document records a decision state and stays in force
+# with its status and its place (the plan syntax
+# standard's Closeout exemption for documents that stay
+# in force), outside the work-state axis the filing
+# checks govern.
+DETERMINATION_WORDS = ("determined", "determination")
+
+# Report-genre markers: hyphen-delimited tokens in the
+# file's slug, the corpus's own naming for its non-plan
+# documents (dossiers, sweeps, provenance and comparison
+# reports; design records match as a compound below).
+REPORT_MARKERS = ("dossier", "sweep", "provenance",
+                  "comparison")
+
+
+def _is_plan_file(plan) -> bool:
+    """Whether a flat plans-corpus file is a PLAN FILE
+    for the filing checks (plan-status, plan-closeout).
+    A bundle's plan.md is a plan file by construction
+    and never comes through here. A flat file is NOT a
+    plan file when any limb holds:
+
+    - Run record: the name ends `.handoff.md`, or the
+      slug ends `-run-record`. Run records narrate a run
+      and declare its outcome in plan vocabulary (a
+      handoff declaring complete in the active tree is
+      finished work), which the filing rules misread.
+    - Determination / living reference: the declared
+      Status leads with `determined` or `determination`
+      — the document stays in force as the decision
+      record and keeps its status and its place.
+    - Report genre: the slug carries a report marker
+      (REPORT_MARKERS, or a `-design-record` compound)
+      AND the file declares no Status. A report that
+      declares no work state has not opted into plan
+      discipline; one that declares a Status is checked
+      like any plan.
+    """
+    name = plan["path"].rsplit("/", 1)[-1]
+    if name.endswith(".handoff.md"):
+        return False
+    stem = name[:-3] if name.endswith(".md") else name
+    if stem == "run-record" \
+            or stem.endswith("-run-record"):
+        return False
+    if declared_status(plan["status_raw"]) \
+            in DETERMINATION_WORDS:
+        return False
+    if plan["status_raw"] is None:
+        tokens = set(stem.split("-"))
+        if tokens.intersection(REPORT_MARKERS) \
+                or "-design-record" in stem:
+            return False
+    return True
 
 
 def _plan_status_finding(slug, plan):
@@ -138,6 +230,10 @@ def plan_todo_findings(project) -> list:
     slug = project.slug
     manifest = project.manifest
     plans_dir = manifest.plans
+    # Informational posture (manifest data, never a name
+    # in code): an as-is registration's plan-status
+    # findings are computed and discarded below.
+    status_informational = manifest.registered_as_is
     out = []
     if plans_dir is None or not plans_dir.is_dir():
         return out
@@ -145,16 +241,24 @@ def plan_todo_findings(project) -> list:
     todo_bundles = {}
     for b in bundles:
         plan = b["plan"]
-        if b["kind"] == "flat-plan":
+        # The filing checks (plan-closeout, plan-status)
+        # govern plan files only; a bundle's plan.md is
+        # one by construction.
+        plan_file = b["kind"] == "bundle" \
+            or (plan is not None and _is_plan_file(plan))
+        if b["kind"] == "flat-plan" and plan_file:
             for err in b["errors"]:
                 if err["error"].startswith("closeout:"):
                     out.append(_finding(
                         slug, "plan-closeout", err["path"],
                         err["error"]))
         if plan is not None:
-            status_finding = _plan_status_finding(slug, plan)
-            if status_finding is not None:
-                out.append(status_finding)
+            if plan_file:
+                status_finding = _plan_status_finding(
+                    slug, plan)
+                if status_finding is not None \
+                        and not status_informational:
+                    out.append(status_finding)
             for sub in plan["subplans"]:
                 if not (plans_dir / sub).is_file():
                     out.append(_finding(
@@ -185,7 +289,8 @@ def plan_todo_findings(project) -> list:
                     slug, "todo-frontmatter", t["path"],
                     "; ".join(t["errors"])))
             if t["plan"] and not _plan_ref_exists(
-                    manifest.root, plans_dir, t["plan"]):
+                    manifest.root, plans_dir, t["plan"],
+                    todo_rel=t["path"]):
                 out.append(_finding(
                     slug, "todo-missing-plan", t["path"],
                     f"plan reference {t['plan']!r} does "
@@ -302,11 +407,9 @@ def save_state(path, records) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(
-        json.dumps({"version": STATE_VERSION,
-                    "findings": records},
-                   indent=1, sort_keys=True),
-        encoding="utf-8")
+    write_text(tmp, json.dumps(
+        {"version": STATE_VERSION, "findings": records},
+        indent=1, sort_keys=True))
     tmp.replace(path)
 
 
@@ -401,7 +504,16 @@ def run_post(projects, *, state_path, messages_db,
             project_slug=harness_slug, send=True)
         message_id = msg["id"]
         posted = True
-    save_state(state_path, merged)
+    try:
+        save_state(state_path, merged)
+    except OSError as e:
+        # The digest (if any) is already posted; the state
+        # file only positions the NEXT run's diff. A failed
+        # save (a transient write denial in this
+        # environment) must not crash the run — the worst
+        # case is a repeated diff next run.
+        print(f"wb doctor: could not save state "
+              f"{state_path}: {e}", file=sys.stderr)
     return {"findings": current, "new": new,
             "resolved": resolved, "baseline": baseline,
             "posted": posted, "message_id": message_id}

@@ -21,6 +21,9 @@ mockup data model is example-project's subplan 09, Part B.
    plans: .plans                     # optional — Plans + Board
    mockups: workbench/entries        # optional
    archive: workbench/archive        # optional
+   registration: as-is               # optional — only for a repo whose
+                                     # plan corpus predates the plan
+                                     # standard and is not backfilled
    ```
 
    Every path is relative to your repo root. Omit a key and

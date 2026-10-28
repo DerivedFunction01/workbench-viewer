@@ -72,10 +72,16 @@ from adopting projects.
 
 Out of scope:
 
-- Any project's application data: no pay figures, no repo
-  browsing (that is the git repo viewer's job), no project
+- Any project's application data: no pay figures, no project
   dashboards. The five sections are the boundary — the
   viewer renders work and design state, never project data.
+  Repo browsing is the exception, absorbed from the git
+  repo viewer (absorption plan,
+  2026-10-28-git-viewer-absorption): census, status, tree,
+  peek, and guarded edit for every repo under the workspace
+  root, manifest or not. A repo anchor (repo + path)
+  legitimizes a peek and a diff against HEAD; arbitrary
+  revision browsing stays out of scope.
 - **another-project is registered (owner's ruling, 2026-10-26 —
   reverses the earlier exclusion)** — it keeps its own maintenance
   system; the harness reads its data files only, as for any
@@ -887,12 +893,17 @@ reasoning is not re-litigated:
    open ("System") lingered for days — names lock BEFORE
    publish, and this name is already consistent across
    the repo, server, unit, and config.
-2. **Cross-links with the git repo viewer: LINK-ONLY.**
-   Separate artifacts, separate servers; at most a link
-   each way. Lesson: the monitor consolidated onto ONE
+2. **Cross-links with the git repo viewer: INTERNAL
+   NAVIGATION** (absorption plan,
+   2026-10-28-git-viewer-absorption — supersedes the
+   earlier link-only ruling). The git repo viewer's job is
+   absorbed (§0): one artifact, one server, and a project
+   and its repo are views of the same record, linked
+   internally. Lesson: the monitor consolidated onto ONE
    dashboard and the git viewer onto ONE artifact for all
    repos — surfaces that tried to be two tools became
-   neither; each viewer's job stays its own (§0).
+   neither; the absorption keeps one tool per job by
+   making the jobs one tool's.
 3. **Staleness check: NOT scheduled in v1.** `wb
    print-schedule` emits the definition; enabling a
    schedule is a later, explicit ruling. Lesson: the

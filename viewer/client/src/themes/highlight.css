@@ -1,0 +1,110 @@
+/* Syntax highlighting (highlight.js) — hand-authored, NOT
+   generated: the .hljs-* classes are colored from the
+   palettes' semantic roles, which olive.css / teal.css
+   define per palette × mode, so this one mapping follows
+   every palette and both modes without a per-palette
+   copy. Role choices, for legibility on the code
+   background (--wb-surface-sunken): the status *-text
+   variants are each hue's contrast-tuned text form;
+   keyword rides the palette accent so the two palettes
+   keep their own flavor; comment is the muted content
+   role, italic. */
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--wb-content-muted);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-doctag,
+.hljs-template-tag {
+  color: var(--wb-accent);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-char,
+.hljs-meta .hljs-string {
+  color: var(--wb-status-implemented-text);
+}
+
+.hljs-number,
+.hljs-literal {
+  color: var(--wb-status-stale-text);
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-name {
+  color: var(--wb-status-canonical-text);
+}
+
+.hljs-type,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-title.class_ {
+  color: var(--wb-status-unexplored-text);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--wb-status-needs-changes-text);
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--wb-status-unexplored-text);
+}
+
+.hljs-meta,
+.hljs-meta .hljs-keyword {
+  color: var(--wb-content-secondary);
+}
+
+.hljs-tag {
+  color: var(--wb-content-muted);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* A highlighted code block spliced into rendered plan
+   markdown (PlanBody's fence swap): the same box the
+   components draw with the code style object. */
+.wb-codeblock {
+  background: var(--wb-surface-sunken);
+  border: 1px solid var(--wb-border-default);
+  border-radius: var(--wb-radius-md);
+  padding: var(--wb-space-12) var(--wb-space-16);
+  font-family: var(--wb-font-mono);
+  font-size: var(--wb-font-size-sm);
+  line-height: var(--wb-line-height-sm);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* The diff grammar's own add/del classes (distinct from
+   the diff views' row tinting, which is the primary
+   signal and lives in the components). */
+.hljs-addition {
+  color: var(--wb-status-implemented-text);
+}
+
+.hljs-deletion {
+  color: var(--wb-status-hard-gate-text);
+}

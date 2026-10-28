@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, \
     ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, parse_qsl, unquote, urlsplit
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
@@ -50,6 +50,10 @@ from lib import messages as msg_mod  # noqa: E402
 from lib import notify as notify_mod  # noqa: E402
 from lib import worktrees as wt_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
+from lib import repo_state as repo_state_mod  # noqa: E402
+from lib import repos as repos_mod  # noqa: E402
+from lib import dataset_console as dataset_console_mod  # noqa: E402
+from lib import datasets as datasets_mod  # noqa: E402
 from lib import staleness  # noqa: E402
 from lib import sweep as sweep_mod  # noqa: E402
 from lib import validators as val_mod  # noqa: E402
@@ -602,6 +606,144 @@ def diff_feed(project, query: dict) -> dict:
             "captured_at": now_iso(), **result}
 
 
+# ----------------------------------------------------------------
+# Repos (absorption plan, steps 2-7): census, status, tree,
+# peek/save, registry, history — every derivation in lib/;
+# this layer only resolves ids and shapes payloads.
+# ----------------------------------------------------------------
+
+def _census() -> dict:
+    """id -> census record, freshly walked (the walk is
+    the cheap part; derivations run per feed)."""
+    prune = CFG["repos_prune"] or repos_mod.DEFAULT_PRUNE
+    records = repos_mod.discover_repos(
+        CFG["workspace_root"],
+        max_depth=CFG["repos_max_depth"], prune=prune)
+    return {r["id"]: r for r in records}
+
+
+def _repo_or_404(repo_id: str) -> dict:
+    record = _census().get(repo_id)
+    if record is None:
+        raise ApiError(404, f"unknown repo: {repo_id}")
+    return record
+
+
+def _repos_registry_path():
+    return cfgmod.state_file(CFG, "repos_registry_file")
+
+
+def _repos_history_path():
+    return cfgmod.state_file(CFG, "repos_history_file")
+
+
+def repos_feed() -> dict:
+    """GET /api/repos: every discovered repo's summary with
+    its registry entry attached; registry entries that
+    discovery did not find ride as missing rows. Serves
+    record history, as the reference did."""
+    census = _census()
+    data = repo_state_mod.load_registry(_repos_registry_path())
+    data, changed = repo_state_mod.reconcile(
+        data, list(census.values()),
+        healthy_scan=len(census) > 0, now=now_iso())
+    if changed:
+        repo_state_mod.save_registry(_repos_registry_path(),
+                                     data)
+    summaries = []
+    for record in census.values():
+        s = repos_mod.repo_summary(record)
+        s["registry"] = data["repos"].get(record["id"])
+        if not s.get("error"):
+            repo_state_mod.record_history(
+                _repos_history_path(), s)
+        summaries.append(s)
+    for repo_id, entry in data["repos"].items():
+        if repo_id not in census:
+            summaries.append({
+                "id": repo_id, "name": repo_id,
+                "root": entry.get("root"),
+                "is_worktree": False, "parent_id": None,
+                "missing": True, "error": None,
+                "registry": dict(entry)})
+    summaries.sort(key=lambda s: s["id"])
+    return {"repos": summaries, "captured_at": now_iso()}
+
+
+def repo_status_feed(record) -> dict:
+    """GET /api/repos/<id>/status: the full status with
+    its registry entry; the serve records history."""
+    status = repos_mod.repo_status(record)
+    data = repo_state_mod.load_registry(_repos_registry_path())
+    status["registry"] = data["repos"].get(record["id"])
+    if not status.get("error"):
+        repo_state_mod.record_history(_repos_history_path(),
+                                      status)
+    return status
+
+
+def _dataset_call(fn, *args, **kwargs):
+    """One dataset derivation with the house error shape:
+    lib/files refusals keep their status; dataset
+    refusals are 400 with the module's renderable
+    message."""
+    try:
+        return fn(*args, **kwargs)
+    except files_mod.FileError_ as e:
+        raise ApiError(e.status, str(e))
+    except datasets_mod.DatasetError as e:
+        raise ApiError(400, str(e))
+
+
+def dataset_schema_feed(record, query) -> dict:
+    """GET /api/repos/<id>/dataset?path=: the dataset's
+    schema (for database kinds, every table's)."""
+    rel = query.get("path")
+    if not rel:
+        raise ApiError(400, "dataset needs ?path=")
+    return _dataset_call(datasets_mod.dataset_schema,
+                         record["root"], rel)
+
+
+def dataset_rows_feed(record, query) -> dict:
+    """GET /api/repos/<id>/dataset/rows: one bounded
+    page; filters ride as one JSON array parameter."""
+    rel = query.get("path")
+    if not rel:
+        raise ApiError(400, "dataset rows need ?path=")
+    try:
+        limit = int(query.get("limit", "100"))
+        offset = int(query.get("offset", "0"))
+    except ValueError:
+        raise ApiError(400, "limit/offset must be integers")
+    filters = []
+    raw_filters = query.get("filters")
+    if raw_filters:
+        try:
+            filters = json.loads(raw_filters)
+        except json.JSONDecodeError:
+            raise ApiError(400, "filters must be a JSON array")
+        if not isinstance(filters, list):
+            raise ApiError(400, "filters must be a JSON array")
+    return _dataset_call(
+        datasets_mod.dataset_rows, record["root"], rel,
+        table=query.get("table") or None, limit=limit,
+        offset=offset, sort=query.get("sort") or None,
+        descending=query.get("dir") == "desc",
+        filters=filters)
+
+
+def dataset_stats_feed(record, query) -> dict:
+    """GET /api/repos/<id>/dataset/stats?path=: the
+    on-demand column statistics."""
+    rel = query.get("path")
+    if not rel:
+        raise ApiError(400, "dataset stats need ?path=")
+    return _dataset_call(
+        datasets_mod.dataset_stats, record["root"], rel,
+        table=query.get("table") or None)
+
+
 def effective_settings() -> dict:
     """GET /api/settings/effective: the seam's resolved
     values, read-only (Settings → Workspace, spec §3).
@@ -906,6 +1048,74 @@ class Handler(BaseHTTPRequestHandler):
             })
         if parts == ["api", "home"]:
             return self._send(200, home_feed())
+        if parts == ["api", "repos"]:
+            return self._send(200, repos_feed())
+        if parts == ["api", "repos", "registry"]:
+            data = repo_state_mod.load_registry(
+                _repos_registry_path())
+            return self._send(200, {
+                "repos": data["repos"],
+                "captured_at": now_iso()})
+        if len(parts) >= 4 and parts[0] == "api" \
+                and parts[1] == "repos" \
+                and parts[-1] in ("status", "files", "file",
+                                  "history"):
+            record = _repo_or_404("/".join(parts[2:-1]))
+            if parts[-1] == "status":
+                return self._send(200,
+                                  repo_status_feed(record))
+            if parts[-1] == "files":
+                # The dir parameter's presence is read from
+                # the raw query: parse_qs drops blank
+                # values, and ?dir= (the root) is a real
+                # request, distinct from no dir at all.
+                raw_pairs = parse_qsl(
+                    urlsplit(self.path).query,
+                    keep_blank_values=True)
+                if any(k == "dir" for k, _v in raw_pairs):
+                    try:
+                        listing = repos_mod.repo_dir(
+                            record, query.get("dir") or "")
+                    except ValueError as e:
+                        raise ApiError(400, str(e))
+                    except FileNotFoundError:
+                        raise ApiError(404, "no such directory")
+                    return self._send(200, listing)
+                include_all = query.get("all") in ("1", "true")
+                return self._send(200, repos_mod.repo_files(
+                    record, include_all=include_all))
+            if parts[-1] == "history":
+                return self._send(
+                    200, repo_state_mod.history_for(
+                        _repos_history_path(), record["id"]))
+            rel = query.get("path")
+            if not rel:
+                raise ApiError(400, "file needs ?path=")
+            try:
+                peek = files_mod.repo_peek(
+                    record["root"], rel,
+                    reveal=query.get("reveal") in ("1", "true"),
+                    editing_enabled=CFG[
+                        "file_editing_enabled"])
+            except files_mod.FileError_ as e:
+                raise ApiError(e.status, str(e))
+            return self._send(200, peek)
+        if len(parts) >= 4 and parts[0] == "api" \
+                and parts[1] == "repos" \
+                and parts[-1] == "dataset":
+            record = _repo_or_404("/".join(parts[2:-1]))
+            return self._send(200,
+                              dataset_schema_feed(record, query))
+        if len(parts) >= 5 and parts[0] == "api" \
+                and parts[1] == "repos" \
+                and parts[-2] == "dataset" \
+                and parts[-1] in ("rows", "stats"):
+            record = _repo_or_404("/".join(parts[2:-2]))
+            if parts[-1] == "rows":
+                return self._send(
+                    200, dataset_rows_feed(record, query))
+            return self._send(
+                200, dataset_stats_feed(record, query))
         if len(parts) == 4 and parts[0] == "api" \
                 and parts[1] == "projects" \
                 and parts[3] == "worktrees":
@@ -1029,6 +1239,56 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["api", "projects", "rescan"]:
             result = get_sweep(force=True)
             return self._send(200, result.summary())
+        if parts == ["api", "repos", "registry"]:
+            body = self._body()
+            repo_id = body.get("id")
+            patch = body.get("patch")
+            if not repo_id or not isinstance(patch, dict):
+                raise ApiError(400, "need {id, patch}")
+            data = repo_state_mod.load_registry(
+                _repos_registry_path())
+            entry, err = repo_state_mod.update_entry(
+                data, repo_id, patch)
+            if err:
+                raise ApiError(400, err)
+            repo_state_mod.save_registry(
+                _repos_registry_path(), data)
+            return self._send(200, {"id": repo_id,
+                                    "registry": entry})
+        if len(parts) >= 4 and parts[0] == "api" \
+                and parts[1] == "repos" \
+                and parts[-1] == "file":
+            record = _repo_or_404("/".join(parts[2:-1]))
+            body = self._body()
+            state = cfgmod.state_dir(CFG)
+            result = files_mod.repo_save(
+                record["root"], body.get("path"),
+                body.get("content"),
+                body.get("base_sha256"),
+                editing_enabled=CFG["file_editing_enabled"],
+                confirm_secret=body.get("confirm_secret")
+                is True,
+                backup_dir=state / CFG["edit_backups_dir"]
+                / "repos" / record["id"],
+                audit_log=state / CFG["edit_audit_log"])
+            return self._send(200, result)
+        if len(parts) >= 5 and parts[0] == "api" \
+                and parts[1] == "repos" \
+                and parts[-2] == "dataset" \
+                and parts[-1] == "sql":
+            record = _repo_or_404("/".join(parts[2:-2]))
+            body = self._body()
+            if not body.get("path") or not body.get("sql"):
+                raise ApiError(400, "sql needs {path, sql}")
+            try:
+                result = dataset_console_mod.run_dataset_sql(
+                    record["root"], body["path"],
+                    body["sql"],
+                    table=body.get("table") or None,
+                    timeout_s=CFG["datasets_sql_timeout_s"])
+            except datasets_mod.DatasetError as e:
+                raise ApiError(400, str(e))
+            return self._send(200, result)
         if len(parts) == 4 and parts[0] == "api" \
                 and parts[1] == "projects" \
                 and parts[3] == "todos":

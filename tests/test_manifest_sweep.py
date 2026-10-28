@@ -84,6 +84,13 @@ class TestManifest(unittest.TestCase):
         self.assertIsNone(m.registry)
         self.assertIsNone(m.plans)
 
+    def test_registration_posture(self):
+        m = self.load("name: X\nregistration: as-is\n")
+        self.assertTrue(m.registered_as_is)
+        # Absent registration is a full adoption.
+        m = self.load("name: X\n")
+        self.assertFalse(m.registered_as_is)
+
     def test_unknown_key_is_an_error(self):
         with self.assertRaises(ManifestError):
             self.load("name: X\nregsitry: typo.db\n")

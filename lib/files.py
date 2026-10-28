@@ -19,6 +19,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -300,6 +301,216 @@ def save_file(db_path, entry: dict, rel_raw: str, content,
                 note=json.dumps({"backup": str(backup)}))
     finally:
         conn.close()
+    return {"path": rel.as_posix(), "sha256": sha_after,
+            "size_bytes": len(new_raw),
+            "backup": str(backup)}
+
+
+# ----------------------------------------------------------------
+# Repo scope (absorption plan, Steps 4 + 6)
+#
+# The same peek/save discipline generalized from an entry's
+# directory to any browsed repo root — the git repo viewer's
+# semantics, re-derived in house idioms (FileError_ results,
+# the module's one secret policy and caps, the atomic-write
+# helper). Two deliberate differences from the entry scope,
+# both inherited from the reference behavior this replaces:
+# the escape check runs BEFORE the secret refusal (a path
+# that escapes is refused as an escape, whatever its name),
+# and a secret-shaped file, once explicitly revealed, is
+# editable — its save then requires confirm_secret, where
+# the entry scope refuses secret saves outright.
+# ----------------------------------------------------------------
+
+_GIT_ENV = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
+
+
+def resolve_in_repo(root, rel_raw: str):
+    """Resolve a path inside a browsed repo root, refusing
+    escapes. Returns (target, rel) or raises FileError_."""
+    root = Path(root).resolve()
+    rel = Path(rel_raw or "")
+    if not rel_raw or rel.is_absolute():
+        raise FileError_(400, "path must be repo-relative")
+    target = (root / rel).resolve()
+    if root not in target.parents and target != root:
+        raise FileError_(400, "path escapes the repo root")
+    return target, target.relative_to(root)
+
+
+def _repo_diff(root: Path, rel: Path):
+    """The file's diff against HEAD (working state), or
+    None — an unchanged file, an untracked file, a repo
+    with no commits yet, and a git failure all read as no
+    diff; a state, never an error. Read-only by
+    construction (GIT_OPTIONAL_LOCKS=0, --no-ext-diff),
+    capped at the peek byte cap. (A local git call rather
+    than lib/diffs: that module imports this one.)"""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "diff", "--no-ext-diff",
+             "HEAD", "--", rel.as_posix()],
+            capture_output=True, timeout=10, env=_GIT_ENV)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    diff = out.stdout.decode("utf-8", errors="replace")
+    if not diff:
+        return None
+    return diff[:PEEK_MAX_BYTES]
+
+
+def _dataset_descriptor(root, rel: Path):
+    """The peek's dataset descriptor for a dataset-like
+    file (datasets plan, step 3): {"kind"} plus the table
+    names for the database kinds, whose peek is a picker.
+    None when the file is not dataset-like, is
+    secret-shaped (a secret-shaped dataset is never
+    tabled), DuckDB is unavailable (the dataset view
+    degrades to text/metadata), or the schema read fails.
+    Single-relation kinds never open the file here —
+    classification is by suffix alone."""
+    if is_secret(rel):
+        return None
+    from . import datasets as datasets_mod
+    kind = datasets_mod.classify(rel)
+    if kind is None or not datasets_mod.available():
+        return None
+    descriptor = {"kind": kind}
+    if kind in ("sqlite", "duckdb"):
+        try:
+            schema = datasets_mod.dataset_schema(
+                root, rel.as_posix())
+        except datasets_mod.DatasetError:
+            return None
+        descriptor["tables"] = [t["name"]
+                                for t in schema["tables"]]
+    return descriptor
+
+
+def repo_peek(root, rel_raw: str, *, reveal: bool = False,
+              editing_enabled: bool = False) -> dict:
+    """Peek one file in a browsed repo: content under the
+    peek caps, binary as metadata only, secret-shaped
+    withheld by default (before existence, so the answer
+    is the same either way) and returned flagged when
+    revealed, the file's sha256, its editability verdict,
+    and its diff against HEAD."""
+    target, rel = resolve_in_repo(root, rel_raw)
+    secret = is_secret(rel)
+    if secret and not reveal:
+        size = target.stat().st_size if target.is_file() else 0
+        return {"path": rel.as_posix(), "size_bytes": size,
+                "is_binary": False, "withheld": "secret",
+                "content": None, "diff": None, "sha256": None,
+                "editable": False,
+                "editable_reason": "withheld"}
+    if not target.is_file():
+        raise FileError_(404, "no such file in the repo")
+    raw = target.read_bytes()
+    sha = hashlib.sha256(raw).hexdigest()
+    if _is_binary(target, raw[:8192]):
+        out = {"path": rel.as_posix(),
+               "size_bytes": len(raw), "is_binary": True,
+               "withheld": None, "content": None, "diff": None,
+               "sha256": sha, "editable": False,
+               "editable_reason": "binary",
+               "dataset": _dataset_descriptor(root, rel)}
+        if secret:
+            out["revealed"] = True
+        return out
+    text = raw.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    truncated = len(raw) > PEEK_MAX_BYTES \
+        or len(lines) > PEEK_MAX_LINES
+    if not truncated:
+        # Whole file within caps: serve the raw text so an
+        # edit round-trips byte-faithfully (line endings,
+        # trailing newline) instead of a line-joined copy.
+        content = text
+    else:
+        content = "\n".join(lines[:PEEK_MAX_LINES])
+        if len(content.encode()) > PEEK_MAX_BYTES:
+            content = content.encode()[:PEEK_MAX_BYTES] \
+                .decode("utf-8", errors="ignore")
+    if not editing_enabled:
+        editable, reason = False, "editing disabled"
+    elif truncated:
+        editable, reason = False, "too large"
+    else:
+        editable, reason = True, None
+    out = {"path": rel.as_posix(), "size_bytes": len(raw),
+           "is_binary": False, "withheld": None,
+           "line_count": len(lines), "truncated": truncated,
+           "content": content,
+           "diff": _repo_diff(Path(root), rel),
+           "sha256": sha, "editable": editable,
+           "editable_reason": reason,
+           "dataset": _dataset_descriptor(root, rel),
+           "captured_at": now_iso()}
+    if secret:
+        out["revealed"] = True
+    return out
+
+
+def repo_save(root, rel_raw: str, content, base_sha256, *,
+              editing_enabled: bool,
+              confirm_secret: bool = False,
+              backup_dir, audit_log) -> dict:
+    """The guarded save for a file in a browsed repo — the
+    reference gate set, in order: editing flag; content
+    validity and caps; resolved containment in the repo
+    root; secret-shaped refused before existence unless
+    confirm_secret (every other gate still applies with
+    it); symlink components refused on the raw path;
+    existence; binary and over-cap refused; sha
+    compare-and-swap (stale → 409, nothing written).
+    Success: one-generation backup under backup_dir,
+    atomic replace with mode preserved, one audit line
+    appended to audit_log."""
+    if not editing_enabled:
+        raise FileError_(
+            403, "file editing is disabled (server config "
+                 "file_editing_enabled)")
+    new_raw = _check_content(content, base_sha256)
+    root = Path(root)
+    target, rel = resolve_in_repo(root, rel_raw)
+    if is_secret(rel) and not confirm_secret:
+        raise FileError_(
+            403, "secret-shaped path requires confirm_secret")
+    probe = root
+    for part in Path(rel_raw).parts:
+        probe = probe / part
+        if os.path.islink(probe):
+            raise FileError_(403, "symlinks are not editable")
+    if not target.is_file():
+        raise FileError_(404, "no such file in the repo")
+    raw = target.read_bytes()
+    if _is_binary(target, raw[:8192]):
+        raise FileError_(403, "binary files are not editable")
+    if len(raw) > PEEK_MAX_BYTES \
+            or len(raw.decode("utf-8", errors="replace")
+                      .splitlines()) > PEEK_MAX_LINES:
+        raise FileError_(403, "file is too large to edit")
+    sha_before = hashlib.sha256(raw).hexdigest()
+    if base_sha256 != sha_before:
+        raise FileError_(
+            409, "file changed on disk since it was opened",
+            current_sha256=sha_before)
+    backup = Path(backup_dir) / (rel.as_posix() + ".bak")
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(target, backup)
+    _write_atomically(target, new_raw)
+    sha_after = sha256_bytes(new_raw)
+    audit_log = Path(audit_log)
+    audit_log.parent.mkdir(parents=True, exist_ok=True)
+    record = {"ts": now_iso(), "path": rel.as_posix(),
+              "bytes_before": len(raw),
+              "bytes_after": len(new_raw),
+              "sha_before": sha_before, "sha_after": sha_after}
+    with open(audit_log, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record) + "\n")
     return {"path": rel.as_posix(), "sha256": sha_after,
             "size_bytes": len(new_raw),
             "backup": str(backup)}

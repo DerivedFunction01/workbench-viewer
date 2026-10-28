@@ -13,6 +13,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { applyAppearance, loadAppearance } from "./lib/preferences";
 import "./themes/index.css";
+import "./themes/highlight.css";
 
 applyAppearance(loadAppearance());
 

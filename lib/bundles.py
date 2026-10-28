@@ -22,6 +22,7 @@ from pathlib import Path
 from . import registry as reg
 from .plans import bundles as bundle_parser
 from .plans.parser import parse_plan
+from .util import write_text
 
 TODO_STATUSES = bundle_parser.TODO_STATUSES
 
@@ -164,10 +165,10 @@ def create_bundle(plans_dir, slug, *, plan: bool = False,
     (bundle_dir / "todos").mkdir(parents=True)
     plan_written = False
     if plan:
-        (bundle_dir / "plan.md").write_text(
+        write_text(
+            bundle_dir / "plan.md",
             _plan_skeleton(slug, feature=feature,
-                           today=today),
-            encoding="utf-8")
+                           today=today))
         plan_written = True
     return {
         "id": bundle_id,
@@ -279,8 +280,7 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
     if todo_path.exists():
         raise BundleError(
             f"todo file already exists: {todo_path}")
-    todo_path.write_text(_render_todo(fields, body),
-                         encoding="utf-8")
+    write_text(todo_path, _render_todo(fields, body))
     rel = todo_path.relative_to(plans_dir).as_posix()
     result = bundle_parser.parse_todo(
         todo_path.read_text(encoding="utf-8"), path=rel)
@@ -360,7 +360,7 @@ def set_todo_status(plans_dir, todo_id, status, *,
     out = "---\n" + "\n".join(new_lines) + "\n---\n"
     if body.strip():
         out += "\n" + body.strip("\n") + "\n"
-    todo_path.write_text(out, encoding="utf-8")
+    write_text(todo_path, out)
     rel = todo_path.relative_to(plans_dir).as_posix()
     result = bundle_parser.parse_todo(
         todo_path.read_text(encoding="utf-8"), path=rel)

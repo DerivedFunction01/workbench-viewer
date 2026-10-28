@@ -38,6 +38,7 @@ import {
   inboxHref,
   parseRoute,
   type Route,
+  reposHref,
   type SectionId,
   sectionHref,
   settingsHref,
@@ -50,6 +51,7 @@ import { InboxSection } from "./sections/Inbox";
 import { MockupsSection } from "./sections/Mockups";
 import { OverviewSection } from "./sections/Overview";
 import { PlansSection } from "./sections/Plans";
+import { ReposSection } from "./sections/Repos";
 import { SettingsSection } from "./sections/Settings";
 import { TodosSection } from "./sections/Todos";
 
@@ -158,7 +160,19 @@ function BackIcon() {
   );
 }
 
-type PhoneTab = "home" | "project" | "inbox" | "settings";
+function ReposIcon() {
+  return (
+    <svg {...tabIconProps} aria-hidden="true">
+      <circle cx="6" cy="5" r="2.2" />
+      <circle cx="6" cy="19" r="2.2" />
+      <circle cx="18" cy="7" r="2.2" />
+      <path d="M6 7.2v9.6" />
+      <path d="M18 9.2c0 4.8-5.4 3.9-9 6" />
+    </svg>
+  );
+}
+
+type PhoneTab = "home" | "project" | "repos" | "inbox" | "settings";
 
 function PhoneTabBar({
   active,
@@ -172,6 +186,7 @@ function PhoneTabBar({
   const tabs: { id: PhoneTab; label: string; href: string; icon: React.ReactNode }[] = [
     { id: "home", label: "Home", href: homeHref(), icon: <HomeIcon /> },
     { id: "project", label: "Project", href: projectHref, icon: <ProjectIcon /> },
+    { id: "repos", label: "Repos", href: reposHref(), icon: <ReposIcon /> },
     { id: "inbox", label: "Inbox", href: inboxHref(), icon: <InboxIcon /> },
     { id: "settings", label: "Settings", href: settingsHref(), icon: <SettingsIcon /> },
   ];
@@ -190,7 +205,7 @@ function PhoneTabBar({
         bottom: 0,
         zIndex: 20,
         display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
+        gridTemplateColumns: "repeat(5, 1fr)",
         borderTop: "1px solid var(--wb-border-default)",
         background: "var(--wb-surface-1)",
         padding:
@@ -445,6 +460,7 @@ export function App() {
   const breadcrumb = (() => {
     if (route.view === "settings") return "Settings";
     if (route.view === "inbox") return "Inbox";
+    if (route.view === "repos") return route.repoId ? `Repos / ${route.repoId}` : "Repos";
     if (route.view === "board-all") return "Board · all projects";
     if (route.view === "section") {
       const name = selected?.name ?? route.slug;
@@ -470,6 +486,8 @@ export function App() {
       <InboxSection />
     ) : route.view === "board-all" ? (
       <BoardSection slug={null} projectName={null} />
+    ) : route.view === "repos" ? (
+      <ReposSection repoId={route.repoId} />
     ) : route.view === "section" ? (
       selected == null && !projectsQuery.isPending ? (
         <p style={{ color: "var(--wb-content-secondary)" }}>
@@ -518,9 +536,11 @@ export function App() {
         ? "inbox"
         : route.view === "settings"
           ? "settings"
-          : route.view === "home"
-            ? "home"
-            : "project";
+          : route.view === "repos"
+            ? "repos"
+            : route.view === "home"
+              ? "home"
+              : "project";
     const firstProject = projectGroups[0]?.project ?? null;
     const projectHref =
       routeSlugValue != null
@@ -542,6 +562,11 @@ export function App() {
       title = "Inbox";
     } else if (route.view === "settings") {
       title = "Settings";
+    } else if (route.view === "repos") {
+      title = "Repos";
+      sub = route.repoId;
+      backHref = route.repoId ? reposHref() : homeHref();
+      backLabel = route.repoId ? "Back to repos" : "Back to Home";
     } else if (route.view === "board-all") {
       title = "Board";
       sub = "all projects";
@@ -859,6 +884,13 @@ export function App() {
         </div>
 
         <div style={{ marginTop: "auto" }}>
+          <a
+            href={reposHref()}
+            style={railLinkStyle(route.view === "repos")}
+            aria-current={route.view === "repos" ? "page" : undefined}
+          >
+            <span>Repos</span>
+          </a>
           <a
             href={inboxHref()}
             style={railLinkStyle(route.view === "inbox")}

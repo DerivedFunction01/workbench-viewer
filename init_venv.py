@@ -57,8 +57,7 @@ def main() -> int:
     version = subprocess.run([str(python), "-c",
                               "import sys; print(sys.version.split()[0])"],
                              capture_output=True, text=True).stdout.strip()
-    print(f"init_venv: dependencies installed from {req.name} "
-          f"(stdlib only — nothing to install today)")
+    print(f"init_venv: dependencies installed from {req.name}")
     print(f"init_venv: interpreter: {python} (Python {version})")
     return 0
 

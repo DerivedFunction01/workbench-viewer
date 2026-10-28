@@ -28,6 +28,7 @@ import {
   type IgnoredChangedEntry,
   type WorktreesPayload,
 } from "../../lib/api";
+import { highlightLines } from "../../lib/highlight";
 import { useIsPhone } from "../../lib/responsive";
 import { EmptyWell, ErrorWell, metaStyle, SkeletonWell } from "../shared";
 import { anchor } from "./anchors";
@@ -49,29 +50,6 @@ const LEG_LABEL: Record<string, string> = {
   unstaged: "Unstaged",
 };
 
-const LANG_BY_EXT: Record<string, string> = {
-  ts: "typescript",
-  tsx: "typescript",
-  js: "javascript",
-  jsx: "javascript",
-  mjs: "javascript",
-  py: "python",
-  md: "markdown",
-  json: "json",
-  css: "css",
-  html: "xml",
-  xml: "xml",
-  sh: "bash",
-  bash: "bash",
-  yaml: "yaml",
-  yml: "yaml",
-  toml: "ini",
-  rs: "rust",
-  go: "go",
-  diff: "diff",
-  patch: "diff",
-};
-
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -91,43 +69,42 @@ const markerGlyph: Record<string, string> = {
 };
 
 /** Hunks with per-line syntax highlighting through the
- * LAZY highlight.js chunk (the SourceView pattern): the
- * language comes from the file extension; an unknown
+ * shared helper (lib/highlight): the language comes from
+ * the file's path (filename/extension map), else an
+ * auto-detect over the joined lines; an undetectable
  * language or a failed load renders plain text — never a
  * hole. Highlighting is per line, so a construct spanning
  * lines loses its tail coloring; the add/del tinting is
  * the primary signal and always renders. */
 export function HunkView({ path, hunks }: { path: string; hunks: DiffHunk[] }) {
   const [html, setHtml] = useState<Map<string, string> | null>(null);
-  const ext = path.includes(".") ? path.split(".").pop()?.toLowerCase() : undefined;
-  const language = ext ? LANG_BY_EXT[ext] : undefined;
   const flat = useMemo(
     () => hunks.flatMap((hunk, hi) => hunk.lines.map((line, li) => ({ key: `${hi}:${li}`, line }))),
     [hunks],
   );
 
   useEffect(() => {
-    if (!language) return;
     let live = true;
-    (async () => {
-      try {
-        const hljs = (await import("highlight.js")).default;
-        if (!hljs.getLanguage(language)) return;
-        const out = new Map<string, string>();
-        for (const { key, line } of flat) {
-          if (line.kind === "context" || line.kind === "add" || line.kind === "del") {
-            out.set(key, hljs.highlight(line.text, { language }).value);
-          }
-        }
-        if (live) setHtml(out);
-      } catch {
-        if (live) setHtml(null);
-      }
+    void (async () => {
+      const code = flat.filter(
+        ({ line }) => line.kind === "context" || line.kind === "add" || line.kind === "del",
+      );
+      const out = await highlightLines(
+        code.map(({ line }) => line.text),
+        path,
+      );
+      if (!live || !out) return;
+      const map = new Map<string, string>();
+      code.forEach(({ key }, j) => {
+        const h = out[j];
+        if (h != null) map.set(key, h);
+      });
+      setHtml(map);
     })();
     return () => {
       live = false;
     };
-  }, [flat, language]);
+  }, [flat, path]);
 
   if (hunks.length === 0) return null;
   return (

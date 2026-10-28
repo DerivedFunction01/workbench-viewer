@@ -117,8 +117,15 @@ async function callServer<T>(
 
 const slugArg = z.object({ slug: z.string().min(1) });
 const entryArg = z.object({ slug: z.string().min(1), entryId: z.string().min(1) });
+const repoArg = z.object({ repoId: z.string().min(1) });
 
 const enc = encodeURIComponent;
+
+// Repo ids are workspace-relative paths and may contain
+// slashes: each segment is encoded, the slashes ride
+// through (the server joins the trailing segments back
+// into the id).
+const encRepoId = (id: string) => id.split("/").map(enc).join("/");
 
 // ---------------------------------------------------------------------------
 // Actions — one per companion-server route (SPEC §7)
@@ -484,6 +491,211 @@ export const Actions = {
     privileged: [privileged.wbApi],
     async handler(ctx, args) {
       return callServer<unknown>(ctx, "/api/messages/cleanup", "POST", args.body);
+    },
+  }),
+
+  // -- repos (absorption plan, steps 8-9): the workspace
+  // repo census, per-repo status / files / peek / save /
+  // history, and the repo registry. Payloads ride
+  // rawResult: their shapes are the lib/repos.py,
+  // lib/files.py, lib/repo_state.py contracts, typed on
+  // the client in lib/api.ts.
+  getRepos: defineAction({
+    request: z.object({}),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<unknown>(ctx, "/api/repos");
+    },
+  }),
+
+  getRepoStatus: defineAction({
+    request: repoArg,
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/repos/${encRepoId(args.repoId)}/status`);
+    },
+  }),
+
+  getRepoFiles: defineAction({
+    request: z.object({
+      repoId: z.string().min(1),
+      all: z.boolean().optional(),
+      dir: z.string().optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      if (args.dir != null) params.set("dir", args.dir);
+      else if (args.all) params.set("all", "1");
+      const query = params.toString();
+      const suffix = query ? `?${query}` : "";
+      return callServer<unknown>(ctx, `/api/repos/${encRepoId(args.repoId)}/files${suffix}`);
+    },
+  }),
+
+  getRepoFile: defineAction({
+    request: z.object({
+      repoId: z.string().min(1),
+      path: z.string().min(1),
+      reveal: z.boolean().optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      params.set("path", args.path);
+      if (args.reveal) params.set("reveal", "1");
+      return callServer<unknown>(
+        ctx,
+        `/api/repos/${encRepoId(args.repoId)}/file?${params.toString()}`,
+      );
+    },
+  }),
+
+  saveRepoFile: defineAction({
+    request: z.object({
+      repoId: z.string().min(1),
+      path: z.string().min(1),
+      content: z.string(),
+      baseSha256: z.string().min(1),
+      confirmSecret: z.boolean().optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/repos/${encRepoId(args.repoId)}/file`, "POST", {
+        path: args.path,
+        content: args.content,
+        base_sha256: args.baseSha256,
+        confirm_secret: args.confirmSecret === true,
+      });
+    },
+  }),
+
+  // -- datasets (peek-highlight-and-datasets plan, steps
+  // 5-6): the Table view over dataset-kind repo files —
+  // described schema, one bounded rows page, on-demand
+  // column stats, and the guarded SQL console. Shapes are
+  // the lib/datasets.py + lib/dataset_console.py
+  // contracts, typed on the client in lib/api.ts.
+  getRepoDataset: defineAction({
+    request: z.object({
+      repoId: z.string().min(1),
+      path: z.string().min(1),
+      table: z.string().min(1).optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      params.set("path", args.path);
+      if (args.table) params.set("table", args.table);
+      return callServer<unknown>(
+        ctx,
+        `/api/repos/${encRepoId(args.repoId)}/dataset?${params.toString()}`,
+      );
+    },
+  }),
+
+  getRepoDatasetRows: defineAction({
+    request: z.object({
+      repoId: z.string().min(1),
+      path: z.string().min(1),
+      table: z.string().min(1).optional(),
+      limit: z.number().int().positive().optional(),
+      offset: z.number().int().nonnegative().optional(),
+      sort: z.string().min(1).optional(),
+      dir: z.enum(["asc", "desc"]).optional(),
+      filtersJson: z.string().optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      params.set("path", args.path);
+      if (args.table) params.set("table", args.table);
+      if (args.limit != null) params.set("limit", String(args.limit));
+      if (args.offset != null) params.set("offset", String(args.offset));
+      if (args.sort) params.set("sort", args.sort);
+      if (args.dir) params.set("dir", args.dir);
+      if (args.filtersJson) params.set("filters", args.filtersJson);
+      return callServer<unknown>(
+        ctx,
+        `/api/repos/${encRepoId(args.repoId)}/dataset/rows?${params.toString()}`,
+      );
+    },
+  }),
+
+  getRepoDatasetStats: defineAction({
+    request: z.object({
+      repoId: z.string().min(1),
+      path: z.string().min(1),
+      table: z.string().min(1).optional(),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      params.set("path", args.path);
+      if (args.table) params.set("table", args.table);
+      return callServer<unknown>(
+        ctx,
+        `/api/repos/${encRepoId(args.repoId)}/dataset/stats?${params.toString()}`,
+      );
+    },
+  }),
+
+  postRepoDatasetSql: defineAction({
+    request: z.object({
+      repoId: z.string().min(1),
+      path: z.string().min(1),
+      table: z.string().min(1).optional(),
+      sql: z.string().min(1),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/repos/${encRepoId(args.repoId)}/dataset/sql`, "POST", {
+        path: args.path,
+        table: args.table,
+        sql: args.sql,
+      });
+    },
+  }),
+
+  getRepoHistory: defineAction({
+    request: repoArg,
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, `/api/repos/${encRepoId(args.repoId)}/history`);
+    },
+  }),
+
+  getReposRegistry: defineAction({
+    request: z.object({}),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<unknown>(ctx, "/api/repos/registry");
+    },
+  }),
+
+  updateReposRegistry: defineAction({
+    request: z.object({
+      id: z.string().min(1),
+      patch: z.record(z.string(), z.unknown()),
+    }),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx, args) {
+      return callServer<unknown>(ctx, "/api/repos/registry", "POST", {
+        id: args.id,
+        patch: args.patch,
+      });
     },
   }),
 } satisfies ActionsModule;

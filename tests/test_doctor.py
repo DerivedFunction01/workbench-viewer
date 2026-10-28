@@ -7,6 +7,7 @@ fixtures plant the same shapes those functions read."""
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from lib import doctor
 from lib import messages as msg_mod
@@ -25,12 +26,13 @@ updated: 2026-10-26
 
 
 def make_project(root, *, plans=True, registry_path=None,
-                 mockups=None, archive=None):
+                 mockups=None, archive=None, declared=None):
     manifest = Manifest(
         root=root, name="Fixture", slug="fixture",
         registry=registry_path,
         plans=(root / ".plans") if plans else None,
-        mockups=mockups, archive=archive)
+        mockups=mockups, archive=archive,
+        declared=declared or {})
     return Project(manifest)
 
 
@@ -174,6 +176,52 @@ class TestPlanTodoChecks(unittest.TestCase):
                         plan=".plans/2026-01-12-work/plan.md"))
         self.assertEqual(self.findings(), [])
 
+    def test_todo_bundle_relative_plan_reference(self):
+        # The harness spelling: a bundle todo names its
+        # own bundle's plan by bare filename, and the
+        # plan.md sits beside the todos/ folder.
+        bundle = self.plans / "2026-01-13-work"
+        write(bundle / "plan.md", "# Work\n\nStatus: draft\n")
+        write(bundle / "todos" / "a.md",
+              todo_text("t-AAAAAAAAAA", plan="plan.md"))
+        self.assertEqual(self.findings(), [])
+
+    def test_todo_bundle_relative_plan_under_finished(self):
+        # The same spelling after the whole bundle moved
+        # to finished/: the todo's own location carries
+        # the move, so the reference still resolves.
+        bundle = self.plans / "finished" / "2026-01-13-work"
+        write(bundle / "plan.md",
+              "# Work\n\nStatus: complete\n")
+        write(bundle / "todos" / "a.md",
+              todo_text("t-AAAAAAAAAA", status="done",
+                        plan="plan.md"))
+        self.assertEqual(self.findings(), [])
+
+    def test_todo_bundle_relative_plan_absent(self):
+        # A bundle with no plan.md at all: a todo still
+        # declaring one names a plan that exists in no
+        # form — the finding fires.
+        bundle = self.plans / "2026-01-13-work"
+        write(bundle / "todos" / "a.md",
+              todo_text("t-AAAAAAAAAA", plan="plan.md"))
+        self.assertEqual(
+            [f["check"] for f in self.findings()],
+            ["todo-missing-plan"])
+
+    def test_todo_bare_filename_that_is_not_the_bundle_plan(
+            self):
+        # Bundle-relative resolution is not a free pass
+        # for any bare name: a filename that is not in
+        # the bundle (nor anywhere else) still fires.
+        bundle = self.plans / "2026-01-13-work"
+        write(bundle / "plan.md", "# Work\n\nStatus: draft\n")
+        write(bundle / "todos" / "a.md",
+              todo_text("t-AAAAAAAAAA", plan="other.md"))
+        self.assertEqual(
+            [f["check"] for f in self.findings()],
+            ["todo-missing-plan"])
+
     def test_duplicate_todo_id_across_bundles(self):
         for name in ("2026-01-05-one", "2026-01-06-two"):
             bundle = self.plans / name
@@ -185,6 +233,110 @@ class TestPlanTodoChecks(unittest.TestCase):
         self.assertEqual([f["check"] for f in found],
                          ["todo-duplicate-id"])
         self.assertEqual(found[0]["subject"], "t-AAAAAAAAAA")
+
+    # -- Plan-file scope (triage ruling): the filing
+    # checks govern plan files only.
+
+    def test_handoff_declaring_complete_is_not_a_closeout(
+            self):
+        # A run record narrates finished work: its
+        # "complete" in the active tree is the run's
+        # outcome, not a filing contradiction.
+        write(self.plans / "2026-01-14-run.handoff.md",
+              "# Run\n\nStatus: complete\n\nDid things.\n")
+        self.assertEqual(self.findings(), [])
+
+    def test_statusless_handoff_is_not_a_plan_file(self):
+        write(self.plans / "2026-01-14-run.handoff.md",
+              "# Run\n\nDid things, declared nothing.\n")
+        self.assertEqual(self.findings(), [])
+
+    def test_dossier_without_status_is_not_a_plan_file(
+            self):
+        write(self.plans / "2026-01-15-evidence-dossier.md",
+              "# Evidence dossier\n\n## Objective\n\n"
+              "Prepare a ruling.\n")
+        self.assertEqual(self.findings(), [])
+
+    def test_design_record_without_status_is_not_a_plan(
+            self):
+        write(self.plans
+              / "2026-01-15-widget-design-record.md",
+              "# Design-record determination\n\n"
+              "Read-only determination.\n")
+        self.assertEqual(self.findings(), [])
+
+    def test_report_declaring_a_status_is_checked(self):
+        # The genre name alone does not exempt: a report
+        # that declares a work state has opted into plan
+        # discipline and is checked like any plan.
+        write(self.plans / "2026-01-16-behavior-sweep.md",
+              "# Sweep\n\nStatus: banana\n")
+        self.assertEqual(
+            self.checks(),
+            [("plan-status", "2026-01-16-behavior-sweep.md")])
+
+    def test_run_record_is_not_a_plan_file(self):
+        write(self.plans / "finished"
+              / "2026-01-17-build-run-record.md",
+              "# Run record\n\nRun: 2026-01-17.\n")
+        self.assertEqual(self.findings(), [])
+
+    def test_determination_doc_is_not_a_plan_file(self):
+        # A determination / living-reference document
+        # stays in force with its declared status,
+        # outside the work-state vocabulary.
+        write(self.plans / "2026-01-18-determination.md",
+              "# Determination: widgets\n\n"
+              "Status: determination — awaiting a ruling\n")
+        write(self.plans / "2026-01-19-spec.md",
+              "# Spec\n\n"
+              "Status: **DETERMINED — for approval.**\n")
+        self.assertEqual(self.findings(), [])
+
+    def test_finished_off_vocabulary_still_closeout(self):
+        # The exception shape: a finished plan file
+        # declaring an off-vocabulary status is a filing
+        # contradiction (and a status finding) in a
+        # normally-registered project.
+        write(self.plans / "finished"
+              / "2026-01-20-vocabulary.md",
+              "# Vocabulary\n\nStatus: planned,\n")
+        self.assertEqual(
+            self.checks(),
+            [("plan-closeout",
+              "finished/2026-01-20-vocabulary.md"),
+             ("plan-status",
+              "finished/2026-01-20-vocabulary.md")])
+
+    # -- Informational posture (registration: as-is)
+
+    def as_is_project(self):
+        return make_project(
+            self.root, declared={"registration": "as-is"})
+
+    def test_as_is_status_is_informational(self):
+        write(self.plans / "finished" / "2026-01-21-old.md",
+              "# Old\n\nProse, no header fields.\n")
+        write(self.plans / "2026-01-22-odd.md",
+              "# Odd\n\nStatus: banana\n")
+        self.assertEqual(
+            doctor.plan_todo_findings(self.as_is_project()),
+            [])
+
+    def test_as_is_closeout_contradiction_still_fires(self):
+        # The posture downgrades plan-status only: the
+        # exception file's exact shape still produces
+        # its plan-closeout finding, alone.
+        write(self.plans / "finished"
+              / "2026-01-20-vocabulary.md",
+              "# Vocabulary\n\nStatus: planned,\n")
+        found = doctor.plan_todo_findings(
+            self.as_is_project())
+        self.assertEqual(
+            [(f["check"], f["subject"]) for f in found],
+            [("plan-closeout",
+              "finished/2026-01-20-vocabulary.md")])
 
     def test_clean_tree_has_no_findings(self):
         write(self.plans / "2026-01-07-plan.md",
@@ -327,6 +479,19 @@ class TestRunPost(unittest.TestCase):
         s = self.run_post("2026-10-26T00:15:00+00:00")
         self.assertFalse(s["baseline"])
         self.assertFalse(s["posted"])
+        self.assertEqual(len(self.outbox()), 1)
+
+    def test_state_save_failure_still_posts(self):
+        # The digest posts before the state save; a failed
+        # save (a transient write denial in this
+        # environment) must not crash the run or lose the
+        # digest — the worst case is a repeated diff.
+        with mock.patch.object(
+                doctor, "save_state",
+                side_effect=OSError(
+                    "Operation not permitted")):
+            s = self.run_post("2026-10-26T00:00:00+00:00")
+        self.assertTrue(s["posted"])
         self.assertEqual(len(self.outbox()), 1)
 
     def test_resolved_finding_posts_digest(self):

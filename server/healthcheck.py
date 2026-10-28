@@ -64,10 +64,22 @@ def main() -> int:
             result["last_error"] = \
                 "health endpoint returned ok=false"
     health_path = cfgmod.state_file(CFG, "health_file")
-    health_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = health_path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(result, indent=2) + "\n")
-    tmp.replace(health_path)
+    try:
+        health_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = health_path.with_suffix(".json.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(json.dumps(result, indent=2) + "\n")
+        tmp.replace(health_path)
+    except OSError as e:
+        # The health file is bookkeeping; the verdict rides
+        # on the probe above. This environment intermittently
+        # denies writes to agent-domain processes (EPERM
+        # windows, first observed 2026-10-26); a bookkeeping
+        # failure must not fail the check — the watchdog
+        # restarts the server on any non-zero exit, so
+        # crashing here would bounce a healthy server.
+        print(f"healthcheck: could not write "
+              f"{health_path}: {e}", file=sys.stderr)
     print(json.dumps(result))
     return 0 if result["ok"] else 1
 

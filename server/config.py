@@ -75,6 +75,24 @@ DEFAULTS = {
     # Repo-home §6: a worktree untouched this many days (or
     # merged into its base) derives the "likely done" flag.
     "worktree_stale_days": 14,
+    # Repos (absorption plan, steps 2/5/7): the census
+    # walks workspace_root at this depth; null prune ->
+    # lib/repos DEFAULT_PRUNE. The registry + history
+    # stores and the repo-save audit log live in state_dir.
+    "repos_max_depth": 3,
+    "repos_prune": None,
+    "repos_registry_file": "repos-registry.json",
+    "repos_history_file": "repos-history.jsonl",
+    "edit_audit_log": "edit-log.jsonl",
+    # Datasets (datasets plan, step 3): the caps are
+    # enforced in lib/datasets + lib/dataset_console;
+    # the timeout is passed through, the rest are listed
+    # so /api/config reports the whole surface (the peek
+    # caps precedent).
+    "datasets_page_max_bytes": 1024 * 1024,
+    "datasets_sql_max_rows": 10000,
+    "datasets_sql_max_payload_bytes": 8 * 1024 * 1024,
+    "datasets_sql_timeout_s": 10,
 }
 
 

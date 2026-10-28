@@ -31,6 +31,7 @@ from datetime import date
 from pathlib import Path
 
 from .plans import bundles as bundle_parser
+from .util import write_text
 
 DECLARATION_FILE = "active.yaml"
 
@@ -108,8 +109,7 @@ def set_active(plans_dir, bundle_ref, *, plan=None,
         lines.append(f"plan: {plan}")
     lines.append(f"since: {since}")
     path = plans_dir / DECLARATION_FILE
-    path.write_text("\n".join(lines) + "\n",
-                    encoding="utf-8")
+    write_text(path, "\n".join(lines) + "\n")
     return {"bundle": bundle["id"], "plan": plan,
             "since": since, "file": str(path)}
 

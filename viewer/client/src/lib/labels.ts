@@ -51,6 +51,41 @@ const SECTION_LABELS: Record<string, string> = {
   board: "Board",
   settings: "Settings",
   inbox: "Inbox",
+  repos: "Repos",
+};
+
+/** A repo's publication posture (lib/repos.py): whether a
+ * remote exists and whether the branch tracks one. */
+const PUBLICATION_LABELS: Record<string, string> = {
+  local_only: "Local only",
+  remote_no_upstream: "Remote · no upstream",
+  tracking: "Tracking",
+};
+
+/** The exposure derivation's levels (lib/repos.py): what
+ * is not backed up, worst first. */
+const EXPOSURE_LABELS: Record<string, string> = {
+  local_only: "Local only",
+  uncommitted_work: "Uncommitted work",
+  unbacked_commits: "Unbacked commits",
+  backed_up: "Backed up",
+};
+
+const SYNC_STATE_LABELS: Record<string, string> = {
+  local_only: "Local only",
+  no_upstream: "No upstream",
+  diverged: "Diverged",
+  ahead: "Ahead",
+  behind: "Behind",
+  synced: "Synced",
+};
+
+/** The registry's expected-publication vocabulary
+ * (lib/repo_state.py EXPECTED_VALUES). */
+const EXPECTED_LABELS: Record<string, string> = {
+  published: "Published",
+  local_ok: "Local OK",
+  untracked: "Untracked",
 };
 
 const MESSAGE_STATE_LABELS: Record<string, string> = {
@@ -93,6 +128,10 @@ export const messageStateLabel = (raw: string | null | undefined) =>
   from(MESSAGE_STATE_LABELS, raw);
 export const activeSourceLabel = (raw: string | null | undefined) =>
   from(ACTIVE_SOURCE_LABELS, raw);
+export const publicationLabel = (raw: string | null | undefined) => from(PUBLICATION_LABELS, raw);
+export const exposureLabel = (raw: string | null | undefined) => from(EXPOSURE_LABELS, raw);
+export const syncStateLabel = (raw: string | null | undefined) => from(SYNC_STATE_LABELS, raw);
+export const expectedLabel = (raw: string | null | undefined) => from(EXPECTED_LABELS, raw);
 
 /** Human label for a project-section availability state. */
 export function availabilityLabel(available: boolean, degraded: boolean): string {

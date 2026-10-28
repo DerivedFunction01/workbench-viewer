@@ -25,6 +25,7 @@ import {
   type TodoItem,
 } from "../lib/api";
 import { formatDate, formatRelative } from "../lib/format";
+import { highlightWithLanguage } from "../lib/highlight";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
@@ -366,15 +367,9 @@ function SourceView({ source }: { source: string }) {
   const [html, setHtml] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    (async () => {
-      try {
-        const hljs = (await import("highlight.js")).default;
-        const out = hljs.highlight(source, { language: "markdown" }).value;
-        if (live) setHtml(out);
-      } catch {
-        if (live) setHtml(null);
-      }
-    })();
+    void highlightWithLanguage(source, "markdown").then((out) => {
+      if (live) setHtml(out);
+    });
     return () => {
       live = false;
     };

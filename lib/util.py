@@ -33,6 +33,19 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def write_text(path, text, *, encoding="utf-8") -> None:
+    """Write text to a file through the builtin open().
+
+    Path.write_text is deliberately not used anywhere in
+    lib/ or server/: this environment intermittently denies
+    it to agent-domain processes (EPERM windows, first
+    observed 2026-10-26) while builtin open() keeps working
+    in strictly more of those conditions. One seam, so the
+    write strategy can change in exactly one place."""
+    with open(path, "w", encoding=encoding) as f:
+        f.write(text)
+
+
 def canonical_json(obj) -> str:
     """Deterministic JSON: sorted keys, no float noise. The
     dagstore manifest habit — the same fold everywhere

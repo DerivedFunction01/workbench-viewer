@@ -25,7 +25,8 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-from .util import now_iso, sha256_file, state_sha256
+from .util import (now_iso, sha256_file, state_sha256,
+                   write_text)
 
 STATUSES = ("canonical", "implemented", "deferred",
             "unexplored", "hard-gate", "abandoned")
@@ -330,9 +331,10 @@ def add_entry(db_path, layout, slug, *, title=None, kind="mockup",
                 abs_dir.mkdir(parents=True)
                 main = abs_dir / main_file
                 if not main.exists():
-                    main.write_text(
+                    write_text(
+                        main,
                         "<!-- placeholder — replace with the"
-                        " mock -->\n", encoding="utf-8")
+                        " mock -->\n")
             sha = None
             if abs_dir is not None and (abs_dir / main_file).is_file():
                 sha = sha256_file(abs_dir / main_file)

@@ -4,8 +4,11 @@ One mechanism under every view: the triple (repo, base,
 target, paths), resolved here from an anchor — a worktree,
 a plan bundle, or a commit (§18.1). Diffs exist ONLY
 anchored (decision D10): a request that cannot name its
-anchor is refused, and arbitrary revision browsing stays
-the git viewer's.
+anchor is refused. Absorption amendment (absorption plan,
+2026-10-28-git-viewer-absorption): a repo anchor (repo +
+path) is a first-class anchor for a single file's peek and
+diff against HEAD, served by lib/files; arbitrary revision
+browsing stays out of scope.
 
 Read-only by construction, like lib/worktrees: every git
 invocation runs with GIT_OPTIONAL_LOCKS=0 and --no-ext-diff,

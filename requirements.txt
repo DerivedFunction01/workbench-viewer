@@ -1,7 +1,16 @@
 # Workbench Viewer dependencies.
 #
 # lib/ and server/ are Python stdlib-only by design (founding
-# plan, architecture invariant) — there is nothing to install.
-# This file exists so init_venv.py has one uniform shape and a
-# future dependency, if one is ever ruled in, lands here with
-# its justification in context/progress-tracker.md.
+# plan, architecture invariant). Exactly one dependency has
+# been ruled in since, under the procedure this file has
+# always named — it lands here, with its justification:
+#
+# duckdb — the dataset derivations in lib/datasets.py and
+# lib/dataset_console.py (peek-highlight-and-datasets plan,
+# owner's ruling 2026-10-28): schema, paged rows, stats,
+# and the guarded read-only SQL console over parquet, csv,
+# jsonl, sqlite, and native DuckDB files in browsed repos.
+# It is imported lazily, inside those two modules only, so
+# the server boots and every other surface works where the
+# package is absent; the dataset view alone degrades.
+duckdb==1.5.6
