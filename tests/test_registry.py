@@ -127,6 +127,35 @@ class TestLifecycle(Fixture):
         self.assertFalse(u["archived"])
         self.assertTrue(src.is_dir())
 
+    def test_archive_unarchive_folderless_round_trip(self):
+        # Folder-less rows (artifact-slug / external sources)
+        # never had an entry dir: archive must not demand or
+        # invent one, and entry_dir stays NULL both ways.
+        e = self.add("slug-mock", source_kind="artifact-slug",
+                     source_ref="slug-mock")
+        self.assertIsNone(e["entry_dir"])
+        a = reg.archive_entry(self.db, self.layout, "slug-mock")
+        self.assertTrue(a["archived"])
+        self.assertIsNone(a["entry_dir"])
+        self.assertFalse(
+            (self.layout[1] / "slug-mock").exists())
+        with self.assertRaises(reg.RegistryError):
+            reg.archive_entry(self.db, self.layout, "slug-mock")
+        u = reg.unarchive_entry(self.db, self.layout, "slug-mock")
+        self.assertFalse(u["archived"])
+        self.assertIsNone(u["entry_dir"])
+        self.assertFalse(
+            (self.layout[0] / "slug-mock").exists())
+
+    def test_archive_resume_folderless_keeps_null_dir(self):
+        self.add("ext-mock", source_kind="external",
+                 source_ref="https://example.invalid/mock")
+        reg.archive_entry(self.db, self.layout, "ext-mock")
+        r = reg.archive_entry(self.db, self.layout, "ext-mock",
+                              resume=True)
+        self.assertTrue(r["archived"])
+        self.assertIsNone(r["entry_dir"])
+
     def test_verify_drift_gate(self):
         e = self.add()
         main = Path(e["entry_dir"]) / "mock.html"

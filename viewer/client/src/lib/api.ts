@@ -119,6 +119,17 @@ export interface PlanSentinelError {
   reason: string;
 }
 
+/** The server's work-staleness derivation for an open
+ * plan / bundle / todo (lib/staleness, served as
+ * `derived`): age in whole days from the item's
+ * birthdate, and whether it flags at the feed's
+ * `stale_warning_days` threshold. age_days null = no
+ * readable birthdate (never flags). */
+export interface WorkStaleness {
+  age_days: number | null;
+  stale: boolean;
+}
+
 export interface PlanSummary {
   path: string;
   title: string;
@@ -127,6 +138,7 @@ export interface PlanSummary {
   conforming: boolean;
   step_count: number;
   open_questions_count: number;
+  derived?: WorkStaleness;
   /** Resolvable questions carried by the summary (the
    * parser's records; [] when the plan has none). */
   questions?: PlanQuestion[];
@@ -154,11 +166,15 @@ export interface BundleItem {
   errors: { path: string; error: string }[];
   todo_count: number;
   open_count: number;
+  derived?: WorkStaleness;
 }
 
 export interface PlansFeed extends FeedEnvelope {
   plans: PlanSummary[];
   bundles: BundleItem[];
+  /** The server's effective stale-work threshold
+   * (days) behind the rows' `derived` flags. */
+  stale_warning_days?: number;
 }
 
 /** A plan's structured document (lib/plans/parser.py via
@@ -252,6 +268,7 @@ export interface TodoItem {
   archived?: boolean;
   created?: string | null;
   updated?: string | null;
+  derived?: WorkStaleness;
   // registry-DB fallback rows (§3.7) keep their DB shape
   source?: string;
   notes?: string;
@@ -267,11 +284,15 @@ export interface TodosFeed extends FeedEnvelope {
   /** "files" = bundle todo files; "db-fallback" = §3.7. */
   source?: string;
   errors?: { path: string; error: string }[];
+  /** The server's effective stale-work threshold
+   * (days) behind the rows' `derived` flags. */
+  stale_warning_days?: number;
 }
 
 export interface AllTodosPayload {
   todos: TodoItem[];
   errors?: unknown[];
+  stale_warning_days?: number;
 }
 
 export interface BoardPlan extends PlanSummary {

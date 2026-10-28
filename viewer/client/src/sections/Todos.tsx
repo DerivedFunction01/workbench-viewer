@@ -12,6 +12,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { api, type TodoItem, type TodosFeed } from "../lib/api";
@@ -135,6 +136,11 @@ function TodoRow({
         </span>
       ) : null}
       {fromDb ? <span style={metaStyle}>registry DB</span> : null}
+      {/* Stale-work warning: rendered from the served
+          `derived` block only (no age math here). */}
+      {todo.derived?.stale && todo.derived.age_days != null ? (
+        <Badge kind="stale" text={`Stale · ${todo.derived.age_days}d`} />
+      ) : null}
       {editable ? (
         <select
           aria-label={`Status of ${todo.title ?? "todo"}`}

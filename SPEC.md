@@ -193,6 +193,30 @@ Creating the registry is the project's step, when it wants
 Mockups/Todos: `wb --project <slug> init` (or the first
 `wb add` creates it).
 
+### 2.1 The staging project — the designated pre-home
+
+One swept project is designated the pre-home for workbench
+items that do not have a proper home yet: plans, bundles,
+mocks, and artifacts whose canonical project does not exist
+yet — above all, a plan whose work creates a new repo, which
+needs somewhere legitimate to live until that repo exists.
+The staging project is an ordinary project under this
+contract (same manifest, registry model, and plan syntax);
+nothing in the harness special-cases it.
+
+An item leaves staging by graduation, a deliberate recorded
+move: a plan or bundle's files move into the target
+project's `.plans/` and the plan gains a `Graduated:` header
+line; an entry is created in the target through `wb add`
+(then, for entry-dir entries, its files are copied over and
+`wb verify --accept-drift` binds the fingerprint) and
+archived in staging in the same pass. Registry rows are
+never copied between databases directly. Every graduation
+is logged in the staging project's `GRADUATIONS.md`, and
+the full procedure lives in its README. New work that will
+create its own repo starts staged and graduates when the
+repo exists.
+
 ## 3. Discovery — the sweep
 
 Discovery is a config-driven sweep. No per-repo path is ever

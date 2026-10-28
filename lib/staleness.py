@@ -18,7 +18,8 @@ write).
 """
 
 import json
-from datetime import datetime, timezone
+import re
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .util import parse_iso, sha256_file, state_sha256
@@ -154,3 +155,128 @@ def project_report(entries: list, latest_reviews: dict, *,
     return {"computed_at": now.isoformat(),
             "entries": items,
             "summary": {"total": len(items), "stale": flagged}}
+
+
+# ----------------------------------------------------------------
+# Work staleness: open plans, bundles, and todos (the
+# stale-work-warnings plan). The same doctrine as entry
+# staleness above — derived at read time, never stored,
+# this module stays pure — with a different birthdate and
+# one configurable threshold: an item's age is whole days
+# from its birthdate; it flags only while it is OPEN work
+# and its age is strictly greater than the threshold (an
+# item exactly at the threshold is not yet stale). An item
+# with no readable birthdate gets age_days None and never
+# flags. Birthdates follow the repo's own conventions:
+# a todo's `created` frontmatter date; a plan's or
+# bundle's `<date>-` file/dir name prefix.
+# ----------------------------------------------------------------
+
+# Todo statuses that are still open work (bundles.TODO_
+# STATUSES minus the terminal "done").
+OPEN_TODO_STATUSES = ("todo", "doing", "blocked")
+# parser.status_bucket's terminal set: todo | doing | done.
+TERMINAL_PLAN_BUCKETS = ("done",)
+_NAME_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-")
+
+
+def _resolve_today(today):
+    return today or datetime.now(timezone.utc).date()
+
+
+def _parse_day(value):
+    """A YYYY-MM-DD value → date, else None (missing or
+    malformed dates are honest unknowns, never guesses)."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value).strip())
+    except ValueError:
+        return None
+
+
+def _name_birth_date(name):
+    """The `<date>-` prefix of a plan file or bundle
+    directory name → its birthdate, else None."""
+    m = _NAME_DATE_RE.match(name or "")
+    return _parse_day(m.group(1)) if m else None
+
+
+def _work_derived(born, is_open, threshold_days, today):
+    age_days = None if born is None else (today - born).days
+    return {
+        "age_days": age_days,
+        "stale": bool(is_open and age_days is not None
+                      and age_days > threshold_days),
+    }
+
+
+def todo_staleness(todo: dict, *, threshold_days: int,
+                   today=None) -> dict:
+    """The work-staleness block for one bundle todo: age
+    from its `created` frontmatter date; only the open
+    statuses (todo / doing / blocked) can flag — a done
+    todo is history and is allowed to be old."""
+    return _work_derived(
+        _parse_day(todo.get("created")),
+        todo.get("status") in OPEN_TODO_STATUSES,
+        threshold_days, _resolve_today(today))
+
+
+def _plan_birth_date(summary: dict):
+    """A plan summary's birthdate: the `<date>-` prefix of
+    its file name — or, for a bundle's plan.md, of the
+    bundle directory name that parents it. A leading
+    finished/ segment is filing location, not name."""
+    parts = [p for p in (summary.get("path") or "").split("/")
+             if p and p != "finished"]
+    if not parts:
+        return None
+    name = parts[-1]
+    if name == "plan.md" and len(parts) > 1:
+        name = parts[-2]
+    return _name_birth_date(name)
+
+
+def _plan_is_open(summary: dict) -> bool:
+    """A plan is open work while its status bucket is
+    non-terminal (mirroring parser.status_bucket's set)
+    and it is not archived."""
+    return summary.get("status_bucket") \
+        not in TERMINAL_PLAN_BUCKETS \
+        and not summary.get("archived")
+
+
+def plan_staleness(summary: dict, *, threshold_days: int,
+                   today=None) -> dict:
+    """The work-staleness block for one plan summary: age
+    from the `<date>-` prefix of its file name; terminal
+    buckets and archived plans never flag."""
+    return _work_derived(
+        _plan_birth_date(summary), _plan_is_open(summary),
+        threshold_days, _resolve_today(today))
+
+
+def bundle_staleness(bundle: dict, *, threshold_days: int,
+                     today=None) -> dict:
+    """The work-staleness block for one bundle row: age
+    from the `<date>-` prefix of the bundle id.
+
+    Openness rule: a bundle is open work while it is
+    unarchived AND still carries open work of its own —
+    an open todo (a status in OPEN_TODO_STATUSES; for
+    valid todos exactly the set the bundle's served
+    open_count counts) OR a plan whose bucket is
+    non-terminal. A bundle whose todos are all done and
+    whose plan is terminal (or absent) is finished work
+    and never flags, however old; an archived bundle
+    never flags."""
+    plan = bundle.get("plan")
+    plan_open = plan is not None and _plan_is_open(plan)
+    todos_open = any(t.get("status") in OPEN_TODO_STATUSES
+                     for t in bundle.get("todos", []))
+    is_open = not bundle.get("archived") \
+        and (plan_open or todos_open)
+    return _work_derived(
+        _name_birth_date(bundle.get("id")), is_open,
+        threshold_days, _resolve_today(today))

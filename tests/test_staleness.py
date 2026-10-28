@@ -124,5 +124,153 @@ class TestStaleness(unittest.TestCase):
                          "stale-check")
 
 
+class TestWorkStaleness(unittest.TestCase):
+    """Work staleness (stale-work-warnings plan): open
+    plans/bundles/todos older than the threshold flag;
+    the boundary is strict; terminal/archived/missing-date
+    items never flag. TODAY is fixed so ages are exact."""
+
+    TODAY = None  # set in setUp
+
+    def setUp(self):
+        from datetime import date
+        self.today = date(2026, 10, 28)
+
+    def todo(self, created, status):
+        return stale_mod.todo_staleness(
+            {"created": created, "status": status},
+            threshold_days=3, today=self.today)
+
+    def test_todo_boundary_is_strict(self):
+        # exactly at the threshold: not yet stale
+        self.assertEqual(self.todo("2026-10-25", "doing"),
+                         {"age_days": 3, "stale": False})
+        # one day past: stale
+        self.assertEqual(self.todo("2026-10-24", "doing"),
+                         {"age_days": 4, "stale": True})
+
+    def test_todo_open_statuses_flag_done_never(self):
+        for status in ("todo", "doing", "blocked"):
+            self.assertTrue(
+                self.todo("2026-10-01", status)["stale"],
+                status)
+        done = self.todo("2020-01-01", "done")
+        self.assertGreater(done["age_days"], 2000)  # age served
+        self.assertFalse(done["stale"])
+        # an unrecognized status is not open work
+        self.assertFalse(self.todo("2020-01-01", "weird")
+                         ["stale"])
+
+    def test_todo_missing_or_bad_date_never_flags(self):
+        for created in (None, "", "not-a-date", "2026-13-40"):
+            self.assertEqual(
+                self.todo(created, "todo"),
+                {"age_days": None, "stale": False}, created)
+
+    def test_todo_default_today(self):
+        # no explicit today: a years-old open todo flags
+        # against the real clock at any run date
+        out = stale_mod.todo_staleness(
+            {"created": "2000-01-01", "status": "todo"},
+            threshold_days=3)
+        self.assertTrue(out["stale"])
+        self.assertGreater(out["age_days"], 3)
+
+    def plan(self, path, bucket, archived=False):
+        return stale_mod.plan_staleness(
+            {"path": path, "status_bucket": bucket,
+             "archived": archived},
+            threshold_days=3, today=self.today)
+
+    def test_plan_age_from_filename_prefix(self):
+        self.assertEqual(
+            self.plan("2026-10-20-some-work.md", "todo"),
+            {"age_days": 8, "stale": True})
+        # a bundle's plan.md takes its parent dir's date
+        self.assertEqual(
+            self.plan("2026-10-20-bundle/plan.md", "doing"),
+            {"age_days": 8, "stale": True})
+        # boundary: exactly 3 days old does not flag
+        self.assertFalse(
+            self.plan("2026-10-25-x.md", "doing")["stale"])
+
+    def test_plan_terminal_and_archived_never_flag(self):
+        self.assertFalse(
+            self.plan("2020-01-01-x.md", "done")["stale"])
+        self.assertFalse(
+            self.plan("2020-01-01-x.md", "doing",
+                      archived=True)["stale"])
+        # archived summaries live under finished/; the
+        # prefix still parses (age served, flag off)
+        out = self.plan("finished/2020-01-01-x.md", "done",
+                        archived=True)
+        self.assertIsNotNone(out["age_days"])
+        self.assertFalse(out["stale"])
+
+    def test_plan_missing_date_never_flags(self):
+        self.assertEqual(self.plan("notes.md", "todo"),
+                         {"age_days": None, "stale": False})
+        self.assertEqual(
+            self.plan("2026-13-40-x.md", "todo"),
+            {"age_days": None, "stale": False})
+
+    def bundle(self, **kw):
+        base = {"id": "2026-10-20-work", "archived": False,
+                "plan": None, "todos": []}
+        base.update(kw)
+        return stale_mod.bundle_staleness(
+            base, threshold_days=3, today=self.today)
+
+    def test_bundle_all_done_terminal_plan_never_flags(self):
+        out = self.bundle(
+            plan={"status_bucket": "done", "archived": False},
+            todos=[{"status": "done"}, {"status": "done"}])
+        self.assertEqual(out, {"age_days": 8,
+                               "stale": False})
+
+    def test_bundle_open_todo_flags_despite_terminal_plan(
+            self):
+        out = self.bundle(
+            plan={"status_bucket": "done", "archived": False},
+            todos=[{"status": "done"}, {"status": "doing"}])
+        self.assertTrue(out["stale"])
+
+    def test_bundle_open_plan_flags_with_all_todos_done(
+            self):
+        out = self.bundle(
+            plan={"status_bucket": "doing",
+                  "archived": False},
+            todos=[{"status": "done"}])
+        self.assertTrue(out["stale"])
+
+    def test_bundle_planless_openness_rides_todos(self):
+        self.assertTrue(self.bundle(
+            todos=[{"status": "blocked"}])["stale"])
+        self.assertFalse(self.bundle(
+            todos=[{"status": "done"}])["stale"])
+        # no plan, no todos: nothing open, nothing flags
+        self.assertFalse(self.bundle()["stale"])
+
+    def test_bundle_archived_and_undated_never_flag(self):
+        self.assertFalse(self.bundle(
+            archived=True,
+            todos=[{"status": "todo"}])["stale"])
+        out = stale_mod.bundle_staleness(
+            {"id": "undated", "archived": False, "plan": None,
+             "todos": [{"status": "todo"}]},
+            threshold_days=3, today=self.today)
+        self.assertEqual(out, {"age_days": None,
+                               "stale": False})
+
+    def test_threshold_is_the_callers(self):
+        todo = {"created": "2026-10-20", "status": "todo"}
+        self.assertTrue(stale_mod.todo_staleness(
+            todo, threshold_days=3, today=self.today)
+            ["stale"])
+        self.assertFalse(stale_mod.todo_staleness(
+            todo, threshold_days=30, today=self.today)
+            ["stale"])
+
+
 if __name__ == "__main__":
     unittest.main()

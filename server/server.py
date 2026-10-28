@@ -199,6 +199,26 @@ def artifacts_feed(project, *, archived: bool) -> dict:
                          kinds=ARTIFACT_KINDS)
 
 
+def _attach_work_staleness(bundles,
+                           threshold_days: int) -> list:
+    """Attach the lib/staleness work derivations in place:
+    `derived` on each bundle row, on its plan summary, and
+    on each of its todos (stale-work-warnings plan —
+    derived at read time, never stored)."""
+    for bundle in bundles:
+        bundle["derived"] = staleness.bundle_staleness(
+            bundle, threshold_days=threshold_days)
+        if bundle.get("plan") is not None:
+            bundle["plan"]["derived"] = \
+                staleness.plan_staleness(
+                    bundle["plan"],
+                    threshold_days=threshold_days)
+        for todo in bundle["todos"]:
+            todo["derived"] = staleness.todo_staleness(
+                todo, threshold_days=threshold_days)
+    return bundles
+
+
 def todos_feed(project) -> dict:
     """Todos read from bundle todo FILES (live-work spec
     §3.7: file todos supersede the registry DB). The DB is
@@ -210,11 +230,15 @@ def todos_feed(project) -> dict:
     parser errors ride on the feed — never a silent skip."""
     m = project.manifest
     base = {"slug": project.slug, "name": project.name,
-            "degraded": False}
+            "degraded": False,
+            "stale_warning_days": CFG["stale_warning_days"]}
     file_todos, errors = [], []
     if m.plans is not None and m.plans.is_dir():
         try:
-            for bundle in bundle_parser.list_bundles(m.plans):
+            bundles = _attach_work_staleness(
+                bundle_parser.list_bundles(m.plans),
+                CFG["stale_warning_days"])
+            for bundle in bundles:
                 errors.extend(bundle["errors"])
                 file_todos.extend(bundle["todos"])
         except Exception as e:
@@ -232,13 +256,21 @@ def todos_feed(project) -> dict:
                              "source": "db-fallback",
                              "todos": [], "errors": errors}, e)
         if db_todos:
+            rows = []
+            for t in db_todos:
+                row = {**t, "source": "db", "bundle": None,
+                       "feature": None, "worktree": None,
+                       "valid": True, "errors": []}
+                # Uniform shape: DB rows carry no `created`
+                # frontmatter date, so the derivation reads
+                # age None and never flags.
+                row["derived"] = staleness.todo_staleness(
+                    row,
+                    threshold_days=CFG["stale_warning_days"])
+                rows.append(row)
             return {**base, "available": True,
                     "source": "db-fallback",
-                    "todos": [{**t, "source": "db",
-                               "bundle": None, "feature": None,
-                               "worktree": None, "valid": True,
-                               "errors": []}
-                              for t in db_todos],
+                    "todos": rows,
                     "errors": errors}
         return {**base, "available": True, "source": "files",
                 "todos": [], "errors": errors}
@@ -252,14 +284,22 @@ def todos_feed(project) -> dict:
 def plans_feed(project) -> dict:
     m = project.manifest
     base = {"slug": project.slug, "name": project.name,
-            "degraded": False}
+            "degraded": False,
+            "stale_warning_days": CFG["stale_warning_days"]}
     if m.plans is None or not m.plans.is_dir():
         return {**base, "available": False, "plans": [],
                 "bundles": []}
     try:
+        threshold = CFG["stale_warning_days"]
+        plans = plan_parser.list_plans(m.plans)
+        for summary in plans:
+            summary["derived"] = staleness.plan_staleness(
+                summary, threshold_days=threshold)
+        bundles = _attach_work_staleness(
+            bundle_parser.list_bundles(m.plans), threshold)
         return {**base, "available": True,
-                "plans": plan_parser.list_plans(m.plans),
-                "bundles": bundle_parser.list_bundles(m.plans)}
+                "plans": plans,
+                "bundles": bundles}
     except Exception as e:
         return degraded({**base, "available": True,
                          "plans": [], "bundles": []}, e)
@@ -1154,8 +1194,10 @@ class Handler(BaseHTTPRequestHandler):
                     items.append({**todo,
                                   "project": project.slug,
                                   "project_name": project.name})
-            return self._send(200, {"todos": items,
-                                    "errors": errors})
+            return self._send(200, {
+                "todos": items, "errors": errors,
+                "stale_warning_days":
+                    CFG["stale_warning_days"]})
         if len(parts) >= 3 and parts[0] == "api" \
                 and parts[1] == "projects":
             project = self._project_or_404(parts[2])

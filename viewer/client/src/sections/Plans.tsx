@@ -14,6 +14,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useRef, useState } from "react";
+import { Badge } from "../components/Badge";
 import { DegradedBanner as KitBanner } from "../components/DegradedBanner";
 import { SegmentedControl } from "../components/SegmentedControl";
 import {
@@ -140,6 +141,16 @@ function BundleRow({
 }) {
   const isPhone = useIsPhone();
   const plan = bundle.plan;
+  // Stale-work warning (served `derived`, never computed
+  // here): the row flags when the bundle itself is stale
+  // open work, or when its plan is — the two share a
+  // birthdate, so either age labels the row honestly.
+  const staleAge = bundle.derived?.stale
+    ? bundle.derived.age_days
+    : plan?.derived?.stale
+      ? plan.derived.age_days
+      : null;
+  const staleBadge = staleAge != null ? <Badge kind="stale" text={`Stale · ${staleAge}d`} /> : null;
   // Phone (the owner, 2026-10-25): the row stacks — the title
   // takes the full row width on its own line(s) and the
   // metadata line renders beneath it. A column direction
@@ -165,12 +176,16 @@ function BundleRow({
       <span style={metaStyle}>
         {formatDate(plan.modified)} {formatRelative(plan.modified)}
       </span>
+      {staleBadge}
     </>
   ) : (
-    <span style={metaStyle}>
-      <span className="num">{bundle.open_count}</span> open of{" "}
-      <span className="num">{bundle.todo_count}</span> todos
-    </span>
+    <>
+      <span style={metaStyle}>
+        <span className="num">{bundle.open_count}</span> open of{" "}
+        <span className="num">{bundle.todo_count}</span> todos
+      </span>
+      {staleBadge}
+    </>
   );
   const inner = (
     <>
@@ -355,6 +370,9 @@ function SubplanRows({
                 {target.title || target.path}
               </span>
               <span style={metaStyle}>{planBucketLabel(target.status_bucket)}</span>
+              {target.derived?.stale && target.derived.age_days != null ? (
+                <Badge kind="stale" text={`Stale · ${target.derived.age_days}d`} />
+              ) : null}
             </a>
           </li>
         );

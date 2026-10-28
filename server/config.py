@@ -75,6 +75,11 @@ DEFAULTS = {
     # Repo-home §6: a worktree untouched this many days (or
     # merged into its base) derives the "likely done" flag.
     "worktree_stale_days": 14,
+    # Stale work warnings: an OPEN plan/bundle/todo older
+    # than this many days derives a stale flag on the
+    # plans/todos feeds (lib/staleness work derivations;
+    # age strictly greater than the threshold flags).
+    "stale_warning_days": 3,
     # Repos (absorption plan, steps 2/5/7): the census
     # walks workspace_root at this depth; null prune ->
     # lib/repos DEFAULT_PRUNE. The registry + history

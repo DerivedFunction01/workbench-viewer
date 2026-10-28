@@ -515,17 +515,22 @@ def archive_entry(db_path, layout, entry_id, *, actor="cli",
     """Folder move + registry update as one operation. If the
     DB half fails after the move, the row still points at the
     old path and `wb validate` reports it; --resume completes
-    the row update without moving anything."""
+    the row update without moving anything. Folder-less rows
+    (entry_dir NULL — artifact-slug / external sources never
+    had a folder) skip the move entirely and keep entry_dir
+    NULL; stamping the archive path onto them would invent a
+    folder that does not exist."""
     entries_dir, archive_dir = layout
     conn = connect(db_path)
     try:
         row = _row(conn, entry_id)
         if row["archived"] and not resume:
             raise RegistryError(f"{entry_id} is already archived")
-        src = Path(row["entry_dir"]) if row["entry_dir"] else None
+        folderless = row["entry_dir"] is None
+        src = None if folderless else Path(row["entry_dir"])
         dst = _entry_dir_rel(layout, entry_id, True)
-        if not resume:
-            if src is None or not src.exists():
+        if not resume and not folderless:
+            if not src.exists():
                 raise RegistryError(
                     f"{entry_id}: entry dir missing: {src}")
             if dst.exists():
@@ -533,6 +538,7 @@ def archive_entry(db_path, layout, entry_id, *, actor="cli",
                     f"{entry_id}: archive target exists: {dst}")
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dst))
+        new_dir = None if folderless else str(dst)
         ts = now_iso()
         with _tx(conn):
             row = _row(conn, entry_id)
@@ -541,10 +547,12 @@ def archive_entry(db_path, layout, entry_id, *, actor="cli",
                 " archived_at = ?, entry_dir = ?,"
                 " updated_at = ?, version = version + 1"
                 " WHERE id = ?",
-                (ts, str(dst), ts, entry_id))
+                (ts, new_dir, ts, entry_id))
             _append_history(conn, entry_id, actor, "archive",
                             field="entry_dir",
-                            old=row["entry_dir"], new=str(dst))
+                            old=row["entry_dir"], new=new_dir,
+                            note="folder-less entry — no folder "
+                                 "moved" if folderless else None)
             return entry_dict(_row(conn, entry_id))
     finally:
         conn.close()
@@ -558,16 +566,19 @@ def unarchive_entry(db_path, layout, entry_id, *,
         row = _row(conn, entry_id)
         if not row["archived"]:
             raise RegistryError(f"{entry_id} is not archived")
-        src = Path(row["entry_dir"])
-        dst = entries_dir / entry_id
-        if not src.exists():
-            raise RegistryError(
-                f"{entry_id}: archived dir missing: {src}")
-        if dst.exists():
-            raise RegistryError(
-                f"{entry_id}: entries target exists: {dst}")
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dst))
+        folderless = row["entry_dir"] is None
+        if not folderless:
+            src = Path(row["entry_dir"])
+            dst = entries_dir / entry_id
+            if not src.exists():
+                raise RegistryError(
+                    f"{entry_id}: archived dir missing: {src}")
+            if dst.exists():
+                raise RegistryError(
+                    f"{entry_id}: entries target exists: {dst}")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+        new_dir = None if folderless else str(dst)
         ts = now_iso()
         with _tx(conn):
             row = _row(conn, entry_id)
@@ -576,10 +587,12 @@ def unarchive_entry(db_path, layout, entry_id, *,
                 " archived_at = NULL, entry_dir = ?,"
                 " updated_at = ?, version = version + 1"
                 " WHERE id = ?",
-                (str(dst), ts, entry_id))
+                (new_dir, ts, entry_id))
             _append_history(conn, entry_id, actor, "unarchive",
                             field="entry_dir",
-                            old=row["entry_dir"], new=str(dst))
+                            old=row["entry_dir"], new=new_dir,
+                            note="folder-less entry — no folder "
+                                 "moved" if folderless else None)
             return entry_dict(_row(conn, entry_id))
     finally:
         conn.close()

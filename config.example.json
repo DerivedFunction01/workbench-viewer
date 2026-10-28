@@ -33,5 +33,6 @@
  "sweep_roots": null,
  "sweep_ttl_s": 15,
  "workspace_root": null,
- "worktree_stale_days": 14
+ "worktree_stale_days": 14,
+ "stale_warning_days": 3
 }
