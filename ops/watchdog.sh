@@ -10,6 +10,23 @@ ROOT="$(cd "$DIR/.." && pwd)"
 # (the owner's venv rule); the healthcheck itself is stdlib-only.
 if [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"; else PY="python3"; fi
 
+# After a restart the server can take several seconds to answer
+# (interpreter start + sweep, slower under load); a single check
+# right after the restart races that startup and brands a
+# successful revival as failed (observed 2026-10-30 and
+# 2026-10-31). Poll for a bounded window instead.
+wait_healthy() {
+  local tries="${1:-30}"
+  local i
+  for ((i = 0; i < tries; i++)); do
+    if "$PY" "$ROOT/server/healthcheck.py" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 if "$PY" "$ROOT/server/healthcheck.py" >/dev/null; then
   exit 0
 fi
@@ -24,8 +41,7 @@ if [ ! -f /etc/systemd/system/workbench-viewer-server.service ]; then
     && systemctl enable --now workbench-viewer-server 2>/dev/null
 fi
 systemctl restart workbench-viewer-server 2>/dev/null
-sleep 2
-if "$PY" "$ROOT/server/healthcheck.py" >/dev/null; then
+if wait_healthy 30; then
   echo "watchdog: revived via systemd" >&2
   exit 0
 fi
@@ -33,8 +49,7 @@ fi
 # 2) Fallback: start directly (lock file keeps this
 #    single-instance).
 nohup "$PY" "$ROOT/run.py" >> "$ROOT/state/server.log" 2>&1 &
-sleep 2
-if "$PY" "$ROOT/server/healthcheck.py" >/dev/null; then
+if wait_healthy 30; then
   echo "watchdog: revived via direct start" >&2
   exit 0
 fi
