@@ -39,6 +39,17 @@ Check families:
                        plan exists in neither
   todo-duplicate-id    one todo id living in more than one
                        bundle of a project
+  todo-progress-unarmed
+                       a doing todo carrying planned
+                       work (a plan reference or a plan
+                       step) with no progress schedule
+                       armed — long work running
+                       unwatched
+  todo-progress-orphan an armed todo whose status is
+                       terminal (done) or whose bundle is
+                       archived — the writer disarms on
+                       the terminal move, so the armed
+                       state outlived the work
   registry-validator   the validate_project suite's
                        findings, unchanged
   approval-coverage    an approved entry whose current
@@ -295,6 +306,34 @@ def plan_todo_findings(project) -> list:
                     slug, "todo-missing-plan", t["path"],
                     f"plan reference {t['plan']!r} does "
                     f"not resolve to a file"))
+            if t["progress_check"]:
+                if t["status"] == "done" or b["archived"]:
+                    reason = "its bundle is archived" \
+                        if b["archived"] else \
+                        "its status is done"
+                    out.append(_finding(
+                        slug, "todo-progress-orphan",
+                        t["path"],
+                        f"todo still carries "
+                        f"progress_check "
+                        f"{t['progress_check']!r} but "
+                        f"{reason} — the writer disarms "
+                        f"on the terminal move, so the "
+                        f"schedule outlived the work; "
+                        f"clear the progress fields or "
+                        f"reopen the todo"))
+            elif t["status"] == "doing" \
+                    and (t["plan"]
+                         or t["plan_step"] is not None):
+                out.append(_finding(
+                    slug, "todo-progress-unarmed",
+                    t["path"],
+                    f"doing todo carries planned work "
+                    f"but no progress schedule is armed "
+                    f"— arm one (wb todo set "
+                    f"{t['id'] or '<id>'} doing "
+                    f"--progress 30m) or the long work "
+                    f"runs unwatched"))
     for todo_id, homes in todo_bundles.items():
         if len(homes) > 1:
             out.append(_finding(

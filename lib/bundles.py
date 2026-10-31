@@ -22,9 +22,17 @@ from pathlib import Path
 from . import registry as reg
 from .plans import bundles as bundle_parser
 from .plans.parser import parse_plan
-from .util import write_text
+from .util import now_iso, write_text
 
 TODO_STATUSES = bundle_parser.TODO_STATUSES
+
+# Statuses that end a todo's active life: a move to one
+# of these disarms its progress schedule (the schedule
+# stops at done/blocked, per the progress-schedules
+# plan's rulings). `done` is also the parser's only
+# terminal status — blocked is resumable work, but its
+# schedule has already surfaced the blocker and stopped.
+PROGRESS_STOP_STATUSES = ("done", "blocked")
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -185,7 +193,25 @@ def create_bundle(plans_dir, slug, *, plan: bool = False,
 
 _FRONT_MATTER_ORDER = ("id", "title", "status", "feature",
                        "plan", "plan_step", "worktree",
-                       "created", "updated")
+                       "created", "updated",
+                       "progress_check", "progress_armed")
+
+
+def _check_progress(progress, status):
+    """Validate an arming request: a cadence the parser
+    accepts, and never armed onto a status whose move
+    would disarm it in the same write."""
+    if progress is None:
+        return
+    if bundle_parser.parse_cadence(progress) is None:
+        raise BundleError(
+            f"bad progress cadence {progress!r}: "
+            f"expected a cadence like 30m or 2h")
+    if status in PROGRESS_STOP_STATUSES:
+        raise BundleError(
+            f"cannot arm a progress schedule on a move "
+            f"to {status}: the schedule stops at that "
+            f"status")
 
 
 def _render_todo(fields: dict, body: str) -> str:
@@ -219,14 +245,19 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
                 worktree=None, plan=None, feature=None,
                 status: str = "todo", body: str = "",
                 created: str = None,
-                updated: str = None) -> dict:
+                updated: str = None,
+                progress: str = None,
+                armed_at: str = None) -> dict:
     """Write one todo file into a bundle's todos/ dir,
     with complete §3.2 front-matter. The id is assigned
     here (timestamp-ordered, collision-checked across
     the WHOLE repo's bundles). Refuses a duplicate title
     in the bundle. Defaults: plan → the bundle's plan.md
     when it has one; feature → the bundle plan's Feature
-    header when it declares one."""
+    header when it declares one. `progress` arms a
+    progress schedule at creation (a cadence like `30m`;
+    `progress_armed` is stamped from `armed_at` or now).
+    """
     if not title or not title.strip() \
             or "\n" in title:
         raise BundleError(
@@ -235,6 +266,7 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
     if status not in TODO_STATUSES:
         raise BundleError(
             f"todo status must be one of {TODO_STATUSES}")
+    _check_progress(progress, status)
     if step is not None and (not isinstance(step, int)
                              or step < 1):
         raise BundleError(
@@ -272,6 +304,9 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
         "worktree": worktree,
         "created": created or today,
         "updated": updated or created or today,
+        "progress_check": progress,
+        "progress_armed": (armed_at or now_iso())
+        if progress is not None else None,
     }
     todos_dir = bundle_dir / "todos"
     todos_dir.mkdir(exist_ok=True)
@@ -312,17 +347,27 @@ def _find_todo_file(plans_dir: Path, todo_id: str):
 
 def set_todo_status(plans_dir, todo_id, status, *,
                     note: str = None,
-                    today: str = None) -> dict:
+                    today: str = None,
+                    progress: str = None,
+                    armed_at: str = None) -> dict:
     """Move one todo's status (todo|doing|blocked|done
     only — anything else refused), stamping `updated:`.
     An optional note is appended to the body (deploy
     records and blocker reasons live there). The rewrite
     is surgical: front-matter lines keep their order and
-    unknown fields, the body is preserved verbatim."""
+    unknown fields, the body is preserved verbatim.
+
+    Progress schedules: `progress` (a cadence) arms or
+    re-arms the todo's schedule in the same write,
+    stamping `progress_armed:` from `armed_at` or now;
+    a move to a stop status (done/blocked) clears both
+    progress fields in the same write. Arming onto a
+    stop status is refused."""
     if status not in TODO_STATUSES:
         raise BundleError(
             f"todo status must be one of {TODO_STATUSES}, "
             f"got {status!r}")
+    _check_progress(progress, status)
     plans_dir = Path(plans_dir)
     found = _find_todo_file(plans_dir, todo_id)
     if found is None:
@@ -336,6 +381,8 @@ def set_todo_status(plans_dir, todo_id, status, *,
             f"todo {todo_id} has no front-matter to "
             f"update: {todo_path}")
     today = today or _today()
+    disarm = status in PROGRESS_STOP_STATUSES
+    armed_stamp = armed_at or now_iso()
     new_lines = []
     seen = set()
     for line in fm_lines:
@@ -347,12 +394,29 @@ def set_todo_status(plans_dir, todo_id, status, *,
         elif key == "updated":
             new_lines.append(f"updated: {today}")
             seen.add("updated")
+        elif key in ("progress_check", "progress_armed"):
+            if disarm:
+                continue
+            if progress is not None:
+                value = progress \
+                    if key == "progress_check" \
+                    else armed_stamp
+                new_lines.append(f"{key}: {value}")
+                seen.add(key)
+            else:
+                new_lines.append(line)
         else:
             new_lines.append(line)
     if "status" not in seen:
         new_lines.append(f"status: {status}")
     if "updated" not in seen:
         new_lines.append(f"updated: {today}")
+    if progress is not None:
+        if "progress_check" not in seen:
+            new_lines.append(f"progress_check: {progress}")
+        if "progress_armed" not in seen:
+            new_lines.append(
+                f"progress_armed: {armed_stamp}")
     if note:
         body = body.rstrip("\n")
         body = (body + "\n\n" if body else "") \

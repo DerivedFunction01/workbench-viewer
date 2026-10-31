@@ -88,6 +88,12 @@ DEFAULTS = {
     "repos_prune": None,
     "repos_registry_file": "repos-registry.json",
     "repos_history_file": "repos-history.jsonl",
+    # The list feed serves its last computed payload for
+    # this long; past it, requests keep serving that
+    # payload while one background pass recomputes (the
+    # derivation is a per-repo git fan-out, seconds even
+    # warm). Writes invalidate the cache immediately.
+    "repos_ttl_s": 30,
     "edit_audit_log": "edit-log.jsonl",
     # Datasets (datasets plan, step 3): the caps are
     # enforced in lib/datasets + lib/dataset_console;

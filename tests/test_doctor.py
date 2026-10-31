@@ -222,6 +222,80 @@ class TestPlanTodoChecks(unittest.TestCase):
             [f["check"] for f in self.findings()],
             ["todo-missing-plan"])
 
+    def _progress_todo(self, bundle, name, *, status,
+                       extra=""):
+        write(bundle / "todos" / name,
+              "---\n"
+              "id: t-01K8Q00000000000000000000P\n"
+              "title: Watched work\n"
+              f"status: {status}\n"
+              "created: 2026-10-26\n"
+              "updated: 2026-10-26\n"
+              f"{extra}"
+              "---\n")
+
+    def test_progress_unarmed_doing_planned_todo(self):
+        bundle = self.plans / "2026-01-04-work"
+        self._progress_todo(bundle, "a.md", status="doing",
+                            extra="plan_step: 1\n")
+        self.assertEqual(
+            self.checks(),
+            [("todo-progress-unarmed",
+              "2026-01-04-work/todos/a.md")])
+
+    def test_progress_unarmed_not_fired_without_plan(self):
+        bundle = self.plans / "2026-01-04-work"
+        self._progress_todo(bundle, "a.md", status="doing")
+        self.assertEqual(self.checks(), [])
+
+    def test_progress_armed_doing_todo_is_clean(self):
+        bundle = self.plans / "2026-01-04-work"
+        self._progress_todo(
+            bundle, "a.md", status="doing",
+            extra="plan_step: 1\n"
+                  "progress_check: 30m\n"
+                  "progress_armed: "
+                  "2026-10-26T09:00:00+00:00\n")
+        self.assertEqual(self.checks(), [])
+
+    def test_progress_orphan_done_but_armed(self):
+        bundle = self.plans / "2026-01-04-work"
+        self._progress_todo(
+            bundle, "a.md", status="done",
+            extra="progress_check: 30m\n"
+                  "progress_armed: "
+                  "2026-10-26T09:00:00+00:00\n")
+        self.assertEqual(
+            self.checks(),
+            [("todo-progress-orphan",
+              "2026-01-04-work/todos/a.md")])
+
+    def test_progress_orphan_in_archived_bundle(self):
+        bundle = self.plans / "finished" / "2026-01-04-old"
+        self._progress_todo(
+            bundle, "a.md", status="doing",
+            extra="progress_check: 30m\n"
+                  "progress_armed: "
+                  "2026-10-26T09:00:00+00:00\n")
+        self.assertEqual(
+            self.checks(),
+            [("todo-progress-orphan",
+              "finished/2026-01-04-old/todos/a.md")])
+
+    def test_progress_blocked_armed_is_not_an_orphan(self):
+        # The orphan check governs the plan's stated
+        # states — terminal (done) or archived. Blocked
+        # is open work (the staleness module's
+        # OPEN_TODO_STATUSES), not a terminal state, so
+        # it stays out of this check's scope.
+        bundle = self.plans / "2026-01-04-work"
+        self._progress_todo(
+            bundle, "a.md", status="blocked",
+            extra="progress_check: 30m\n"
+                  "progress_armed: "
+                  "2026-10-26T09:00:00+00:00\n")
+        self.assertEqual(self.checks(), [])
+
     def test_duplicate_todo_id_across_bundles(self):
         for name in ("2026-01-05-one", "2026-01-06-two"):
             bundle = self.plans / name

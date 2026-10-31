@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import active as active_mod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
 from lib import doctor as doctor_mod  # noqa: E402
+from lib import progress as progress_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
@@ -419,10 +420,11 @@ def cmd_todo_new(args):
         ctx.plans_dir, args.bundle, args.title,
         step=args.step, worktree=args.worktree,
         plan=args.plan, feature=args.feature,
-        body=args.body or "")
+        body=args.body or "", progress=args.progress)
     _print({k: result[k] for k in
             ("id", "title", "status", "feature", "plan",
              "plan_step", "worktree", "created", "updated",
+             "progress_check", "progress_armed",
              "bundle", "file")})
     return 0
 
@@ -430,10 +432,12 @@ def cmd_todo_new(args):
 def cmd_todo_file_set(args):
     ctx = PlansCtx(args)
     result = bundle_mod.set_todo_status(
-        ctx.plans_dir, args.id, args.status, note=args.note)
+        ctx.plans_dir, args.id, args.status, note=args.note,
+        progress=args.progress)
     _print({k: result[k] for k in
-            ("id", "title", "status", "updated", "bundle",
-             "file")})
+            ("id", "title", "status", "updated",
+             "progress_check", "progress_armed",
+             "bundle", "file")})
     return 0
 
 
@@ -553,6 +557,31 @@ def cmd_doctor(args):
             print("wb doctor: finding set unchanged — "
                   "no digest posted")
     return 1 if findings else 0
+
+
+def cmd_progress(args):
+    """The progress driver's single read: every swept
+    project's armed todos with their derived stall
+    verdicts (lib/progress.py), as JSON. Read-only —
+    acting on a verdict (checkpointing through
+    `wb todo set --note`, nudging, surfacing) is the
+    driver's business, and the schedule that runs it is
+    a platform concern. Sweep roots resolve through the
+    server config seam, like the doctor's."""
+    from server import config as cfgmod
+    cfg = cfgmod.load()
+    roots = [Path(r) for r in args.root] \
+        if args.root else cfgmod.sweep_roots(cfg)
+    result = sweep(roots)
+    projects = []
+    for project in result.projects:
+        plans_dir = project.manifest.plans
+        if plans_dir is None:
+            continue
+        report = progress_mod.project_progress(plans_dir)
+        projects.append({"slug": project.slug, **report})
+    _print({"projects": projects})
+    return 0
 
 
 def cmd_print_schedule(args):
@@ -697,6 +726,9 @@ def build_parser():
     nt.add_argument("--plan")
     nt.add_argument("--feature")
     nt.add_argument("--body")
+    nt.add_argument("--progress",
+                    help="arm a progress schedule with "
+                         "this cadence (e.g. 30m)")
     nt.set_defaults(fn=cmd_todo_new)
 
     st = tsub.add_parser("set")
@@ -706,6 +738,11 @@ def build_parser():
     st.add_argument("--note",
                     help="appended to the todo body "
                          "(blocker reason / deploy record)")
+    st.add_argument("--progress",
+                    help="arm or re-arm the progress "
+                         "schedule with this cadence "
+                         "(e.g. 30m); a move to done or "
+                         "blocked disarms it")
     st.set_defaults(fn=cmd_todo_file_set)
 
     lt = tsub.add_parser("list")
@@ -757,6 +794,17 @@ def build_parser():
                          "default: the server config's "
                          "sweep roots")
     sp.set_defaults(fn=cmd_doctor)
+
+    sp = sub.add_parser(
+        "progress",
+        help="armed progress schedules with derived "
+             "stall verdicts, as JSON (the progress "
+             "driver's read)")
+    sp.add_argument("--root", action="append",
+                    help="sweep root (repeatable); "
+                         "default: the server config's "
+                         "sweep roots")
+    sp.set_defaults(fn=cmd_progress)
 
     sub.add_parser("print-schedule").set_defaults(
         fn=cmd_print_schedule)

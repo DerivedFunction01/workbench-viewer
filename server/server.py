@@ -677,11 +677,14 @@ def _repos_history_path():
     return cfgmod.state_file(CFG, "repos_history_file")
 
 
-def repos_feed() -> dict:
-    """GET /api/repos: every discovered repo's summary with
-    its registry entry attached; registry entries that
-    discovery did not find ride as missing rows. Serves
-    record history, as the reference did."""
+def _compute_repos_feed() -> dict:
+    """The /api/repos derivation itself: every discovered
+    repo's summary with its registry entry attached;
+    registry entries that discovery did not find ride as
+    missing rows. Serves record history, as the reference
+    did. Expensive — a git fan-out per repo — so the
+    request path goes through the cache below, never
+    straight here."""
     census = _census()
     data = repo_state_mod.load_registry(_repos_registry_path())
     data, changed = repo_state_mod.reconcile(
@@ -708,6 +711,96 @@ def repos_feed() -> dict:
                 "registry": dict(entry)})
     summaries.sort(key=lambda s: s["id"])
     return {"repos": summaries, "captured_at": now_iso()}
+
+
+# ----------------------------------------------------------------
+# Repos feed cache
+#
+# The derivation fans out git subprocesses per repo and
+# costs seconds even warm (measured 7.2 s cold, 1.2 s warm
+# over ~20 repos), so the request path serves the last
+# computed payload: within repos_ttl_s as-is; past the TTL
+# the stale payload while ONE background thread recomputes;
+# and only a never-filled cache computes on the request
+# path, single-flighted so a burst of cold requests shares
+# one derivation. main() warms the cache in a thread at
+# startup, so the first open after a restart does not pay
+# the cold cost either. Writes that change what the feed
+# derives (registry curation, a guarded repo save)
+# invalidate the cache — a save must never look unstuck
+# for a TTL — and the generation counter keeps a payload
+# computed across an invalidation from being stored.
+# ----------------------------------------------------------------
+
+_repos_cache = {"at": 0.0, "result": None}
+_repos_state_lock = threading.Lock()
+_repos_compute_lock = threading.Lock()
+_repos_refreshing = False
+_repos_generation = 0
+
+
+def _repos_invalidate_cache() -> None:
+    global _repos_generation
+    with _repos_state_lock:
+        _repos_generation += 1
+        _repos_cache.update(at=0.0, result=None)
+
+
+def _repos_store(result, generation: int) -> None:
+    with _repos_state_lock:
+        if generation == _repos_generation:
+            _repos_cache.update(at=time.monotonic(),
+                                result=result)
+
+
+def _repos_refresh_background() -> None:
+    global _repos_refreshing
+    try:
+        with _repos_state_lock:
+            generation = _repos_generation
+        _repos_store(_compute_repos_feed(), generation)
+    except Exception as e:
+        # The stale payload keeps serving; the next stale
+        # request kicks another refresh.
+        print(f"workbench-viewer: repos feed refresh "
+              f"failed: {e}", file=sys.stderr)
+    finally:
+        with _repos_state_lock:
+            _repos_refreshing = False
+
+
+def _repos_kick_refresh() -> None:
+    global _repos_refreshing
+    with _repos_state_lock:
+        if _repos_refreshing:
+            return
+        _repos_refreshing = True
+    threading.Thread(target=_repos_refresh_background,
+                     daemon=True).start()
+
+
+def repos_feed() -> dict:
+    """GET /api/repos: the cached census payload (see the
+    cache note above); captured_at is when the payload was
+    computed, not when it was served."""
+    cached = _repos_cache["result"]
+    if cached is not None:
+        if time.monotonic() - _repos_cache["at"] \
+                < CFG["repos_ttl_s"]:
+            return cached
+        _repos_kick_refresh()
+        return cached
+    with _repos_compute_lock:
+        # The startup warm or a racing request may have
+        # filled the cache while this one waited.
+        cached = _repos_cache["result"]
+        if cached is not None:
+            return cached
+        with _repos_state_lock:
+            generation = _repos_generation
+        result = _compute_repos_feed()
+        _repos_store(result, generation)
+        return result
 
 
 def repo_status_feed(record) -> dict:
@@ -1295,6 +1388,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(400, err)
             repo_state_mod.save_registry(
                 _repos_registry_path(), data)
+            _repos_invalidate_cache()
             return self._send(200, {"id": repo_id,
                                     "registry": entry})
         if len(parts) >= 4 and parts[0] == "api" \
@@ -1313,6 +1407,7 @@ class Handler(BaseHTTPRequestHandler):
                 backup_dir=state / CFG["edit_backups_dir"]
                 / "repos" / record["id"],
                 audit_log=state / CFG["edit_audit_log"])
+            _repos_invalidate_cache()
             return self._send(200, result)
         if len(parts) >= 5 and parts[0] == "api" \
                 and parts[1] == "repos" \
@@ -1414,6 +1509,10 @@ def main() -> int:
     acquire_lock()
     get_sweep()  # warm the cache; sweep errors never block
     start_message_maintenance()  # repo-home §5.3 cleanup
+    # Warm the repos feed off the request path: its first
+    # derivation costs seconds and must not land on the
+    # first open after a restart.
+    threading.Thread(target=repos_feed, daemon=True).start()
     server = ThreadingHTTPServer((CFG["host"], CFG["port"]),
                                  Handler)
     print(f"workbench-viewer server v{VERSION} on "

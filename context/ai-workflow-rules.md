@@ -62,6 +62,79 @@ the bundle is the unit of work.
   archived in the same pass, its Status line naming the
   followup.
 
+## Progress schedules for long work
+
+Long work never waits on the owner to ping for status: a
+schedule pings the work instead. Long = multi-step,
+delegated, detached, or expected to run past roughly an
+hour. The harness records the intent and the derivations;
+the schedule itself is a platform concern (the
+`print-schedule` precedent — this repo builds the tool,
+not the schedule).
+
+- **Arm at the `doing` transition**, in the same pass as
+  the status move, when the work is long:
+  `.venv/bin/python wb todo set <id> doing --progress 30m`
+  (default cadence `30m`; arming at creation is
+  `wb todo new <bundle> "<title>" --progress 30m`). Arming
+  writes `progress_check` / `progress_armed` onto the todo
+  through lib/ — the only write path; never hand-edit the
+  fields. Then create ONE platform schedule per bundle
+  from the template below, and note its identity in the
+  todo body.
+- **Checkpoints are todo-body lines**, appended through
+  `wb todo set <id> doing --note "progress-checkpoint:
+  <ISO-8601 UTC> — <what moved>"`. The todo file stays
+  the progress record; chat is never the record. Whoever
+  does the work checkpoints at meaningful progress; a
+  driver run checkpoints what it observes.
+- **Disarm is automatic**: a move to `done` or `blocked`
+  clears both progress fields in the same write. When no
+  armed todos remain in the bundle, delete the platform
+  schedule. The doctor backs the discipline both ways:
+  `todo-progress-unarmed` flags planned `doing` work with
+  no schedule, `todo-progress-orphan` flags arming that
+  outlived its work.
+- **The driver reads one thing**: `.venv/bin/python wb
+  progress` (JSON: per project, the armed todos with
+  last checkpoint, missed checks, and the stall verdict —
+  stalled at 2 missed checks). Acting on the verdict is
+  the driver's business.
+- **Scope guard**: a driver run nudges or resumes only
+  inside the work's existing scope, never blind-retries
+  irreversible or login-limited actions, and reports to
+  the owner only milestones, stalls, blockers, and
+  completion — never heartbeats. Work already covered by
+  a completion handoff (delegated agents, browser tasks)
+  gets no duplicate monitor.
+
+Platform schedule template — the agent instantiates one
+per bundle at arm time, owned by the work's goal,
+delivering to the originating chat:
+
+```text
+Progress driver for bundle <bundle-id> (this repo).
+
+Each run:
+1. Run `.venv/bin/python wb progress` from the repo
+   root; take the armed todos in bundle <bundle-id>.
+2. If none remain, delete this schedule and stop.
+3. For each armed todo: if the work moved since the
+   last checkpoint (its own records show it), append
+   the checkpoint:
+   wb todo set <id> doing --note "progress-checkpoint:
+   <now, ISO-8601 UTC> — <what moved>"
+4. If a todo reads stalled, diagnose from its body and
+   the work's run records; nudge or resume the work
+   inside its existing scope, and note the diagnosis
+   in the todo.
+5. If a todo is blocked or needs the owner's decision:
+   wb todo set <id> blocked --note "<the reason>" and
+   report it once to the originating chat.
+6. Report milestones and completion only. No heartbeat
+   messages.
+```
+
 ## Handling Missing Requirements
 
 - Do not invent product behavior not defined in the context

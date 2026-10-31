@@ -80,6 +80,31 @@ class BundleCli(unittest.TestCase):
         r = self.wb("todo", "list", "--status", "done")
         self.assertIn("no file todos", r.stdout)
 
+    def test_todo_progress_arm_and_disarm_walk(self):
+        r = self.wb("bundle", "new", "watched")
+        bundle = json.loads(r.stdout)["id"]
+        # refusal: a cadence that is not a cadence
+        r = self.wb("todo", "new", bundle, "Bad cadence",
+                    "--progress", "soon", expect=None)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("cadence", r.stderr)
+        r = self.wb("todo", "new", bundle, "Long work",
+                    "--progress", "30m")
+        todo = json.loads(r.stdout)
+        self.assertEqual(todo["progress_check"], "30m")
+        self.assertTrue(todo["progress_armed"])
+        # a plain status move keeps the arming
+        r = self.wb("todo", "set", todo["id"], "doing")
+        moved = json.loads(r.stdout)
+        self.assertEqual(moved["progress_check"], "30m")
+        # the terminal move disarms in the same write
+        r = self.wb("todo", "set", todo["id"], "done")
+        moved = json.loads(r.stdout)
+        self.assertIsNone(moved["progress_check"])
+        self.assertIsNone(moved["progress_armed"])
+        self.assertNotIn("progress_",
+                         Path(todo["file"]).read_text())
+
     def test_todo_import_db_cli(self):
         self.wb("init")
         # seed the DB directly through lib (the legacy wb

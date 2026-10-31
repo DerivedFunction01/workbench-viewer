@@ -40,6 +40,30 @@ updated: 2026-10-25
 Broken body.
 """
 
+TODO_ARMED = """---
+id: t-01K8Q00000000000000000000C
+title: Armed work
+status: doing
+created: 2026-10-24
+updated: 2026-10-25
+progress_check: 45m
+progress_armed: 2026-10-25T09:30:00+00:00
+---
+Armed body.
+"""
+
+TODO_BAD_CADENCE = """---
+id: t-01K8Q00000000000000000000D
+title: Bad cadence
+status: doing
+created: 2026-10-24
+updated: 2026-10-25
+progress_check: whenever
+progress_armed: last Tuesday
+---
+Bad body.
+"""
+
 TODO_NO_FM = "Just prose, no front-matter at all.\n"
 
 PLAN = """# Bundle plan
@@ -102,6 +126,27 @@ class TestParser(Fixture):
         # unknown fields preserved (lossless rule)
         self.assertEqual(todo["fields"]["x-custom"],
                          "preserved value")
+
+    def test_armed_todo_fields_parse(self):
+        d = self.plans / "2026-10-24-armed"
+        write(d / "todos" / "t-c.md", TODO_ARMED)
+        todo = parser.list_todos(self.plans)[0]
+        self.assertTrue(todo["valid"], todo["errors"])
+        self.assertEqual(todo["progress_check"], "45m")
+        self.assertEqual(todo["progress_armed"],
+                         "2026-10-25T09:30:00+00:00")
+
+    def test_bad_progress_fields_are_flagged(self):
+        d = self.plans / "2026-10-24-badprog"
+        write(d / "todos" / "t-d.md", TODO_BAD_CADENCE)
+        todo = parser.list_todos(self.plans)[0]
+        self.assertFalse(todo["valid"])
+        self.assertTrue(any("progress_check" in e
+                            for e in todo["errors"]))
+        self.assertTrue(any("progress_armed" in e
+                            for e in todo["errors"]))
+        # the raw values survive for diagnosis
+        self.assertEqual(todo["progress_check"], "whenever")
 
     def test_flat_and_finished_enumeration(self):
         write(self.plans / "2026-10-20-flat.md", PLAN)
@@ -291,6 +336,93 @@ class TestWriters(Fixture):
                 "done")
         after = parser.list_todos(self.plans)
         self.assertEqual(after[0]["status"], "todo")
+
+    def test_todo_new_armed_front_matter(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(
+            self.plans, "b1", "Long work", status="doing",
+            progress="30m",
+            armed_at="2026-10-25T09:00:00+00:00")
+        self.assertEqual(todo["progress_check"], "30m")
+        self.assertEqual(todo["progress_armed"],
+                         "2026-10-25T09:00:00+00:00")
+        self.assertTrue(todo["valid"], todo["errors"])
+        text = Path(todo["file"]).read_text()
+        # the progress fields ride after `updated:` in
+        # the §3.2 field order
+        self.assertLess(text.index("updated:"),
+                        text.index("progress_check:"))
+        self.assertLess(text.index("progress_check:"),
+                        text.index("progress_armed:"))
+
+    def test_todo_new_unarmed_by_default(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(self.plans, "b1",
+                                      "Short work")
+        self.assertIsNone(todo["progress_check"])
+        self.assertIsNone(todo["progress_armed"])
+        self.assertNotIn("progress_",
+                         Path(todo["file"]).read_text())
+
+    def test_todo_progress_refusals(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.create_todo(self.plans, "b1",
+                                   "Bad cadence",
+                                   progress="soon")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.create_todo(self.plans, "b1",
+                                   "Zero cadence",
+                                   progress="0m")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.create_todo(
+                self.plans, "b1", "Born done and armed",
+                status="done", progress="30m")
+        todo = bundle_mod.create_todo(self.plans, "b1",
+                                      "Refuse late arming")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.set_todo_status(
+                self.plans, todo["id"], "done",
+                progress="30m")
+
+    def test_todo_set_arms_keeps_and_disarms(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(self.plans, "b1",
+                                      "Watched work",
+                                      body="Body stays.")
+        armed = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "doing", progress="30m",
+            armed_at="2026-10-25T10:00:00+00:00")
+        self.assertEqual(armed["progress_check"], "30m")
+        self.assertEqual(armed["progress_armed"],
+                         "2026-10-25T10:00:00+00:00")
+        # a plain move keeps the arming untouched
+        noted = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "doing",
+            note="Checkpoint: still going.")
+        self.assertEqual(noted["progress_check"], "30m")
+        self.assertIn("Body stays.", noted["body"])
+        # blocked disarms in the same write
+        blocked = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "blocked",
+            note="Waiting on X.")
+        self.assertIsNone(blocked["progress_check"])
+        self.assertIsNone(blocked["progress_armed"])
+        self.assertNotIn("progress_",
+                         Path(todo["file"]).read_text())
+        # resuming re-arms; done disarms
+        rearmed = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "doing", progress="1h",
+            armed_at="2026-10-25T12:00:00+00:00")
+        self.assertEqual(rearmed["progress_check"], "1h")
+        done = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "done")
+        self.assertIsNone(done["progress_check"])
+        self.assertTrue(done["valid"], done["errors"])
 
     def test_todo_set_preserves_unknown_fields(self):
         d = self.plans / "2026-10-25-keep"

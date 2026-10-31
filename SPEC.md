@@ -495,6 +495,18 @@ Plus `print-schedule` — emits the staleness-check job
 definition for a platform scheduler, IF one is later ruled;
 the harness builds the tool, not the schedule.
 
+Progress schedules for long work: `wb todo new --progress
+<cadence>` and `wb todo set --progress <cadence>` arm a
+per-todo progress schedule (the `progress_check` /
+`progress_armed` front-matter fields; a move to done or
+blocked disarms in the same write), and `wb progress`
+serves every project's armed todos with their derived
+stall verdicts as JSON — the single read a platform
+driver consumes. The schedule itself stays a platform
+concern, exactly as with `print-schedule`; the
+arm / run / disarm contract lives in
+`context/ai-workflow-rules.md`.
+
 Semantics that bind every verb:
 
 - `add <slug>` creates the entry dir + row; status starts

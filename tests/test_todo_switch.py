@@ -119,6 +119,19 @@ class TodoSwitch(unittest.TestCase):
         self.assertEqual(feed["todos"][0]["status"],
                          "blocked")
 
+    def test_server_done_move_disarms_progress(self):
+        project = make_project(self.root)
+        todo = self._file_todo(project, progress="30m")
+        self.assertEqual(todo["progress_check"], "30m")
+        out = server_mod.todo_action(
+            project, {"verb": "set-status", "id": todo["id"],
+                      "status": "done"})
+        self.assertIsNone(out["todo"]["progress_check"])
+        self.assertIsNone(out["todo"]["progress_armed"])
+        self.assertNotIn(
+            "progress_",
+            Path(todo["file"]).read_text(encoding="utf-8"))
+
     def test_server_mutation_refusals(self):
         project = make_project(self.root)
         todo = self._file_todo(project)

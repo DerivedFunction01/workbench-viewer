@@ -35,7 +35,7 @@ files and are never closeout-checked.
 """
 
 import re
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from .parser import declared_status, parse_plan, status_bucket
@@ -46,6 +46,7 @@ REQUIRED_TODO_FIELDS = ("id", "title", "status",
 TODO_ID_RE = re.compile(r"^t-[0-9A-HJKMNP-TV-Z]+$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _BUNDLE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
+_CADENCE_RE = re.compile(r"^(\d+)([mh])$")
 
 
 def _valid_date(value: str) -> bool:
@@ -53,6 +54,30 @@ def _valid_date(value: str) -> bool:
         return False
     try:
         date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def parse_cadence(value):
+    """A progress-check cadence (`30m`, `2h`) → a
+    timedelta, or None when the value is not a cadence.
+    The one definition of the format: the writers refuse
+    anything else, the parser flags it, and the progress
+    derivation consumes exactly this."""
+    m = _CADENCE_RE.match((value or "").strip())
+    if not m or int(m.group(1)) < 1:
+        return None
+    amount = int(m.group(1))
+    if m.group(2) == "h":
+        return timedelta(hours=amount)
+    return timedelta(minutes=amount)
+
+
+def _valid_instant(value: str) -> bool:
+    try:
+        datetime.fromisoformat(
+            (value or "").replace("Z", "+00:00"))
     except ValueError:
         return False
     return True
@@ -131,6 +156,20 @@ def parse_todo(text: str, *, path: str = "") -> dict:
                 f"invalid plan_step {fields['plan_step']!r}: "
                 f"expected a positive integer")
             plan_step = None
+    progress_check = fields.get("progress_check") or None
+    if progress_check is not None \
+            and parse_cadence(progress_check) is None:
+        errors.append(
+            f"invalid progress_check "
+            f"{progress_check!r}: expected a cadence "
+            f"like 30m or 2h")
+    progress_armed = fields.get("progress_armed") or None
+    if progress_armed is not None \
+            and not _valid_instant(progress_armed):
+        errors.append(
+            f"invalid progress_armed "
+            f"{progress_armed!r}: expected an ISO-8601 "
+            f"timestamp")
     return {
         "id": todo_id,
         "title": fields.get("title") or None,
@@ -139,6 +178,8 @@ def parse_todo(text: str, *, path: str = "") -> dict:
         "plan": fields.get("plan") or None,
         "plan_step": plan_step,
         "worktree": fields.get("worktree") or None,
+        "progress_check": progress_check,
+        "progress_armed": progress_armed,
         "created": fields.get("created") or None,
         "updated": fields.get("updated") or None,
         "fields": fields,
@@ -157,7 +198,8 @@ def _parse_todo_path(todo_path: Path, rel: str) -> dict:
         return {
             "id": None, "title": None, "status": None,
             "feature": None, "plan": None, "plan_step": None,
-            "worktree": None, "created": None,
+            "worktree": None, "progress_check": None,
+            "progress_armed": None, "created": None,
             "updated": None, "fields": {}, "body": "",
             "markdown": "", "path": rel, "valid": False,
             "errors": [f"unreadable todo file: {e}"],
