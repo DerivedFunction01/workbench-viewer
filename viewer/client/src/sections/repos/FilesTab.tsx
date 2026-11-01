@@ -8,7 +8,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "../../components/Button";
-import { api, type RepoFilesPayload, type RepoPeek } from "../../lib/api";
+import { api } from "../../lib/api";
+import type { RepoFilesPayload, RepoPeek } from "../../lib/api-types-repos";
 import { useIsPhone } from "../../lib/responsive";
 import { ErrorWell, SkeletonWell } from "../shared";
 import { FileTree } from "./FileTree";

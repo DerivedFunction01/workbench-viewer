@@ -14,17 +14,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
-import {
-  api,
-  type DatasetCell,
-  type DatasetColumn,
-  type DatasetDescriptor,
-  type DatasetFilter,
-  type DatasetRowsPage,
-  type DatasetSchema,
-  type DatasetStats,
-  type DatasetTable as DatasetTableShape,
-} from "../../lib/api";
+import { api } from "../../lib/api";
+import type {
+  DatasetCell,
+  DatasetColumn,
+  DatasetDescriptor,
+  DatasetFilter,
+  DatasetRowsPage,
+  DatasetSchema,
+  DatasetStats,
+  DatasetTable as DatasetTableShape,
+} from "../../lib/api-types-repos";
 import { formatCount } from "../../lib/format";
 import { metaStyle } from "../shared";
 import { DatasetConsole } from "./DatasetConsole";

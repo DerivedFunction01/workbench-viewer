@@ -16,7 +16,7 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useId, useMemo, useState } from "react";
-import type { PlanBlock, PlanStep } from "../../lib/api";
+import type { PlanBlock, PlanStep } from "../../lib/api-types";
 import { highlightCode, highlightWithLanguage } from "../../lib/highlight";
 import { anchor } from "./anchors";
 import { codePlaceholderRe, extractCode } from "./codefences";

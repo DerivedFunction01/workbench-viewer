@@ -16,7 +16,7 @@
 
 import { useState } from "react";
 import { Button } from "../components/Button";
-import type { ActiveResolution, WorktreeItem } from "../lib/api";
+import type { ActiveResolution, WorktreeItem } from "../lib/api-types";
 import { formatDate, formatRelative } from "../lib/format";
 import { activeSourceLabel, planBucketLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";

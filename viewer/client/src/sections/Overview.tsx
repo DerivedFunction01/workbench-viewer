@@ -18,13 +18,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
-import {
-  type ActiveResolution,
-  api,
-  type HomePayload,
-  type HomeRow,
-  type WorktreesPayload,
-} from "../lib/api";
+import { api } from "../lib/api";
+import type { ActiveResolution, HomePayload, HomeRow, WorktreesPayload } from "../lib/api-types";
 import { formatDate, formatRelative } from "../lib/format";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";

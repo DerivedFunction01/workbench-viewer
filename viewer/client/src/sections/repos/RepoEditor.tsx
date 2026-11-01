@@ -17,7 +17,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import { SegmentedControl } from "../../components/SegmentedControl";
-import { api, type RepoPeek, type RepoSaveResult } from "../../lib/api";
+import { api } from "../../lib/api";
+import type { RepoPeek, RepoSaveResult } from "../../lib/api-types-repos";
 import { formatShortHash } from "../../lib/format";
 import { detectLanguage, highlightWithLanguage } from "../../lib/highlight";
 

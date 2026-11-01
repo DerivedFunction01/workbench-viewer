@@ -16,9 +16,9 @@ import { Frame } from "../../components/Frame";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { Sheet } from "../../components/Sheet";
 import { StateControls, type StateValues } from "../../components/StateControls";
-import { api, type TextSelection } from "../../lib/api";
-import { formatDate, formatDateTime, formatShortHash } from "../../lib/format";
-import { kindLabel, ruledStatusLabel } from "../../lib/labels";
+import { api } from "../../lib/api";
+import { formatDate } from "../../lib/format";
+import { ruledStatusLabel } from "../../lib/labels";
 import { useIsPhone } from "../../lib/responsive";
 import {
   AnnotationComposer,
@@ -30,80 +30,14 @@ import {
   useAnnotationThreads,
 } from "../Annotations";
 import { normalizeText } from "../plans/relocation";
+import { ApprovalCard } from "./ApprovalCard";
 import { FilePanel } from "./FilePanel";
 import { HistoryList, ReviewLog } from "./HistoryLog";
 import { EntryBadges, hasState, PreviewSummary, stateValues } from "./helpers";
+import { LifecycleCard } from "./LifecycleCard";
+import { type Disposition, labelForComponent, type Selected } from "./labels";
+import { labelStyle, MetaCard, toStateValues } from "./meta";
 import type { EntryDetail, Envelope, FullEntry, MockupsFeedFull } from "./types";
-import { RULED_STATUSES } from "./types";
-
-type Disposition = "approve" | "needs-changes" | "stale";
-
-/** Display labels for the drill-in's components (§12):
- * the stored snapshot an annotation carries. An explicit
- * data-anchor-label on the element wins; the id-derived
- * form is the fallback. */
-const COMPONENT_LABELS: Record<string, string> = {
-  "mockups/exhibit-stage": "Exhibit stage",
-  "mockups/disposition": "Disposition",
-  "mockups/metadata-card": "Metadata",
-  "mockups/state-card": "State",
-  "mockups/approval-card": "Approval",
-  "mockups/lifecycle-card": "Lifecycle",
-  "mockups/files-card": "Files",
-  "mockups/review-log-card": "Review log",
-  "mockups/history-card": "History",
-  "mockups/entry-sheet": "Entry sheet",
-};
-
-function labelForComponent(el: HTMLElement, id: string): string {
-  return (
-    el.getAttribute("data-anchor-label") ??
-    COMPONENT_LABELS[id] ??
-    id.split("/").pop()?.replace(/-/g, " ") ??
-    id
-  );
-}
-
-type Selected =
-  | { kind: "component"; entryId: string; id: string; label: string }
-  | { kind: "text"; entryId: string; selection: TextSelection };
-
-const labelStyle: React.CSSProperties = {
-  color: "var(--wb-content-muted)",
-  fontSize: "var(--wb-font-size-xs)",
-  lineHeight: "var(--wb-line-height-xs)",
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-};
-
-function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "128px 1fr",
-        gap: "var(--wb-space-12)",
-        padding: "var(--wb-space-4) 0",
-        borderBottom: "1px solid var(--wb-border-default)",
-        fontSize: "var(--wb-font-size-sm)",
-      }}
-    >
-      <span style={labelStyle}>{label}</span>
-      <span style={{ overflowWrap: "anywhere" }}>{children}</span>
-    </div>
-  );
-}
-
-function toStateValues(source: FullEntry | null): StateValues {
-  const values: StateValues = {};
-  if (!source) return values;
-  for (const [key, value] of Object.entries(stateValues(source))) {
-    if (typeof value === "boolean" || typeof value === "string" || typeof value === "number") {
-      values[key] = value;
-    }
-  }
-  return values;
-}
 
 export function MockupDetail({
   slug,
@@ -648,61 +582,7 @@ export function MockupDetail({
             minWidth: isPhone ? 0 : undefined,
           }}
         >
-          <Card title="Metadata" anchor="mockups/metadata-card">
-            <MetaRow label="Id">
-              <span className="mono">{entry.id}</span>
-            </MetaRow>
-            <MetaRow label="Kind">{kindLabel(entry.kind)}</MetaRow>
-            <MetaRow label="Status">
-              {ruledStatusLabel(entry.status)}
-              {entry.gate ? ` · gate: ${entry.gate}` : ""}
-            </MetaRow>
-            <MetaRow label="Source">
-              {entry.source_kind}
-              {entry.source_ref ? (
-                <>
-                  {" · "}
-                  <span className="mono">{entry.source_ref}</span>
-                </>
-              ) : null}
-            </MetaRow>
-            <MetaRow label="Entry dir">
-              <span className="mono">{entry.entry_dir ?? "—"}</span>
-            </MetaRow>
-            <MetaRow label="Main file">
-              <span className="mono">{entry.main_file ?? "—"}</span>
-            </MetaRow>
-            <MetaRow label="Content sha">
-              <span className="mono">{formatShortHash(entry.content_sha256)}</span>
-            </MetaRow>
-            <MetaRow label="Spec ref">{entry.spec_ref ?? "—"}</MetaRow>
-            <MetaRow label="Plan ref">{entry.plan_ref ?? "—"}</MetaRow>
-            <MetaRow label="Ruling">
-              {entry.ruling_text ?? "—"}
-              {entry.ruling_date ? ` (${entry.ruling_date})` : ""}
-            </MetaRow>
-            <MetaRow label="Superseded by">
-              {entry.superseded_by ? (supersededByTitle ?? entry.superseded_by) : "—"}
-            </MetaRow>
-            <MetaRow label="Created">{formatDateTime(entry.created_at)}</MetaRow>
-            <MetaRow label="Updated">
-              {formatDate(entry.updated_at)} · status changed {formatDate(entry.status_changed_at)}
-            </MetaRow>
-            <MetaRow label="Last verified">
-              {entry.last_verified_at ? formatDateTime(entry.last_verified_at) : "Never"}
-            </MetaRow>
-            <MetaRow label="Version">
-              <span className="num">{entry.version}</span>
-            </MetaRow>
-            {derived ? (
-              <MetaRow label="Staleness">
-                {derived.stale
-                  ? derived.reasons.join("; ")
-                  : `Not stale · ${Math.floor(derived.days_since_verified)}d since verified · ${derived.age_days}d old`}
-                {derived.drift ? " · content drifted" : ""}
-              </MetaRow>
-            ) : null}
-          </Card>
+          <MetaCard entry={entry} derived={derived} supersededByTitle={supersededByTitle} />
 
           {hasState(entry) && draftState ? (
             <div>
@@ -745,231 +625,26 @@ export function MockupDetail({
             </Card>
           )}
 
-          <Card title="Approval" anchor="mockups/approval-card">
-            {approval?.approved ? (
-              <>
-                <p style={{ margin: "0 0 var(--wb-space-8)" }}>
-                  {approval.covers_current ? (
-                    <>This approval covers the current state.</>
-                  ) : (
-                    <>This approval does not cover the current state — re-approve to cover it.</>
-                  )}
-                </p>
-                <MetaRow label="Approved at">
-                  {approval.approved_at ? formatDateTime(approval.approved_at) : "—"}
-                </MetaRow>
-                <MetaRow label="Approved by">{latestReview?.actor ?? "—"}</MetaRow>
-                <MetaRow label="Covered state">
-                  <span className="mono">{formatShortHash(approval.approved_state_sha256)}</span>
-                </MetaRow>
-                <MetaRow label="Current state">
-                  <span className="mono">{formatShortHash(approval.current_state_sha256)}</span>
-                </MetaRow>
-                {latestReview?.payload?.state ? (
-                  <ul style={{ listStyle: "none", margin: "var(--wb-space-8) 0 0", padding: 0 }}>
-                    {Object.entries(latestReview.payload.state).map(([key, value]) => (
-                      <li key={key}>
-                        <span className="mono" style={{ color: "var(--wb-content-muted)" }}>
-                          {key}
-                        </span>{" "}
-                        {String(value)}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            ) : (
-              <p style={{ margin: 0, color: "var(--wb-content-secondary)" }}>
-                Not approved — no approval snapshot is recorded for this entry.
-              </p>
-            )}
-          </Card>
+          <ApprovalCard approval={approval} latestReview={latestReview} />
 
-          <Card title="Lifecycle" anchor="mockups/lifecycle-card">
-            <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
-              <span style={labelStyle}>Set status</span>
-              <select
-                aria-label="New status"
-                value={statusChoice}
-                onChange={(event) => setStatusChoice(event.target.value)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  minHeight: "38px",
-                  marginTop: "var(--wb-space-4)",
-                  background: "var(--wb-surface-2)",
-                  color: "var(--wb-content-primary)",
-                  border: "1px solid var(--wb-border-default)",
-                  borderRadius: "var(--wb-button-radius)",
-                  padding: "0 var(--wb-space-8)",
-                }}
-              >
-                {RULED_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {ruledStatusLabel(status)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
-              <span style={labelStyle}>Ruling note (required for Canonical and Hard gate)</span>
-              <input
-                aria-label="Ruling note"
-                type="text"
-                value={ruling}
-                onChange={(event) => setRuling(event.target.value)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  minHeight: "38px",
-                  marginTop: "var(--wb-space-4)",
-                  background: "var(--wb-surface-2)",
-                  color: "var(--wb-content-primary)",
-                  border: "1px solid var(--wb-border-default)",
-                  borderRadius: "var(--wb-button-radius)",
-                  padding: "0 var(--wb-space-8)",
-                }}
-              />
-            </label>
-            {statusChoice === "hard-gate" ? (
-              <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
-                <span style={labelStyle}>Gate name</span>
-                <input
-                  aria-label="Gate name"
-                  type="text"
-                  value={gate}
-                  onChange={(event) => setGate(event.target.value)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    minHeight: "38px",
-                    marginTop: "var(--wb-space-4)",
-                    background: "var(--wb-surface-2)",
-                    color: "var(--wb-content-primary)",
-                    border: "1px solid var(--wb-border-default)",
-                    borderRadius: "var(--wb-button-radius)",
-                    padding: "0 var(--wb-space-8)",
-                  }}
-                />
-              </label>
-            ) : null}
-            <div style={{ display: "flex", gap: "var(--wb-space-8)", flexWrap: "wrap" }}>
-              <Button
-                variant="secondary"
-                disabled={busy}
-                onClick={() =>
-                  runAction({
-                    verb: "set-status",
-                    status: statusChoice,
-                    ruling: ruling.trim() ? ruling.trim() : undefined,
-                    gate: statusChoice === "hard-gate" && gate.trim() ? gate.trim() : undefined,
-                    expect_version: entry.version,
-                  })
-                }
-              >
-                Set status
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={busy}
-                onClick={() => runAction({ verb: "verify", accept_drift: acceptDrift })}
-              >
-                Verify
-              </Button>
-              {entry.archived ? (
-                <Button
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => runAction({ verb: "unarchive" })}
-                >
-                  Unarchive
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => runAction({ verb: "archive" })}
-                >
-                  Archive
-                </Button>
-              )}
-            </div>
-            {derived?.drift ? (
-              <label
-                style={{
-                  display: "flex",
-                  gap: "var(--wb-space-8)",
-                  alignItems: "center",
-                  marginTop: "var(--wb-space-8)",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={acceptDrift}
-                  onChange={(event) => setAcceptDrift(event.target.checked)}
-                />
-                <span>Accept drift on verify (the file changed since the last verify)</span>
-              </label>
-            ) : null}
-            <div style={{ marginTop: "var(--wb-space-12)" }}>
-              <span style={labelStyle}>Supersede with</span>
-              {supersedeCandidates.length > 0 ? (
-                <>
-                  <select
-                    aria-label="Superseding entry"
-                    value={supersedeTarget}
-                    onChange={(event) => setSupersedeTarget(event.target.value)}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      minHeight: "38px",
-                      marginTop: "var(--wb-space-4)",
-                      background: "var(--wb-surface-2)",
-                      color: "var(--wb-content-primary)",
-                      border: "1px solid var(--wb-border-default)",
-                      borderRadius: "var(--wb-button-radius)",
-                      padding: "0 var(--wb-space-8)",
-                    }}
-                  >
-                    <option value="" disabled>
-                      Choose the superseding entry…
-                    </option>
-                    {supersedeCandidates.map((candidate) => (
-                      <option key={candidate.id} value={candidate.id}>
-                        {candidateLabel(candidate)}
-                      </option>
-                    ))}
-                  </select>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "var(--wb-space-8)",
-                      flexWrap: "wrap",
-                      marginTop: "var(--wb-space-8)",
-                    }}
-                  >
-                    <Button
-                      variant="danger"
-                      disabled={busy || supersedeTarget.trim() === ""}
-                      onClick={() =>
-                        runAction({
-                          verb: "supersede",
-                          new_id: supersedeTarget.trim(),
-                          ruling: ruling.trim() ? ruling.trim() : undefined,
-                        })
-                      }
-                    >
-                      Supersede
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <p style={{ margin: "var(--wb-space-4) 0 0", color: "var(--wb-content-muted)" }}>
-                  No other entries in this project to supersede with.
-                </p>
-              )}
-            </div>
-          </Card>
+          <LifecycleCard
+            entry={entry}
+            derived={derived}
+            busy={busy}
+            runAction={runAction}
+            statusChoice={statusChoice}
+            setStatusChoice={setStatusChoice}
+            ruling={ruling}
+            setRuling={setRuling}
+            gate={gate}
+            setGate={setGate}
+            acceptDrift={acceptDrift}
+            setAcceptDrift={setAcceptDrift}
+            supersedeTarget={supersedeTarget}
+            setSupersedeTarget={setSupersedeTarget}
+            supersedeCandidates={supersedeCandidates}
+            candidateLabel={candidateLabel}
+          />
 
           <div data-annotation-ui="true">
             <Card title={`Annotations · ${count}`} anchor="mockups/annotations-card">

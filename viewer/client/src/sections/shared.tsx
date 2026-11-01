@@ -6,7 +6,7 @@
 // section with nothing to show says so in its own words.
 
 import type { ReactNode } from "react";
-import type { FeedEnvelope } from "../lib/api";
+import type { FeedEnvelope } from "../lib/api-types";
 
 const wellStyle: React.CSSProperties = {
   background: "var(--wb-surface-sunken)",
@@ -88,4 +88,13 @@ export const metaStyle: React.CSSProperties = {
   fontSize: "var(--wb-font-size-xs)",
   lineHeight: "var(--wb-line-height-xs)",
   whiteSpace: "nowrap",
+};
+
+export const badgeStyle: React.CSSProperties = {
+  background: "var(--wb-surface-sunken)",
+  borderRadius: "var(--wb-radius-pill)",
+  padding: "0 var(--wb-space-8)",
+  fontSize: "var(--wb-font-size-xs)",
+  lineHeight: "var(--wb-line-height-xs)",
+  color: "var(--wb-content-secondary)",
 };

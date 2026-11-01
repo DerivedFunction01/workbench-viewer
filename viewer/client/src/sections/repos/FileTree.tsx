@@ -24,7 +24,8 @@ import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useState } from "react";
 import { Button } from "../../components/Button";
 import { Toggle } from "../../components/Toggle";
-import { api, type RepoDirListing, type RepoTreeFolder } from "../../lib/api";
+import { api } from "../../lib/api";
+import type { RepoDirListing, RepoTreeFolder } from "../../lib/api-types-repos";
 import { metaStyle } from "../shared";
 
 function dirQueryKey(repoId: string, dir: string) {

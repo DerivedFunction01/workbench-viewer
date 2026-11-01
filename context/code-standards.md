@@ -77,3 +77,12 @@ record was closed by build Subplan 01, 2026-10-25):
 - `tests/` — unittest suites mirroring lib/ and server/
 - `state/` — runtime only (gitignored)
 - `workbench/` — project zero's data (gitignored)
+- **800-line cap:** no in-scope source file (.py, .ts, .tsx,
+  .js, .mjs — tests included) exceeds 800 lines, counted by
+  splitlines. Over the cap the promotion rule applies: the
+  file becomes a same-named module folder split by intent,
+  every leaf at or under the cap with headroom (splits target
+  780). Enforced by `tools/length.py` as the gate's first leg;
+  its exclusions (the vendored SDK tree, builder-generated
+  output, dependency and build trees) are named in that
+  module. The same cap and rule hold in the sister repos.

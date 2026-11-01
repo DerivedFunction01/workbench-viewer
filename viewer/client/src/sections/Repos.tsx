@@ -11,7 +11,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { SegmentedControl } from "../components/SegmentedControl";
-import { api, type RepoHistoryPayload, type RepoStatusPayload, type RepoSummary } from "../lib/api";
+import { api } from "../lib/api";
+import type { RepoHistoryPayload, RepoStatusPayload, RepoSummary } from "../lib/api-types-repos";
 import { formatDate, formatRelative, formatShortHash } from "../lib/format";
 import { reposHref } from "../lib/routing";
 import { FilesTab } from "./repos/FilesTab";

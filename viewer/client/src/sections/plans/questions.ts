@@ -5,7 +5,7 @@
 // panel's state logic is testable without a DOM
 // (viewer/tools/test-questions.ts).
 
-import type { PlanBlock, PlanQuestion, PlanSection } from "../../lib/api";
+import type { PlanBlock, PlanQuestion, PlanSection } from "../../lib/api-types";
 
 /** Starting control values, keyed by question id: the
  * recorded answer ("" while a question is unanswered). */

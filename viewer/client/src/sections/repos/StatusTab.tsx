@@ -5,7 +5,7 @@
 // Worktrees. Every value is the status payload's own;
 // the tab only arranges it.
 
-import type { RepoFileStat, RepoStatusPayload } from "../../lib/api";
+import type { RepoFileStat, RepoStatusPayload } from "../../lib/api-types-repos";
 import { formatCount, formatDate, formatRelative } from "../../lib/format";
 import { reposHref } from "../../lib/routing";
 import { EmptyWell, metaStyle } from "../shared";

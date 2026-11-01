@@ -6,7 +6,8 @@
 // two never disagree by construction of the query key).
 
 import { useQuery } from "@tanstack/react-query";
-import { api, type RepoHistoryPayload } from "../../lib/api";
+import { api } from "../../lib/api";
+import type { RepoHistoryPayload } from "../../lib/api-types-repos";
 import { formatDateTime, formatRelative, formatShortHash } from "../../lib/format";
 import { exposureLabel, publicationLabel } from "../../lib/labels";
 import { EmptyWell, ErrorWell, metaStyle, SkeletonWell } from "../shared";

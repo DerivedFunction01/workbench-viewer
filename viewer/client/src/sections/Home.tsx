@@ -10,7 +10,8 @@
 // worktree strip never renders as an empty shell.
 
 import { useQuery } from "@tanstack/react-query";
-import { api, type HomePayload, type HomeRow } from "../lib/api";
+import { api } from "../lib/api";
+import type { HomePayload, HomeRow } from "../lib/api-types";
 import { formatDate, formatRelative } from "../lib/format";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";

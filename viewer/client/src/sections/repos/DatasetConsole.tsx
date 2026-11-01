@@ -11,7 +11,8 @@
 
 import { useState } from "react";
 import { Button } from "../../components/Button";
-import { api, type DatasetCell, type DatasetSqlResult } from "../../lib/api";
+import { api } from "../../lib/api";
+import type { DatasetCell, DatasetSqlResult } from "../../lib/api-types-repos";
 import { metaStyle } from "../shared";
 
 const CELL_MAX = 80;

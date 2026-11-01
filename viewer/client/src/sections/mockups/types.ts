@@ -1,6 +1,6 @@
 // Local feed/detail types for the Mockups section — the
 // companion server's shapes (SPEC §4/§7), read off the bridge
-// envelopes in lib/api.ts. lib/api.ts carries the loose feed
+// envelopes in lib/api-types.ts, which carries the loose feed
 // envelope; the full entry rows (the export fold: entry +
 // derived + approval) and the entry-detail payload are typed
 // here, where they are consumed.
@@ -127,7 +127,7 @@ export interface PeekResult {
   captured_at?: string;
 }
 
-/** The bridge envelope every action returns (lib/api.ts). */
+/** The bridge envelope every action returns (lib/api-types.ts). */
 export interface Envelope {
   status: number;
   payload: unknown;

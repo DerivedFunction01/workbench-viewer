@@ -11,7 +11,7 @@
 // Usage: bun viewer/tools/test-grouping.ts
 // Exit 1 on any failure.
 
-import type { BundleItem, PlanSummary } from "../client/src/lib/api";
+import type { BundleItem, PlanSummary } from "../client/src/lib/api-types";
 import { groupBundles, type PlanGrouping } from "../client/src/sections/plans/grouping";
 
 function bundle(path: string, subplans: string[], archived = false): BundleItem {

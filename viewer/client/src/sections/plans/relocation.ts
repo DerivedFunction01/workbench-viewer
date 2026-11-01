@@ -14,7 +14,7 @@
 // guessed position, never a dropped annotation. Status
 // is derived at read, never stored.
 
-import type { TextSelection } from "../../lib/api";
+import type { TextSelection } from "../../lib/api-types";
 
 export type RelocationStatus = "located" | "orphan" | "ambiguous";
 

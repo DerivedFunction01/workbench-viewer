@@ -17,7 +17,7 @@
 // declared path that resolves to no plan in the set
 // is the parent's missing child row, never dropped.
 
-import type { BundleItem } from "../../lib/api";
+import type { BundleItem } from "../../lib/api-types";
 
 export interface PlanGroupEntry {
   bundle: BundleItem;

@@ -18,16 +18,16 @@ import { Button } from "../../components/Button";
 import { DegradedBanner as KitBanner } from "../../components/DegradedBanner";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { Toggle } from "../../components/Toggle";
-import {
-  api,
-  type DiffFileEntry,
-  type DiffHunk,
-  type DiffPayload,
-  type DiffPeek,
-  type DiffPeekPayload,
-  type IgnoredChangedEntry,
-  type WorktreesPayload,
-} from "../../lib/api";
+import { api } from "../../lib/api";
+import type {
+  DiffFileEntry,
+  DiffHunk,
+  DiffPayload,
+  DiffPeek,
+  DiffPeekPayload,
+  IgnoredChangedEntry,
+  WorktreesPayload,
+} from "../../lib/api-types";
 import { highlightLines } from "../../lib/highlight";
 import { useIsPhone } from "../../lib/responsive";
 import { EmptyWell, ErrorWell, metaStyle, SkeletonWell } from "../shared";

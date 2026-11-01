@@ -10,7 +10,7 @@
 // Usage: bun viewer/tools/test-questions.ts
 // Exit 1 on any failure.
 
-import type { PlanBlock, PlanQuestion, PlanSection } from "../client/src/lib/api";
+import type { PlanBlock, PlanQuestion, PlanSection } from "../client/src/lib/api-types";
 import {
   initialValues,
   pendingAnswers,

@@ -881,7 +881,8 @@ focus-visible / disabled) being the canonical example;
 **props contracts** — typed props, data in via props,
 events out, components never fetch; **components, not
 monoliths** — one component per concept and file, sections
-compose the kit and own no private chrome; **buttons from
+compose the kit and own no private chrome; source files hold
+the 800-line cap (tools/length.py; context/code-standards.md); **buttons from
 ONE shared kit**; and **scrollbars are one thin global
 rule** in the themes CSS, never styled per-component.
 

@@ -388,7 +388,7 @@ export const Actions = {
   // the /api namespace, proxied verbatim like everything
   // above. Payloads ride rawResult: their shapes are the
   // home/messages/settings contracts in lib/, typed on the
-  // client in lib/api.ts.
+  // client in lib/api-types.ts.
   getHome: defineAction({
     request: z.object({}),
     response: rawResult,
@@ -499,7 +499,7 @@ export const Actions = {
   // history, and the repo registry. Payloads ride
   // rawResult: their shapes are the lib/repos.py,
   // lib/files.py, lib/repo_state.py contracts, typed on
-  // the client in lib/api.ts.
+  // the client in lib/api-types-repos.ts.
   getRepos: defineAction({
     request: z.object({}),
     response: rawResult,
@@ -580,7 +580,7 @@ export const Actions = {
   // described schema, one bounded rows page, on-demand
   // column stats, and the guarded SQL console. Shapes are
   // the lib/datasets.py + lib/dataset_console.py
-  // contracts, typed on the client in lib/api.ts.
+  // contracts, typed on the client in lib/api-types-repos.ts.
   getRepoDataset: defineAction({
     request: z.object({
       repoId: z.string().min(1),

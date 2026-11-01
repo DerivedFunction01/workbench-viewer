@@ -17,13 +17,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnnotationBadge, annotationMarkStyle } from "../components/AnnotationBadge";
 import { Button } from "../components/Button";
-import {
-  api,
-  type MessageItem,
-  type MessagesPayload,
-  type SelectionAnchor,
-  type TextSelection,
-} from "../lib/api";
+import { api } from "../lib/api";
+import type {
+  MessageItem,
+  MessagesPayload,
+  SelectionAnchor,
+  TextSelection,
+} from "../lib/api-types";
 import { formatRelative } from "../lib/format";
 import { useIsPhone } from "../lib/responsive";
 import { locateInText, type RelocationStatus } from "./plans/relocation";

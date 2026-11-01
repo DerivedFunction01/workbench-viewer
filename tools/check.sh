@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# tools/check.sh — THE repo gate (Subplan 03). One command, four legs,
+# tools/check.sh — THE repo gate (Subplan 03). One command, five legs,
 # fail-fast with the failing leg named:
 #
-#   1. python-unittest   repo venv, tests/ (stdlib unittest)
-#   2. biome-check       viewer/ — lint + format + assist (pinned Biome)
-#   3. typecheck         viewer/ — strict tsc, client + server
-#   4. client-build      viewer/ — server bundle + client bundle
+#   1. length-scan       tools/length.py — the 800-line cap
+#   2. python-unittest   repo venv, tests/ (stdlib unittest)
+#   3. biome-check       viewer/ — lint + format + assist (pinned Biome)
+#   4. typecheck         viewer/ — strict tsc, client + server
+#   5. client-build      viewer/ — server bundle + client bundle
 #
 # The repo root is resolved from THIS script's location, never a
 # hardcoded path, so the gate runs identically from a fresh worktree
@@ -15,7 +16,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VIEWER="$ROOT/viewer"
-TOTAL=4
+TOTAL=5
 leg=0
 
 run_leg() {
@@ -31,6 +32,14 @@ run_leg() {
     echo "-- FAIL: $name (exit $rc) — gate stops here" >&2
     exit "$rc"
   fi
+}
+
+leg_length() {
+  if [ ! -x "$ROOT/.venv/bin/python" ]; then
+    echo "check.sh: repo venv missing at .venv/ — build it: python3 init_venv.py" >&2
+    return 1
+  fi
+  (cd "$ROOT" && .venv/bin/python tools/length.py)
 }
 
 leg_python() {
@@ -58,6 +67,7 @@ leg_build() {
 }
 
 echo "workbench-viewer gate — repo root: $ROOT"
+run_leg "length-scan" leg_length
 run_leg "python-unittest" leg_python
 run_leg "biome-check" leg_biome
 run_leg "typecheck" leg_typecheck

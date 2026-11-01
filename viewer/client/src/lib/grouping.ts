@@ -16,7 +16,7 @@
 // sees, and it keys on ROOTS, not slugs, because a repo
 // and its worktree copy can share a slug.
 
-import type { HomeRow, ProjectSummary } from "./api";
+import type { HomeRow, ProjectSummary } from "./api-types";
 
 export interface ProjectGroup {
   project: ProjectSummary;

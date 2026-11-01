@@ -13,7 +13,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "../../components/Button";
-import { api, type EffectiveSettingsPayload } from "../../lib/api";
+import { api } from "../../lib/api";
+import type { EffectiveSettingsPayload } from "../../lib/api-types";
 import { formatCount, formatDateTime } from "../../lib/format";
 import { messageStateLabel } from "../../lib/labels";
 import { ErrorWell, SkeletonWell } from "../shared";

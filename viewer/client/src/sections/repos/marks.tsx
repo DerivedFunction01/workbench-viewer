@@ -7,7 +7,7 @@
 // they render in the outline-badge shape of the
 // fundamentals — glyph + word, never color alone.
 
-import type { RepoSummary } from "../../lib/api";
+import type { RepoSummary } from "../../lib/api-types-repos";
 import { formatCount } from "../../lib/format";
 import { exposureLabel, publicationLabel, syncStateLabel } from "../../lib/labels";
 import { metaStyle } from "../shared";

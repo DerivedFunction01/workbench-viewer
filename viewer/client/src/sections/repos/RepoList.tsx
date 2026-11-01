@@ -11,7 +11,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { api, type RepoSummary } from "../../lib/api";
+import { api } from "../../lib/api";
+import type { RepoSummary } from "../../lib/api-types-repos";
 import { formatCount } from "../../lib/format";
 import { reposHref } from "../../lib/routing";
 import { EmptyWell, ErrorWell, metaStyle, SkeletonWell } from "../shared";

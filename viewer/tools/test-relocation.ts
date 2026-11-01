@@ -12,7 +12,7 @@
 // Exit 1 on any failure.
 
 import fixtures from "../../tests/fixtures/relocation.json";
-import type { TextSelection } from "../client/src/lib/api";
+import type { TextSelection } from "../client/src/lib/api-types";
 import { locateInText, normalizeText } from "../client/src/sections/plans/relocation";
 
 interface FixtureCase {
