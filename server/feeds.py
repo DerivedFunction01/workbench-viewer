@@ -8,6 +8,8 @@ never the request.
 """
 
 import sys
+import threading
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -265,7 +267,44 @@ def board_feed() -> dict:
             "sweep_errors": result.errors}
 
 
-def home_feed() -> dict:
+# ----------------------------------------------------------------
+# Home feed cache (the repos-feed idiom, repos_feed.py):
+# the home derivation walks every swept project —
+# registry counts, plan summaries, git state — and
+# costs seconds (under load, tens of seconds), so it
+# is computed at most once per TTL window (repos_ttl_s,
+# the client's poll cadence), served stale past it
+# while one background thread refreshes, and only a
+# never-filled cache computes on the request path
+# (single-flighted). Writes that change what the feed
+# derives (registry curation, a guarded repo save)
+# invalidate — and the generation counter keeps a
+# payload computed across an invalidation from being
+# stored.
+# ----------------------------------------------------------------
+
+_home_cache = {"at": 0.0, "result": None}
+_home_state_lock = threading.Lock()
+_home_compute_lock = threading.Lock()
+_home_refreshing = False
+_home_generation = 0
+
+
+def _home_invalidate_cache() -> None:
+    global _home_generation
+    with _home_state_lock:
+        _home_generation += 1
+        _home_cache.update(at=0.0, result=None)
+
+
+def _home_store(result, generation: int) -> None:
+    with _home_state_lock:
+        if generation == _home_generation:
+            _home_cache.update(at=time.monotonic(),
+                               result=result)
+
+
+def _compute_home_feed() -> dict:
     """GET /api/home (repo-home §4): one row per swept
     project, from lib/home derivations."""
     result = get_sweep()
@@ -273,7 +312,58 @@ def home_feed() -> dict:
         result.projects,
         stale_days=CFG["worktree_stale_days"])
     feed["sweep_errors"] = result.errors
+    feed["captured_at"] = now_iso()
     return feed
+
+
+def _home_refresh_background() -> None:
+    global _home_refreshing
+    try:
+        with _home_state_lock:
+            generation = _home_generation
+        _home_store(_compute_home_feed(), generation)
+    except Exception as e:
+        # The stale payload keeps serving; the next stale
+        # request kicks another refresh.
+        print(f"workbench-viewer: home feed refresh "
+              f"failed: {e}", file=sys.stderr)
+    finally:
+        with _home_state_lock:
+            _home_refreshing = False
+
+
+def _home_kick_refresh() -> None:
+    global _home_refreshing
+    with _home_state_lock:
+        if _home_refreshing:
+            return
+        _home_refreshing = True
+    threading.Thread(target=_home_refresh_background,
+                     daemon=True).start()
+
+
+def home_feed() -> dict:
+    """GET /api/home: the cached home payload (see the
+    cache note above); captured_at is when the payload
+    was computed, not when it was served."""
+    cached = _home_cache["result"]
+    if cached is not None:
+        if time.monotonic() - _home_cache["at"] \
+                < CFG["repos_ttl_s"]:
+            return cached
+        _home_kick_refresh()
+        return cached
+    with _home_compute_lock:
+        # The startup warm or a racing request may have
+        # filled the cache while this one waited.
+        cached = _home_cache["result"]
+        if cached is not None:
+            return cached
+        with _home_state_lock:
+            generation = _home_generation
+        result = _compute_home_feed()
+        _home_store(result, generation)
+        return result
 
 
 def worktrees_feed(project) -> dict:

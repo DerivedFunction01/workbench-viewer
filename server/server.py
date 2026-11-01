@@ -54,10 +54,10 @@ from lib.util import now_iso  # noqa: E402
 from common import (CFG, COMMIT, MAX_BODY,  # noqa: E402
                     STARTED_AT, VERSION, ApiError,
                     find_project, get_sweep)
-from feeds import (artifacts_feed, board_feed,  # noqa: E402
-                   diff_feed, entry_detail, home_feed,
-                   mockups_feed, plans_feed, todos_feed,
-                   worktrees_feed)
+from feeds import (_home_invalidate_cache,  # noqa: E402
+                   artifacts_feed, board_feed, diff_feed,
+                   entry_detail, home_feed, mockups_feed,
+                   plans_feed, todos_feed, worktrees_feed)
 from messages_api import (effective_settings,  # noqa: E402
                           message_archive, message_cleanup,
                           message_create, message_done,
@@ -380,6 +380,7 @@ class Handler(BaseHTTPRequestHandler):
             repo_state_mod.save_registry(
                 _repos_registry_path(), data)
             _repos_invalidate_cache()
+            _home_invalidate_cache()
             return self._send(200, {"id": repo_id,
                                     "registry": entry})
         if len(parts) >= 4 and parts[0] == "api" \
@@ -399,6 +400,7 @@ class Handler(BaseHTTPRequestHandler):
                 / "repos" / record["id"],
                 audit_log=state / CFG["edit_audit_log"])
             _repos_invalidate_cache()
+            _home_invalidate_cache()
             return self._send(200, result)
         if len(parts) >= 5 and parts[0] == "api" \
                 and parts[1] == "repos" \
@@ -496,14 +498,21 @@ def acquire_lock():
     _lock_fd = fd  # held for the process's life
 
 
+def _warm_feeds() -> None:
+    """Fill the TTL-cached feeds (repos census, home)
+    once at startup, off the request path."""
+    repos_feed()
+    home_feed()
+
+
 def main() -> int:
     acquire_lock()
     get_sweep()  # warm the cache; sweep errors never block
     start_message_maintenance()  # repo-home §5.3 cleanup
-    # Warm the repos feed off the request path: its first
-    # derivation costs seconds and must not land on the
-    # first open after a restart.
-    threading.Thread(target=repos_feed, daemon=True).start()
+    # Warm the cached feeds off the request path: their
+    # first derivations cost seconds and must not land on
+    # the first open after a restart.
+    threading.Thread(target=_warm_feeds, daemon=True).start()
     server = ThreadingHTTPServer((CFG["host"], CFG["port"]),
                                  Handler)
     print(f"workbench-viewer server v{VERSION} on "
