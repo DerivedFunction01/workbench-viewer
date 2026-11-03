@@ -271,8 +271,7 @@ class TestFormerLegacyPaths404(RouteServerCase):
         for canonical, legacy in [
                 ("/api/health", "/health"),
                 ("/api/config", "/config"),
-                ("/api/projects", "/projects"),
-                ("/api/todos", "/todos")]:
+                ("/api/projects", "/projects")]:
             with self.subTest(path=legacy):
                 self.assert_canonical_ok("GET", canonical)
                 self.assert_router_404("GET", legacy)

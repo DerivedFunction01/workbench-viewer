@@ -215,10 +215,53 @@ def plans_feed(project, *, bundles=None) -> dict:
                 bundle_parser.list_bundles(m.plans), threshold)
         return {**base, "available": True,
                 "plans": plans,
-                "bundles": bundles}
+                "bundles": [_plans_bundle(b)
+                            for b in bundles]}
     except Exception as e:
         return degraded({**base, "available": True,
                          "plans": [], "bundles": []}, e)
+
+
+# ----------------------------------------------------------------
+# Plans feed bundle projection (heavy-feed batching
+# follow-up, 2026-11-03): the board-portion treatment
+# applied to the Plans section's own feed. A bundle's
+# todos ride the feed as CHECKLIST CARDS — the fields
+# the plan list and the reader's checklist strip render,
+# plus the served staleness derivation this feed is
+# contract for — never as full todo records: the raw
+# frontmatter
+# dict (`fields`) duplicates the parsed keys, and
+# `markdown` duplicates the whole todo file, so neither
+# rides. The todo body is rendered in exactly one
+# place, the Finished list's expander, so it rides only
+# on archived bundles' cards. Full todo records stay in
+# the Todos section feed; full plan records stay on the
+# plan detail route — the reader already loads its
+# document there. Plan summaries (and the feed's
+# standalone `plans` list) ride whole: they are small
+# and their questions are contract (plan-questions).
+# The projection copies — a caller-shared bundles list
+# (the board portion's) is never mutated.
+# ----------------------------------------------------------------
+
+_PLANS_TODO_KEYS = ("id", "title", "status", "valid",
+                    "path", "bundle", "archived", "derived")
+
+
+def _plans_todo_card(todo, *, archived: bool) -> dict:
+    card = {k: todo.get(k) for k in _PLANS_TODO_KEYS}
+    if archived:
+        card["body"] = todo.get("body")
+    return card
+
+
+def _plans_bundle(bundle) -> dict:
+    out = dict(bundle)
+    out["todos"] = [
+        _plans_todo_card(t, archived=bundle["archived"])
+        for t in bundle["todos"]]
+    return out
 
 
 # ----------------------------------------------------------------

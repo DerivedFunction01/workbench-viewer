@@ -5,7 +5,9 @@
  "file_editing_enabled": false,
  "health_file": "health.json",
  "host": "127.0.0.1",
+ "link_file": "link.json",
  "lock_file": "server.lock",
+ "repair_file": "repair.json",
  "messages_archive_ttl_days": 90,
  "messages_awaiting_badge_days": 14,
  "messages_db": "messages.db",
@@ -32,6 +34,7 @@
  ],
  "sweep_roots": null,
  "sweep_ttl_s": 15,
+ "systemd_unit": "workbench-viewer-server",
  "workspace_root": null,
  "worktree_stale_days": 14,
  "stale_warning_days": 3

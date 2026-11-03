@@ -10,13 +10,15 @@ export { bytesToBase64, fileToBase64 } from "./client/file-encoding";
  * non-OK HTTP response. Carries the HTTP `status` so retry policy can tell a
  * permanent client error (4xx) apart from retryable backpressure/transient
  * failures, and the server's `Retry-After` (when present) as `retryAfterMs` so
- * the backoff honors it.
+ * the backoff honors it, and the server's error `code` (when present) so a
+ * page can tell refusals with the same status apart.
  */
 export declare class SpaceActionError extends Error {
     readonly status: number;
     readonly retryAfterMs?: number | undefined;
     readonly retrySafe: boolean;
-    constructor(message: string, status: number, retryAfterMs?: number | undefined, retrySafe?: boolean);
+    readonly code?: string | undefined;
+    constructor(message: string, status: number, retryAfterMs?: number | undefined, retrySafe?: boolean, code?: string | undefined);
 }
 export declare const PERMANENT_ACTION_STATUSES: Set<number>;
 /** Retries after the first failure for a retryable action error. */

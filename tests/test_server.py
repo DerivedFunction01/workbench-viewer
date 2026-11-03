@@ -245,16 +245,25 @@ class TestFeeds(ServerCase):
         self.assertEqual(status, 404)
 
     def test_todos_and_board(self):
-        status, feed = self.req("GET", "/api/todos")
-        self.assertEqual(status, 200)
-        projects = {t["project"] for t in feed["todos"]}
+        # The cross-project todos view is a client-side
+        # assembly of the per-project feeds (the /api/todos
+        # aggregate is dropped): fetch both portions and
+        # combine them the way the client does.
+        combined = []
+        for slug in ("alpha", "beta"):
+            status, feed = self.req(
+                "GET", f"/api/projects/{slug}/todos")
+            self.assertEqual(status, 200)
+            combined.extend({**t, "project": slug}
+                            for t in feed["todos"])
+        projects = {t["project"] for t in combined}
         self.assertEqual(projects, {"alpha", "beta"})
         # file todos are the source; the DB todo is superseded
-        titles = [t["title"] for t in feed["todos"]]
+        titles = [t["title"] for t in combined]
         self.assertNotIn("DB only thing", titles)
         self.assertEqual(titles.count("Do the thing"), 2)
         self.assertTrue(all(t["bundle"] == "2026-10-25-fixture-work"
-                            for t in feed["todos"]))
+                            for t in combined))
         # The board is assembled from per-project portions
         # (the /api/board monolith is dropped): the lanes
         # across both portions carry the same cards.

@@ -13,12 +13,12 @@
 //   } satisfies ActionsModule;
 //
 // The browser-side counterpart lives at @hatch/space-sdk/client.
-import { createDefineAction, createPrivilegedExecutor, definePrivilegedContracts, definePrivilegedHandlers, isAction as isSharedAction, isPrivilegedContract, isPrivilegedHandlers, z, } from "./server-contract";
+import { actionDescription, createDefineAction, createPrivilegedExecutor, definePrivilegedContracts, definePrivilegedHandlers, isAction as isSharedAction, isPrivilegedContract, isPrivilegedHandlers, z, } from "./server-contract";
 export { ACTION_BRAND, PRIVILEGED_CONTRACT_BRAND, PRIVILEGED_HANDLERS_FORMAT, z, } from "./server-contract";
 // Local handle for the `Ctx` interface below; the full set of these symbols
 // is re-exported from `./verticals` further down.
 import {} from "./verticals";
-export { createPrivilegedExecutor, definePrivilegedContracts, definePrivilegedHandlers, isPrivilegedContract, isPrivilegedHandlers, };
+export { actionDescription, createPrivilegedExecutor, definePrivilegedContracts, definePrivilegedHandlers, isPrivilegedContract, isPrivilegedHandlers, };
 /**
  * Brand string carried on every `InferenceSchemaError` instance. Same
  * pattern as `ACTION_BRAND`: bundle-stable string identity, so cross-bundle

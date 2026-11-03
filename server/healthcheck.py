@@ -29,7 +29,7 @@ STATE = cfgmod.state_dir(CFG)
 
 def fetch_health(path: str) -> dict:
     url = f"http://{CFG['host']}:{CFG['port']}{path}"
-    with urllib.request.urlopen(url, timeout=3) as r:
+    with urllib.request.urlopen(url, timeout=10) as r:
         return json.loads(r.read())
 
 

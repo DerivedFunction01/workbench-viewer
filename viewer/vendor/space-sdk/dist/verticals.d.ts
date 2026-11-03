@@ -336,9 +336,11 @@ export interface SpaceToolClient {
     /**
      * Generate an image server-side and store it in this Space's `ctx.blobs`,
      * returning a durable own-origin URL + blob key. No network egress from the
-     * action and no expiring URL — prefer this for hero/per-item imagery, and as
-     * the fallback when a web photo can't be sourced. Persist `blobKey` in your
-     * DB and render `url`.
+     * action and no expiring URL. Use it for decoration and illustration. A
+     * real place, product, person, or item gets a fetched photo or no image,
+     * except the user's own one-off or customized thing with no accurate photo:
+     * illustrate that from the specifics the artifact states and name its real
+     * components in the prompt. Persist `blobKey` in your DB and render `url`.
      */
     generate_media(prompt: string, options?: GenerateMediaOptions): Promise<GeneratedMedia>;
 }

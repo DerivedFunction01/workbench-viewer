@@ -87,6 +87,12 @@ export function createPrivilegedExecutor(declared, transport) {
  */
 export const ACTION_BRAND = "@hatch/space-sdk/action/v1";
 const LEGACY_ACTION_BRAND = Symbol.for("@hatch/space-sdk/action");
+const ACTION_DESCRIPTION_MAX_CHARS = 300;
+/** Both runtimes list actions through this, so local and shared catalogs agree. */
+export function actionDescription(definition) {
+    const description = definition.description?.replace(/[\s\u0000-\u001f\u007f]+/g, " ").trim();
+    return description ? [...description].slice(0, ACTION_DESCRIPTION_MAX_CHARS).join("") : undefined;
+}
 /** Bind the shared action implementation to a runtime-specific Ctx type. */
 export function createDefineAction() {
     return function defineAction(spec) {
@@ -94,6 +100,7 @@ export function createDefineAction() {
             __brand: ACTION_BRAND,
             request: spec.request,
             response: spec.response,
+            ...(spec.description !== undefined ? { description: spec.description } : {}),
             ...(spec.privileged !== undefined ? { privileged: spec.privileged } : {}),
             handler: spec.handler,
         };

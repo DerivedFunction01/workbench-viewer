@@ -10,7 +10,7 @@
 // imported. Invalid front-matter todos render as feed
 // errors on their row — never silent skips.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
@@ -172,12 +172,68 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
     queryFn: () => api.getProjectTodos({ slug }),
     enabled: scope === "project",
   });
-  const allQuery = useQuery({
-    queryKey: ["todos", "all"],
-    queryFn: () => api.getAllTodos({}),
+  // "All projects" is assembled from ONE CALL PER PROJECT
+  // (heavy-feed batching, 2026-11-01), not the /api/todos
+  // monolith: that aggregate re-derived every project
+  // before its first byte (1.3 MB, ~2 s warm, far longer
+  // cold) and parked the whole list behind the slowest
+  // project. Portions are the same ["todos", slug] queries
+  // the per-project view uses, so they render as they land
+  // and one project's failure never parks the others.
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => api.listProjects({}),
     enabled: scope === "all",
   });
-  const query = scope === "project" ? projectQuery : allQuery;
+  const allProjects = projectsQuery.data?.payload?.projects ?? [];
+  const portionQueries = useQueries({
+    queries: allProjects.map((p) => ({
+      queryKey: ["todos", p.slug],
+      queryFn: () => api.getProjectTodos({ slug: p.slug }),
+      enabled: scope === "all",
+    })),
+  });
+  const allPortions: TodosFeed[] = [];
+  const allFailedNames: string[] = [];
+  let allPendingCount = 0;
+  allProjects.forEach((p, i) => {
+    const q = portionQueries[i];
+    if (!q) return;
+    if (q.isPending) {
+      allPendingCount += 1;
+      return;
+    }
+    const payload = q.data?.payload as unknown as TodosFeed | undefined;
+    if (q.isError || !payload) allFailedNames.push(p.name);
+    else allPortions.push(payload);
+  });
+  const allTodos: TodoItem[] = allPortions.flatMap((feed) =>
+    (feed.todos ?? []).map((todo) => ({
+      ...todo,
+      project: todo.project ?? feed.slug,
+      project_name: todo.project_name ?? feed.name,
+    })),
+  );
+  const allErrors = allPortions.flatMap((feed) => feed.errors ?? []);
+  const allPending =
+    scope === "all" &&
+    (projectsQuery.isPending || (allPortions.length === 0 && allFailedNames.length === 0));
+  const allFailed =
+    scope === "all" && allProjects.length > 0 && allPortions.length === 0 && !allPending;
+
+  // Batched rendering: long lists mount N rows at a time
+  // (the "Show more" buttons below), so a several-hundred
+  // row list never pays a several-hundred-row first paint.
+  const BATCH = 50;
+  const [openVisible, setOpenVisible] = useState(BATCH);
+  const [doneVisible, setDoneVisible] = useState(BATCH);
+  const [prevScope, setPrevScope] = useState(scope);
+  if (prevScope !== scope) {
+    setPrevScope(scope);
+    setOpenVisible(BATCH);
+    setDoneVisible(BATCH);
+    setShowDone(false);
+  }
 
   const mutation = useMutation({
     mutationFn: (args: { project: string; id: string; status: string }) =>
@@ -197,16 +253,39 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
     if (todo.id) mutation.mutate({ project, id: todo.id, status });
   };
 
-  if (query.isPending) return <SkeletonWell label={`todos for ${projectName}`} />;
-  if (query.isError) {
+  if (scope === "project" && projectQuery.isPending) {
+    return <SkeletonWell label={`todos for ${projectName}`} />;
+  }
+  if (scope === "all" && allPending) return <SkeletonWell label="todos for all projects" />;
+  if (scope === "project" && projectQuery.isError) {
     return <ErrorWell section="Todos" message="the section feed could not be loaded." />;
   }
-  const { payload, error } = query.data;
-  if (!payload) {
-    return <ErrorWell section="Todos" message={error ?? "the companion server did not answer."} />;
+  if (allFailed) {
+    return <ErrorWell section="Todos" message="the section feed could not be loaded." />;
   }
-  const feed = payload as unknown as TodosFeed;
-  const todos = feed.todos ?? [];
+  // The per-project view renders its own feed; the combined
+  // view renders the assembled portions under a synthetic
+  // feed shell (available when any portion landed).
+  const feed: TodosFeed =
+    scope === "project"
+      ? (projectQuery.data?.payload as unknown as TodosFeed)
+      : ({
+          slug: "",
+          name: "",
+          degraded: false,
+          available: allPortions.some((f) => f.available),
+          todos: allTodos,
+          errors: allErrors,
+        } as TodosFeed);
+  if (scope === "project" && !projectQuery.data?.payload) {
+    return (
+      <ErrorWell
+        section="Todos"
+        message={projectQuery.data?.error ?? "the companion server did not answer."}
+      />
+    );
+  }
+  const todos = scope === "project" ? (feed.todos ?? []) : allTodos;
   const open = todos.filter((todo) => todo.status !== "done");
   const done = todos.filter((todo) => todo.status === "done");
   const dbFallback = scope === "project" && feed.source === "db-fallback";
@@ -224,6 +303,16 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
         value={scope}
         onChange={setScope}
       />
+      {scope === "all" && allPendingCount > 0 ? (
+        <p style={{ color: "var(--wb-content-muted)" }}>
+          Loading {allPendingCount} project{allPendingCount === 1 ? "" : "s"}…
+        </p>
+      ) : null}
+      {scope === "all" && allFailedNames.length > 0 ? (
+        <p role="alert" style={{ color: "var(--wb-danger)" }}>
+          Could not load {allFailedNames.join(", ")} — the rest of the list is shown.
+        </p>
+      ) : null}
       {dbFallback ? (
         <p style={{ color: "var(--wb-content-secondary)" }}>
           These todos still live in {projectName}&rsquo;s registry DB — no bundle todos exist yet,
@@ -254,7 +343,7 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
         ) : (
           <>
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {open.map((todo) => (
+              {open.slice(0, openVisible).map((todo) => (
                 <TodoRow
                   key={`${todo.project ?? slug}:${todo.path ?? todo.id}`}
                   todo={todo}
@@ -263,22 +352,35 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
                 />
               ))}
             </ul>
+            {open.length > openVisible ? (
+              <Button variant="secondary" onClick={() => setOpenVisible((n) => n + BATCH)}>
+                Show more — <span className="num">{open.length - openVisible}</span> more open todos
+              </Button>
+            ) : null}
             {done.length > 0 ? (
               <>
                 <Button variant="ghost" onClick={() => setShowDone(!showDone)}>
                   <span className="num">{done.length}</span> completed {showDone ? "▾" : "▸"}
                 </Button>
                 {showDone ? (
-                  <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                    {done.map((todo) => (
-                      <TodoRow
-                        key={`${todo.project ?? slug}:${todo.path ?? todo.id}`}
-                        todo={todo}
-                        showProject={scope === "all"}
-                        onSetStatus={setStatus}
-                      />
-                    ))}
-                  </ul>
+                  <>
+                    <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                      {done.slice(0, doneVisible).map((todo) => (
+                        <TodoRow
+                          key={`${todo.project ?? slug}:${todo.path ?? todo.id}`}
+                          todo={todo}
+                          showProject={scope === "all"}
+                          onSetStatus={setStatus}
+                        />
+                      ))}
+                    </ul>
+                    {done.length > doneVisible ? (
+                      <Button variant="secondary" onClick={() => setDoneVisible((n) => n + BATCH)}>
+                        Show more — <span className="num">{done.length - doneVisible}</span> more
+                        completed todos
+                      </Button>
+                    ) : null}
+                  </>
                 ) : null}
               </>
             ) : null}

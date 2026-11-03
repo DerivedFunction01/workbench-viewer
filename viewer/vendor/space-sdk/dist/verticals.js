@@ -270,7 +270,7 @@ export const TOOL_WEB_SEARCH_RESULT_SCHEMA = z.object({
         snippet: nullableString.describe("Short excerpt of the page for display. Not for parsing."),
         published_at: nullableString.describe("Best-effort publish date (ISO 8601 / YYYY-MM-DD), derived primarily from the URL slug. NOT authoritative — a hint only; prefer it over `last_updated_raw` for date ordering."),
         last_updated_raw: nullableString.describe('Raw freshness marker from the feed, e.g. "Just now", "3 hours ago", "525 days ago". Unstructured and unreliable in BOTH directions — display only, never parse it into a real date.'),
-        favicon_url: nullableString.describe("Source-domain favicon — an external Google s2 URL the artifact does NOT own. For a small icon next to the source name only, rendered decoratively with an onError fallback. Never content imagery and never a hotlinked page image: for real pictures use ctx.tool.generate_media or fetch-and-self-host the page's og:image. Usually present."),
+        favicon_url: nullableString.describe("Source-domain favicon — an external Google s2 URL the artifact does NOT own. For a small icon next to the source name only, rendered decoratively with an onError fallback. Never content imagery and never a hotlinked page image. Usually present."),
         rank: z.number().describe("Upstream result rank (0-based) — stable ordering + debugging."),
         is_index_page: z
             .boolean()

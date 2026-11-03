@@ -324,15 +324,6 @@ export const Actions = {
     },
   }),
 
-  getAllTodos: defineAction({
-    request: z.object({}),
-    response: proxied(z.looseObject({ todos: z.array(z.unknown()) })),
-    privileged: [privileged.wbApi],
-    async handler(ctx) {
-      return callServer<{ todos: unknown[] }>(ctx, "/api/todos");
-    },
-  }),
-
   todoAction: defineAction({
     request: z.object({
       slug: z.string().min(1),

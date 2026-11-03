@@ -146,15 +146,20 @@ export interface ActionDefinition<TCtx extends PortableCtx = PortableCtx, Req ex
     readonly __brand: typeof ACTION_BRAND;
     readonly request: Req;
     readonly response: Res;
+    readonly description?: string;
     readonly privileged?: readonly PrivilegedContract[];
     readonly handler: (ctx: TCtx, args: z.infer<Req>) => Promise<z.infer<Res>>;
 }
 export type ActionFactoryInput<TCtx extends PortableCtx, Req extends z.ZodType, Res extends z.ZodType> = {
     request: Req;
     response: Res;
+    /** One sentence telling the user's agent what the action does. */
+    description?: string;
     privileged?: readonly PrivilegedContract[];
     handler: (ctx: TCtx, args: z.infer<Req>) => Promise<z.infer<Res>>;
 };
+/** Both runtimes list actions through this, so local and shared catalogs agree. */
+export declare function actionDescription(definition: Pick<ActionDefinition, "description">): string | undefined;
 /** Bind the shared action implementation to a runtime-specific Ctx type. */
 export declare function createDefineAction<TCtx extends PortableCtx>(): <Req extends z.ZodType, Res extends z.ZodType>(spec: ActionFactoryInput<TCtx, Req, Res>) => ActionDefinition<TCtx, Req, Res>;
 /** Runtime check used by workers to filter module exports. */

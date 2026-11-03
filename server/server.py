@@ -263,24 +263,6 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["api", "projects"]:
             result = get_sweep()
             return self._send(200, result.summary())
-        if parts == ["api", "todos"]:
-            items, errors = [], []
-            for project in get_sweep().projects:
-                feed = todos_feed(project)
-                if feed["degraded"]:
-                    errors.append({"slug": project.slug,
-                                   "reason": feed["reason"]})
-                for err in feed.get("errors", []):
-                    errors.append({"slug": project.slug,
-                                   **err})
-                for todo in feed["todos"]:
-                    items.append({**todo,
-                                  "project": project.slug,
-                                  "project_name": project.name})
-            return self._send(200, {
-                "todos": items, "errors": errors,
-                "stale_warning_days":
-                    CFG["stale_warning_days"]})
         if len(parts) >= 3 and parts[0] == "api" \
                 and parts[1] == "projects":
             project = self._project_or_404(parts[2])

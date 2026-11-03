@@ -156,9 +156,15 @@ class StaleFeedCase(unittest.TestCase):
         self.assertFalse(
             by_title["Fresh thing"]["derived"]["stale"])
 
-        all_todos = self.get("/api/todos")
-        self.assertEqual(all_todos["stale_warning_days"], 3)
-        by_title = {t["title"]: t for t in all_todos["todos"]}
+        # The cross-project view assembles the per-project
+        # feeds client-side (the /api/todos aggregate is
+        # dropped); the threshold and the derivation ride
+        # every portion the assembly consumes.
+        assembled = []
+        feed = self.get("/api/projects/alpha/todos")
+        self.assertEqual(feed["stale_warning_days"], 3)
+        assembled.extend(feed["todos"])
+        by_title = {t["title"]: t for t in assembled}
         self.assertTrue(
             by_title["Old open thing"]["derived"]["stale"])
 

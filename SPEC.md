@@ -571,8 +571,11 @@ API (the feeds the artifact consumes):
   (`{path, base_sha256, answers}` → sentinel-question
   answers written into the plan file via the guarded
   save)
-- `GET /api/projects/<slug>/todos` · `GET /api/todos` ·
-  `POST /api/projects/<slug>/todos` (`{verb, ...}`)
+- `GET /api/projects/<slug>/todos` ·
+  `POST /api/projects/<slug>/todos` (`{verb, ...}`) —
+  the cross-project todos view assembles the per-project
+  feeds client-side; the `GET /api/todos` aggregate was
+  dropped with the board monolith's lineage (2026-11-03)
 - `GET /api/projects/<slug>/board` (one project's board
   portion; the board screen assembles portions
   client-side)
@@ -683,7 +686,9 @@ flagged in the UI as source format (§1.7).
 
 ### 8.3 Todos
 
-Per project and cross-project (`GET /api/todos`). Stored in
+Per project (`GET /api/projects/<slug>/todos`); the
+cross-project view assembles those portions client-side.
+Stored in
 each project's registry DB (§4.3), managed by the `wb`
 todo verbs and editable in the viewer through the same
 lib/ mutation path. Plan steps are NOT todos and are never

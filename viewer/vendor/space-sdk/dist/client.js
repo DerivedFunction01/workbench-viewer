@@ -24,17 +24,20 @@ export { bytesToBase64, fileToBase64 } from "./client/file-encoding";
  * non-OK HTTP response. Carries the HTTP `status` so retry policy can tell a
  * permanent client error (4xx) apart from retryable backpressure/transient
  * failures, and the server's `Retry-After` (when present) as `retryAfterMs` so
- * the backoff honors it.
+ * the backoff honors it, and the server's error `code` (when present) so a
+ * page can tell refusals with the same status apart.
  */
 export class SpaceActionError extends Error {
     status;
     retryAfterMs;
     retrySafe;
-    constructor(message, status, retryAfterMs, retrySafe = false) {
+    code;
+    constructor(message, status, retryAfterMs, retrySafe = false, code) {
         super(message);
         this.status = status;
         this.retryAfterMs = retryAfterMs;
         this.retrySafe = retrySafe;
+        this.code = code;
         this.name = "SpaceActionError";
     }
 }
@@ -562,15 +565,11 @@ export function createActionClient(options = {}) {
                                 markSpaceUnavailable(actionCallId);
                                 throwIfSpaceUnavailable();
                             }
-                            const retryText = typeof retryBody === "string"
-                                ? retryBody
-                                : JSON.stringify(retryBody ?? null);
-                            throw new SpaceActionError(`action ${name} failed after auth refresh: ${retryResponse.status} ${retryText}`, retryResponse.status, parseRetryAfterMs(retryResponse), isActionRetrySafe(retryBody));
+                            throw new SpaceActionError(actionFailureMessage(name, "failed after auth refresh", retryResponse.status, retryBody), retryResponse.status, parseRetryAfterMs(retryResponse), isActionRetrySafe(retryBody), actionErrorCode(retryBody));
                         }
                         return readActionData(retryResponse, name);
                     }
-                    const text = typeof body === "string" ? body : JSON.stringify(body ?? null);
-                    throw new SpaceActionError(`action ${name} failed: ${response.status} ${text}`, response.status, parseRetryAfterMs(response), isActionRetrySafe(body));
+                    throw new SpaceActionError(actionFailureMessage(name, "failed", response.status, body), response.status, parseRetryAfterMs(response), isActionRetrySafe(body), actionErrorCode(body));
                 }
                 return readActionData(response, name);
             };
@@ -579,6 +578,24 @@ export function createActionClient(options = {}) {
 }
 function isActionRetrySafe(body) {
     return body !== null && typeof body === "object" && "retrySafe" in body && body.retrySafe === true;
+}
+/**
+ * A view-only viewer's refusal keeps the shared app's own sentence, so an app
+ * that shows the error tells the person why; any other failure names the
+ * action, status, and body.
+ */
+function actionFailureMessage(name, failure, status, body) {
+    const error = body !== null && typeof body === "object" && "error" in body ? body.error : undefined;
+    if (actionErrorCode(body) === "view_only" && typeof error === "string" && error.length > 0) {
+        return error;
+    }
+    const text = typeof body === "string" ? body : JSON.stringify(body ?? null);
+    return `action ${name} ${failure}: ${status} ${text}`;
+}
+function actionErrorCode(body) {
+    return body !== null && typeof body === "object" && "code" in body && typeof body.code === "string"
+        ? body.code
+        : undefined;
 }
 // Parse a `Retry-After` response header (RFC 7231 delta-seconds or HTTP-date)
 // into milliseconds-from-now. Returns undefined when absent/unparseable.

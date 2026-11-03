@@ -325,8 +325,10 @@ stays entry-pure).
 (`{path, base_sha256, answers}` → the plan file's sentinel
 questions answered in place via lib composition + the
 guarded save) ·
-`GET /api/projects/<slug>/todos` · `GET /api/todos` ·
-`POST /api/projects/<slug>/todos` (`{verb, ...}`) · `GET /api/projects/<slug>/board`.
+`GET /api/projects/<slug>/todos` ·
+`POST /api/projects/<slug>/todos` (`{verb, ...}`) · `GET /api/projects/<slug>/board`
+(the `GET /api/todos` cross-project aggregate is dropped;
+the client assembles the per-project feeds).
 
 The whole HTTP surface lives under `/api`. The 15 legacy
 unprefixed patterns were served as exact aliases for one

@@ -55,6 +55,14 @@ DEFAULTS = {
     "state_dir": "state",
     "lock_file": "server.lock",
     "health_file": "health.json",
+    "link_file": "link.json",
+    "repair_file": "repair.json",
+    # Auto-recovery (vm-restart bundle): the systemd unit
+    # ops/install-unit.sh installs and ops/watchdog.sh keeps
+    # the server under. The link probe verifies the running
+    # server is this unit's MainPID — a stray process
+    # answering the port is not recovery.
+    "systemd_unit": "workbench-viewer-server",
     "edit_backups_dir": "edit-backups",
     # Repo-home (spec §5/§6): the viewer-tied message store.
     # messages_db resolves against state_dir unless absolute.
