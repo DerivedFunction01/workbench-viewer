@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+# Runtime state (server lock, logs, edit backups, health file).
+state/
+# Machine-local config instance; defaults live in server/config.py.
+config.json
+# Machine-local env overrides; see viewer.env.example.
+viewer.env
+# Rendered systemd unit; the tracked source is the .template file.
+workbench-viewer-server.service
+# Plan files are not tracked in this repo.
+.plans/
+# Local virtualenv (init_venv.py); never tracked.
+.venv/
+# Project zero's workbench data: transient workspace material,
+# untracked like every project's (the manifest IS tracked).
+workbench/registry.db
+workbench/registry.db-*
+workbench/registry.json
+workbench/entries/
+workbench/archive/

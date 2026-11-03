@@ -1,0 +1,125 @@
+{
+  "cases": [
+    {
+      "expect": "located",
+      "name": "unique quote locates",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "Alpha ",
+        "quote": "beta gamma",
+        "suffix": ". Delta"
+      },
+      "source": "Alpha beta gamma. Delta epsilon zeta."
+    },
+    {
+      "expect": "orphan",
+      "name": "quote edited away is orphan",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "Alpha ",
+        "quote": "beta omega",
+        "suffix": ". Delta"
+      },
+      "source": "Alpha beta gamma. Delta epsilon zeta."
+    },
+    {
+      "expect": "located",
+      "name": "duplicated quote, context disambiguates",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "the red ",
+        "quote": "fox runs",
+        "suffix": " fast"
+      },
+      "source": "the red fox runs fast. the blue fox runs slow."
+    },
+    {
+      "expect": "ambiguous",
+      "name": "duplicated quote, no context, tie is ambiguous",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "",
+        "quote": "fox runs",
+        "suffix": ""
+      },
+      "source": "the red fox runs fast. the blue fox runs slow."
+    },
+    {
+      "expect": "ambiguous",
+      "name": "duplicated quote, context matches neither, tie is ambiguous",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "the green ",
+        "quote": "fox runs",
+        "suffix": " sideways"
+      },
+      "source": "the red fox runs fast. the blue fox runs slow."
+    },
+    {
+      "expect": "located",
+      "name": "prefix-only beats suffix-only",
+      "selection": {
+        "component_id": "plans/step-2",
+        "kind": "text",
+        "prefix": "mark: ",
+        "quote": "hold the line",
+        "suffix": " now"
+      },
+      "source": "mark: hold the line. then hold the line now."
+    },
+    {
+      "expect": "located",
+      "name": "whitespace and newline drift still locates",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "",
+        "quote": "Anything that moved since the checkpoint is listed, not silently carried.",
+        "suffix": ""
+      },
+      "source": "Anything that moved\nsince the   checkpoint is\nlisted, not silently carried."
+    },
+    {
+      "expect": "located",
+      "name": "nbsp drift still locates",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "empty does ",
+        "quote": "the step close. Next step.",
+        "suffix": ""
+      },
+      "source": "Only when the list is empty does the step close. Next step."
+    },
+    {
+      "expect": "orphan",
+      "name": "case differs is orphan (matching is case-sensitive)",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "",
+        "quote": "the seal holds",
+        "suffix": "."
+      },
+      "source": "The Seal Holds."
+    },
+    {
+      "expect": "orphan",
+      "name": "empty quote is orphan",
+      "selection": {
+        "component_id": "plans/step-1",
+        "kind": "text",
+        "prefix": "",
+        "quote": "   ",
+        "suffix": ""
+      },
+      "source": "Some text."
+    }
+  ],
+  "comment": "Shared re-location fixtures (annotation plan Step 3): the lib engine (tests/test_annotations.py) and the client engine (viewer/client/src/sections/plans/relocation.test.ts) run THE SAME cases. source is the scoped region text; selection is the stored payload; expect is the status both engines must derive. Spans are deliberately NOT pinned across engines (raw-source offsets lib-side, DOM ranges client-side); status + the matched quote are the contract."
+}

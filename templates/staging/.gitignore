@@ -1,0 +1,5 @@
+# Registry data and plans are untracked in every workbench
+# project; git versions the manifest, the README, and the
+# graduation log only.
+workbench/
+.plans/

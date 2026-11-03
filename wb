@@ -1,0 +1,885 @@
+#!/usr/bin/env python3
+"""wb — the workbench harness CLI.
+
+A thin caller over lib/: every verb is a lib/ mutation or
+read; wb holds no logic of its own and no SQL. The companion
+server calls the same lib/ functions — there is exactly one
+mutation path in the system. Every mutation verb regenerates
+the project's registry.json export (a pure fold; safe to
+repeat).
+
+Project selection (first match wins):
+  --db PATH         a registry DB directly (fixtures, repair)
+  --root PATH       a project root holding workbench.yaml
+  --project SLUG    resolved by sweeping the workspace
+  (none)            walk up from the cwd for workbench.yaml
+
+Run under the repo venv:  .venv/bin/python wb --help
+"""
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib import active as active_mod  # noqa: E402
+from lib import bundles as bundle_mod  # noqa: E402
+from lib import doctor as doctor_mod  # noqa: E402
+from lib import progress as progress_mod  # noqa: E402
+from lib import progress_schedule as \
+    progress_schedule_mod  # noqa: E402
+from lib import export as export_mod  # noqa: E402
+from lib import files as files_mod  # noqa: E402
+from lib import registry as reg  # noqa: E402
+from lib.plans import bundles as bundle_parser  # noqa: E402
+from lib import staleness as stale_mod  # noqa: E402
+from lib import validators as val_mod  # noqa: E402
+from lib.manifest import load_manifest  # noqa: E402
+from lib.sweep import sweep  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parent
+
+
+class Ctx:
+    """Resolved project context for one invocation."""
+
+    def __init__(self, args):
+        self.db_path = None
+        self.layout = None
+        self.project_meta = None
+        if args.db:
+            self.db_path = Path(args.db)
+            parent = self.db_path.parent
+            self.layout = (parent / "entries",
+                           parent / "archive")
+            self.project_meta = {"slug": parent.parent.name,
+                                 "name": parent.parent.name}
+            return
+        manifest = None
+        if args.root:
+            manifest = load_manifest(
+                Path(args.root) / "workbench.yaml")
+        if manifest is None and not args.project:
+            here = Path.cwd()
+            for candidate in (here, *here.parents):
+                if (candidate / "workbench.yaml").is_file():
+                    manifest = load_manifest(
+                        candidate / "workbench.yaml")
+                    break
+        if manifest is None:
+            env_roots = os.environ.get("WB_VIEWER_SWEEP_ROOTS")
+            roots = [Path(r) for r in
+                     env_roots.split(os.pathsep) if r] \
+                if env_roots else [REPO_ROOT.parent]
+            result = sweep(roots)
+            if args.project:
+                project = result.by_slug(args.project)
+                if project is None:
+                    raise SystemExit(
+                        f"wb: project {args.project!r} not "
+                        f"found by the sweep of {roots}")
+                manifest = project.manifest
+            elif result.projects:
+                raise SystemExit(
+                    "wb: no project selected — use --project,"
+                    " --root, --db, or run inside a project")
+            else:
+                raise SystemExit(
+                    "wb: no projects found by the sweep")
+        self.manifest = manifest
+        self.project_meta = {"slug": manifest.slug,
+                             "name": manifest.name}
+        if manifest.registry is None:
+            raise SystemExit(
+                f"wb: project {manifest.slug} declares no "
+                f"registry — Mockups/Todos are absent for it")
+        self.db_path = manifest.registry
+        self.layout = (manifest.mockups, manifest.archive)
+
+    def regenerate(self):
+        if self.db_path and self.db_path.is_file():
+            export_mod.regenerate(
+                self.db_path, project=self.project_meta)
+
+
+class PlansCtx:
+    """Resolved project context for the bundle/file-todo
+    verbs (live-work-tracking spec §3.4). Unlike Ctx, a
+    registry is NOT required — bundles live in the plans
+    dir; the DB is only needed by todo import-db."""
+
+    def __init__(self, args, project_slug=None):
+        self.db_path = None
+        self.plans_dir = None
+        self.root = None
+        self.project_meta = None
+        if args.db:
+            self.db_path = Path(args.db)
+            self.root = self.db_path.parent.parent
+            manifest = None
+            candidate = self.root / "workbench.yaml"
+            if candidate.is_file():
+                manifest = load_manifest(candidate)
+            self.plans_dir = manifest.plans \
+                if manifest is not None and manifest.plans \
+                else self.root / ".plans"
+            self.project_meta = {"slug": self.root.name,
+                                 "name": self.root.name}
+            return
+        manifest = None
+        if args.root:
+            manifest = load_manifest(
+                Path(args.root) / "workbench.yaml")
+        slug = project_slug or args.project
+        if manifest is None and not slug:
+            here = Path.cwd()
+            for candidate in (here, *here.parents):
+                if (candidate / "workbench.yaml").is_file():
+                    manifest = load_manifest(
+                        candidate / "workbench.yaml")
+                    break
+        if manifest is None:
+            env_roots = os.environ.get("WB_VIEWER_SWEEP_ROOTS")
+            roots = [Path(r) for r in
+                     env_roots.split(os.pathsep) if r] \
+                if env_roots else [REPO_ROOT.parent]
+            result = sweep(roots)
+            if slug:
+                project = result.by_slug(slug)
+                if project is None:
+                    raise SystemExit(
+                        f"wb: project {slug!r} not found "
+                        f"by the sweep of {roots}")
+                manifest = project.manifest
+            else:
+                raise SystemExit(
+                    "wb: no project selected — use --project,"
+                    " --root, --db, or run inside a project")
+        self.manifest = manifest
+        self.root = manifest.root
+        self.plans_dir = manifest.plans \
+            or manifest.root / ".plans"
+        self.db_path = manifest.registry
+        self.project_meta = {"slug": manifest.slug,
+                             "name": manifest.name}
+
+
+def _print(obj):
+    if isinstance(obj, (dict, list)):
+        print(json.dumps(obj, indent=2, sort_keys=True,
+                         ensure_ascii=False))
+    else:
+        print(obj)
+
+
+def _latest_reviews(ctx):
+    entries = reg.list_entries(ctx.db_path, archived=None)
+    return {e["id"]: reg.latest_review(ctx.db_path, e["id"])
+            for e in entries}
+
+
+# ----------------------------------------------------------------
+# Verbs
+# ----------------------------------------------------------------
+
+def cmd_projects(args):
+    roots = [Path(r) for r in args.root] \
+        if args.root else [REPO_ROOT.parent]
+    result = sweep(roots)
+    _print(result.summary())
+    return 0
+
+
+def cmd_init(args):
+    ctx = Ctx(args)
+    reg.init_registry(ctx.db_path)
+    ctx.regenerate()
+    print(f"wb: registry ready at {ctx.db_path}")
+    return 0
+
+
+def cmd_add(args):
+    ctx = Ctx(args)
+    schema = None
+    if args.state_schema:
+        schema = json.loads(Path(args.state_schema)
+                            .read_text())
+    entry = reg.add_entry(
+        ctx.db_path, ctx.layout, args.slug, title=args.title,
+        kind=args.kind, actor="cli", status=args.status,
+        ruling=args.ruling, source_kind=args.source_kind,
+        source_ref=args.source_ref, main_file=args.main_file,
+        state_schema=schema)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_list(args):
+    ctx = Ctx(args)
+    archived = None
+    if args.archived:
+        archived = True
+    elif not args.all:
+        archived = False
+    entries = reg.list_entries(ctx.db_path, archived=archived)
+    thresholds = stale_mod.load_thresholds(ctx.db_path)
+    latest = _latest_reviews(ctx)
+    rows = []
+    for e in entries:
+        derived = stale_mod.entry_staleness(
+            e, thresholds=thresholds)
+        row = {"id": e["id"], "title": e["title"],
+               "kind": e["kind"], "status": e["status"],
+               "archived": e["archived"],
+               "stale": derived["stale"],
+               "stale_reasons": derived["reasons"]}
+        if args.stale and not derived["stale"]:
+            continue
+        if args.status and e["status"] != args.status:
+            continue
+        rows.append(row)
+    for r in rows:
+        badge = " [STALE: " + "; ".join(r["stale_reasons"]) + "]" \
+            if r["stale"] else ""
+        arch = " (archived)" if r["archived"] else ""
+        print(f"{r['id']:<28} {r['status']:<12} "
+              f"{r['kind']:<18} {r['title']}{arch}{badge}")
+    if not rows:
+        print("wb: no entries")
+    return 0
+
+
+def cmd_show(args):
+    ctx = Ctx(args)
+    entry = reg.get_entry(ctx.db_path, args.id)
+    entry["derived"] = stale_mod.entry_staleness(
+        entry, thresholds=stale_mod.load_thresholds(ctx.db_path))
+    entry["approval"] = stale_mod.approval_coverage(
+        entry, reg.latest_review(ctx.db_path, args.id))
+    entry["history"] = reg.history_for(ctx.db_path, args.id)
+    _print(entry)
+    return 0
+
+
+def cmd_set(args):
+    ctx = Ctx(args)
+    fields = {}
+    for pair in args.pairs:
+        if "=" not in pair:
+            raise SystemExit(f"wb set: expected field=value, "
+                             f"got {pair!r}")
+        key, _, value = pair.partition("=")
+        fields[key] = value
+    entry = reg.set_fields(ctx.db_path, args.id, fields,
+                           actor="cli",
+                           expect_version=args.expect_version)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_set_status(args):
+    ctx = Ctx(args)
+    entry = reg.set_status(
+        ctx.db_path, args.id, args.status, actor="cli",
+        ruling=args.ruling, gate=args.gate,
+        expect_version=args.expect_version, layout=ctx.layout)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_supersede(args):
+    ctx = Ctx(args)
+    entry = reg.supersede(ctx.db_path, args.old, args.new,
+                          actor="cli", ruling=args.ruling)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_verify(args):
+    ctx = Ctx(args)
+    entry = reg.verify_entry(ctx.db_path, args.id, actor="cli",
+                             accept_drift=args.accept_drift)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_archive(args):
+    ctx = Ctx(args)
+    entry = reg.archive_entry(ctx.db_path, ctx.layout, args.id,
+                              actor="cli", resume=args.resume)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_unarchive(args):
+    ctx = Ctx(args)
+    entry = reg.unarchive_entry(ctx.db_path, ctx.layout,
+                                args.id, actor="cli")
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_stale(args):
+    ctx = Ctx(args)
+    entries = reg.list_entries(ctx.db_path, archived=False)
+    report = stale_mod.project_report(
+        entries, _latest_reviews(ctx),
+        thresholds=stale_mod.load_thresholds(ctx.db_path))
+    _print(report)
+    summary = (f"stale-check: {report['summary']['stale']} of "
+               f"{report['summary']['total']} entries flagged")
+    reg.record_stale_check(ctx.db_path, summary)
+    ctx.regenerate()
+    print(summary)
+    return 0
+
+
+def cmd_validate(args):
+    ctx = Ctx(args)
+    findings = val_mod.validate_project(ctx.db_path, ctx.layout)
+    for f in findings:
+        print(f"[{f['validator']}] {f['entry']}: {f['message']}")
+    if findings:
+        print(f"wb validate: {len(findings)} finding(s)")
+        return 1
+    print("wb validate: clean")
+    return 0
+
+
+def cmd_export(args):
+    ctx = Ctx(args)
+    out = export_mod.regenerate(ctx.db_path,
+                                project=ctx.project_meta)
+    print(f"wb: export regenerated at {out}")
+    return 0
+
+
+def cmd_rebuild(args):
+    ctx = Ctx(args)
+    export_path = ctx.db_path.with_name("registry.json")
+    if args.from_file:
+        export_path = Path(args.from_file)
+    data = export_mod.rebuild(ctx.db_path, export_path)
+    print(f"wb: rebuilt {ctx.db_path} from {export_path} "
+          f"({len(data.get('entries', []))} entries)")
+    return 0
+
+
+def cmd_set_state_schema(args):
+    ctx = Ctx(args)
+    schema = json.loads(Path(args.file).read_text())
+    entry = reg.set_state_schema(ctx.db_path, args.id, schema,
+                                 actor="cli")
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_set_state(args):
+    ctx = Ctx(args)
+    state = json.loads(args.json)
+    entry = reg.set_state(ctx.db_path, args.id, state,
+                          actor="cli",
+                          expect_version=args.expect_version)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_review(args):
+    ctx = Ctx(args)
+    entry = reg.review_entry(ctx.db_path, args.id,
+                             args.disposition, actor="cli",
+                             comment=args.comment,
+                             layout=ctx.layout)
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_bundle_new(args):
+    ctx = PlansCtx(args)
+    result = bundle_mod.create_bundle(
+        ctx.plans_dir, args.slug, plan=args.plan,
+        feature=args.feature, today=args.date)
+    _print(result)
+    return 0
+
+
+def cmd_todo_new(args):
+    ctx = PlansCtx(args)
+    result = bundle_mod.create_todo(
+        ctx.plans_dir, args.bundle, args.title,
+        step=args.step, worktree=args.worktree,
+        plan=args.plan, feature=args.feature,
+        body=args.body or "", progress=args.progress,
+        no_progress=args.no_progress)
+    _print({k: result[k] for k in
+            ("id", "title", "status", "feature", "plan",
+             "plan_step", "worktree", "created", "updated",
+             "progress_check", "progress_armed",
+             "progress_entry", "bundle", "file")})
+    return 0
+
+
+def cmd_todo_file_set(args):
+    ctx = PlansCtx(args)
+    result = bundle_mod.set_todo_status(
+        ctx.plans_dir, args.id, args.status, note=args.note,
+        progress=args.progress,
+        no_progress=args.no_progress)
+    _print({k: result[k] for k in
+            ("id", "title", "status", "updated",
+             "progress_check", "progress_armed",
+             "progress_entry", "bundle", "file")})
+    return 0
+
+
+def cmd_todo_file_list(args):
+    ctx = PlansCtx(args)
+    todos = bundle_parser.list_todos(
+        ctx.plans_dir, bundle=args.bundle,
+        status=args.status)
+    invalid = 0
+    for t in todos:
+        feature = f" [{t['feature']}]" if t["feature"] else ""
+        bundle = f" ({t['bundle']})" if t.get("bundle") else ""
+        flag = ""
+        if not t["valid"]:
+            invalid += 1
+            flag = " [INVALID: " + "; ".join(t["errors"]) + "]"
+        print(f"{t['id'] or '(no id)':<32} "
+              f"{t['status'] or '?':<8} "
+              f"{t['title'] or '(no title)'}{feature}"
+              f"{bundle}{flag}")
+    if not todos:
+        print("wb: no file todos")
+    if invalid:
+        print(f"wb: {invalid} todo(s) with invalid "
+              f"front-matter (see flags above)",
+              file=sys.stderr)
+    return 0
+
+
+def cmd_todo_import_db(args):
+    ctx = PlansCtx(args,
+                   project_slug=args.import_project)
+    if ctx.db_path is None:
+        raise SystemExit(
+            "wb: project declares no registry — no DB "
+            "todos to import")
+    result = bundle_mod.import_db_todos(
+        ctx.plans_dir, ctx.db_path, bundle_slug=args.bundle,
+        today=args.date)
+    _print(result)
+    return 0
+
+
+def cmd_activate(args):
+    """Active-plan declaration (repo-home spec §17.2 step
+    1): set/clear/show `.plans/active.yaml` in the resolved
+    project's plans dir. Run inside a worktree, this is
+    THAT worktree's declaration — activeness is
+    per-worktree and the plans dir resolves from the cwd's
+    own workbench.yaml."""
+    ctx = PlansCtx(args)
+    if args.clear:
+        _print(active_mod.clear_active(ctx.plans_dir))
+        return 0
+    if args.bundle:
+        result = active_mod.set_active(
+            ctx.plans_dir, args.bundle, plan=args.plan,
+            since=args.since)
+        _print(result)
+        return 0
+    branch = None
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["git", "-C", str(ctx.root), "rev-parse",
+             "--abbrev-ref", "HEAD"], capture_output=True,
+            text=True, timeout=5)
+        name = out.stdout.strip()
+        branch = name if name and name != "HEAD" else None
+    except Exception:
+        branch = None
+    resolution = active_mod.resolve_active(
+        ctx.plans_dir, branch=branch)
+    resolution["branch"] = branch
+    resolution["plans_dir"] = str(ctx.plans_dir)
+    _print(resolution)
+    return 0
+
+
+def cmd_doctor(args):
+    """Read-only consistency checks over every swept
+    project (wb-doctor plan): broken todos, plans not
+    archived, conflicting status — all derived by
+    lib/doctor.py from the same functions the feeds use.
+    --post diffs against the previous run's state and
+    posts one digest through lib/messages when the
+    finding set changed. Paths resolve through the server
+    config seam, like every other caller."""
+    from server import config as cfgmod
+    cfg = cfgmod.load()
+    roots = [Path(r) for r in args.root] \
+        if args.root else cfgmod.sweep_roots(cfg)
+    result = sweep(roots)
+    findings = doctor_mod.run_checks(result.projects)
+    for f in findings:
+        print(f"[{f['project']}] {f['check']} — "
+              f"{f['subject']}: {f['detail']}")
+    if findings:
+        print(f"wb doctor: {len(findings)} finding(s) "
+              f"across {len(result.projects)} project(s)")
+    else:
+        print("wb doctor: clean")
+    if args.post:
+        own = load_manifest(REPO_ROOT / "workbench.yaml")
+        summary = doctor_mod.run_post(
+            result.projects, findings=findings,
+            state_path=cfgmod.state_dir(cfg)
+            / "doctor-findings.json",
+            messages_db=cfgmod.messages_db_path(cfg),
+            harness_slug=own.slug)
+        if summary["posted"]:
+            print(f"wb doctor: digest posted "
+                  f"(message {summary['message_id']}) — "
+                  f"{len(summary['new'])} new, "
+                  f"{len(summary['resolved'])} resolved")
+        else:
+            print("wb doctor: finding set unchanged — "
+                  "no digest posted")
+    return 1 if findings else 0
+
+
+def cmd_progress(args):
+    """The progress driver's single read: every swept
+    project's armed todos with their derived stall
+    verdicts (lib/progress.py), as JSON. Read-only —
+    acting on a verdict (checkpointing through
+    `wb todo set --note`, nudging, surfacing) is the
+    driver's business. The schedules themselves are the
+    harness's own mechanism now: arming a todo writes
+    its scheduler-registry entry in the same call
+    (lib/progress_schedule.py), and `--sync-entries`
+    reconciles the whole registry against the swept
+    armed set. Sweep roots resolve through the server
+    config seam, like the doctor's."""
+    from server import config as cfgmod
+    cfg = cfgmod.load()
+    roots = [Path(r) for r in args.root] \
+        if args.root else cfgmod.sweep_roots(cfg)
+    result = sweep(roots)
+    if args.sync_entries:
+        _print({"sync": progress_schedule_mod.sync_all(
+            result.projects)})
+        return 0
+    projects = []
+    for project in result.projects:
+        plans_dir = project.manifest.plans
+        if plans_dir is None:
+            continue
+        report = progress_mod.project_progress(plans_dir)
+        projects.append({"slug": project.slug, **report})
+    _print({"projects": projects})
+    return 0
+
+
+def cmd_progress_check(args):
+    """One armed todo's stall verdict, for the scheduler
+    entry the harness wrote when the todo armed: exit 0
+    on track / disarmed / gone, exit 3 with a STALLED
+    line when the derivation says it stalled — the
+    entry's failure report carries the line as a ping."""
+    ctx = PlansCtx(args)
+    code, line = progress_schedule_mod.check_todo(
+        ctx.plans_dir, args.id)
+    print(line)
+    return code
+
+
+def cmd_print_schedule(args):
+    print("# Staleness check for one project — run by hand or")
+    print("# hand this definition to the platform scheduler.")
+    print("# (Scheduling itself is a platform concern; the")
+    print("# harness builds the tool, not the schedule.)")
+    print()
+    print("[systemd timer]")
+    print("OnCalendar=daily")
+    print(f"ExecStart={REPO_ROOT}/.venv/bin/python "
+          f"{REPO_ROOT}/wb --project <slug> stale")
+    print()
+    print("[cron]")
+    print(f"17 6 * * * {REPO_ROOT}/.venv/bin/python "
+          f"{REPO_ROOT}/wb --project <slug> stale")
+    return 0
+
+
+def build_parser():
+    p = argparse.ArgumentParser(
+        prog="wb", description="Workbench harness CLI "
+        "(thin caller over lib/ — one mutation path).")
+    p.add_argument("--project", help="project slug (sweep)")
+    p.add_argument("--root", help="project root with "
+                                  "workbench.yaml")
+    p.add_argument("--db", help="registry DB path (direct)")
+    sub = p.add_subparsers(dest="verb", required=True)
+
+    sp = sub.add_parser("projects")
+    sp.add_argument("--root", action="append",
+                    help="sweep root (repeatable)")
+    sp.set_defaults(fn=cmd_projects)
+
+    sub.add_parser("init").set_defaults(fn=cmd_init)
+
+    sp = sub.add_parser("add")
+    sp.add_argument("slug")
+    sp.add_argument("--title")
+    sp.add_argument("--kind", default="mockup")
+    sp.add_argument("--status", default="unexplored")
+    sp.add_argument("--ruling")
+    sp.add_argument("--source-kind", default="entry-dir")
+    sp.add_argument("--source-ref")
+    sp.add_argument("--main-file", default="mock.html")
+    sp.add_argument("--state-schema",
+                    help="path to a JSON state-schema file")
+    sp.set_defaults(fn=cmd_add)
+
+    sp = sub.add_parser("list")
+    sp.add_argument("--status")
+    sp.add_argument("--stale", action="store_true")
+    sp.add_argument("--archived", action="store_true")
+    sp.add_argument("--all", action="store_true")
+    sp.set_defaults(fn=cmd_list)
+
+    sp = sub.add_parser("show")
+    sp.add_argument("id")
+    sp.set_defaults(fn=cmd_show)
+
+    sp = sub.add_parser("set")
+    sp.add_argument("id")
+    sp.add_argument("pairs", nargs="+")
+    sp.add_argument("--expect-version", type=int)
+    sp.set_defaults(fn=cmd_set)
+
+    sp = sub.add_parser("set-status")
+    sp.add_argument("id")
+    sp.add_argument("status")
+    sp.add_argument("--ruling")
+    sp.add_argument("--gate")
+    sp.add_argument("--expect-version", type=int)
+    sp.set_defaults(fn=cmd_set_status)
+
+    sp = sub.add_parser("supersede")
+    sp.add_argument("old")
+    sp.add_argument("new")
+    sp.add_argument("--ruling")
+    sp.set_defaults(fn=cmd_supersede)
+
+    sp = sub.add_parser("verify")
+    sp.add_argument("id")
+    sp.add_argument("--accept-drift", action="store_true")
+    sp.set_defaults(fn=cmd_verify)
+
+    sp = sub.add_parser("archive")
+    sp.add_argument("id")
+    sp.add_argument("--resume", action="store_true")
+    sp.set_defaults(fn=cmd_archive)
+
+    sp = sub.add_parser("unarchive")
+    sp.add_argument("id")
+    sp.set_defaults(fn=cmd_unarchive)
+
+    sub.add_parser("stale").set_defaults(fn=cmd_stale)
+    sub.add_parser("validate").set_defaults(fn=cmd_validate)
+    sub.add_parser("export").set_defaults(fn=cmd_export)
+
+    sp = sub.add_parser("rebuild")
+    sp.add_argument("--from-file")
+    sp.set_defaults(fn=cmd_rebuild)
+
+    sp = sub.add_parser("set-state-schema")
+    sp.add_argument("id")
+    sp.add_argument("file")
+    sp.set_defaults(fn=cmd_set_state_schema)
+
+    sp = sub.add_parser("set-state")
+    sp.add_argument("id")
+    sp.add_argument("json")
+    sp.add_argument("--expect-version", type=int)
+    sp.set_defaults(fn=cmd_set_state)
+
+    sp = sub.add_parser("review")
+    sp.add_argument("id")
+    sp.add_argument("disposition",
+                    choices=list(reg.REVIEW_DISPOSITIONS))
+    sp.add_argument("--comment")
+    sp.set_defaults(fn=cmd_review)
+
+    sp = sub.add_parser(
+        "bundle", help="plan bundles (spec §3.4)")
+    bsub = sp.add_subparsers(dest="bundle_verb",
+                             required=True)
+    nb = bsub.add_parser("new")
+    nb.add_argument("slug")
+    nb.add_argument("--plan", action="store_true",
+                    help="also write a plan.md skeleton")
+    nb.add_argument("--feature")
+    nb.add_argument("--date",
+                    help="bundle date prefix (default: today)")
+    nb.set_defaults(fn=cmd_bundle_new)
+
+    sp = sub.add_parser(
+        "todo", help="file todos in bundles (spec §3.4)")
+    tsub = sp.add_subparsers(dest="todo_verb", required=True)
+    nt = tsub.add_parser("new")
+    nt.add_argument("bundle")
+    nt.add_argument("title")
+    nt.add_argument("--step", type=int)
+    nt.add_argument("--worktree")
+    nt.add_argument("--plan")
+    nt.add_argument("--feature")
+    nt.add_argument("--body")
+    nt.add_argument("--progress",
+                    help="arm a progress schedule with "
+                         "this cadence (e.g. 30m)")
+    nt.add_argument("--no-progress",
+                    action="store_true",
+                    help="record the explicit opt-out: "
+                         "this todo is never monitored")
+    nt.set_defaults(fn=cmd_todo_new)
+
+    st = tsub.add_parser("set")
+    st.add_argument("id")
+    st.add_argument("status",
+                    choices=list(bundle_mod.TODO_STATUSES))
+    st.add_argument("--note",
+                    help="appended to the todo body "
+                         "(blocker reason / deploy record)")
+    st.add_argument("--progress",
+                    help="arm or re-arm the progress "
+                         "schedule with this cadence "
+                         "(e.g. 30m), overriding the "
+                         "automatic 15m arm on a move to "
+                         "doing; a move to done or "
+                         "blocked disarms it")
+    st.add_argument("--no-progress",
+                    action="store_true",
+                    help="record the explicit opt-out "
+                         "instead: progress_check off, "
+                         "no schedule, never monitored")
+    st.set_defaults(fn=cmd_todo_file_set)
+
+    lt = tsub.add_parser("list")
+    lt.add_argument("--bundle")
+    lt.add_argument("--status",
+                    choices=list(bundle_mod.TODO_STATUSES))
+    lt.set_defaults(fn=cmd_todo_file_list)
+
+    it = tsub.add_parser(
+        "import-db",
+        help="import registry-DB todos into a starter "
+             "bundle of file todos (spec §3.7)")
+    it.add_argument("import_project", nargs="?",
+                    help="project slug (sweep); default: "
+                         "the selected project")
+    it.add_argument("--bundle", default="project-zero-starter",
+                    help="starter bundle slug")
+    it.add_argument("--date",
+                    help="bundle date prefix (default: today)")
+    it.set_defaults(fn=cmd_todo_import_db)
+
+    sp = sub.add_parser(
+        "activate",
+        help="active-plan declaration for this worktree "
+             "(repo-home spec §17): set, clear, or show")
+    sp.add_argument("bundle", nargs="?",
+                    help="bundle id or slug to declare "
+                         "active (omit to show the current "
+                         "resolution)")
+    sp.add_argument("--plan",
+                    help="plan path within the bundle "
+                         "(default: the bundle's plan)")
+    sp.add_argument("--since",
+                    help="declaration date (default: today)")
+    sp.add_argument("--clear", action="store_true",
+                    help="remove the declaration")
+    sp.set_defaults(fn=cmd_activate)
+
+    sp = sub.add_parser(
+        "doctor",
+        help="read-only consistency checks over every "
+             "swept project")
+    sp.add_argument("--post", action="store_true",
+                    help="diff against the previous run "
+                         "and post a digest message when "
+                         "the finding set changed")
+    sp.add_argument("--root", action="append",
+                    help="sweep root (repeatable); "
+                         "default: the server config's "
+                         "sweep roots")
+    sp.set_defaults(fn=cmd_doctor)
+
+    sp = sub.add_parser(
+        "progress",
+        help="armed progress schedules with derived "
+             "stall verdicts, as JSON (the progress "
+             "driver's read)")
+    sp.add_argument("--root", action="append",
+                    help="sweep root (repeatable); "
+                         "default: the server config's "
+                         "sweep roots")
+    sp.add_argument("--sync-entries",
+                    action="store_true",
+                    help="reconcile the scheduler "
+                         "registry against the swept "
+                         "armed set (write missing "
+                         "entries, delete orphans) "
+                         "instead of reporting")
+    sp.set_defaults(fn=cmd_progress)
+
+    sp = sub.add_parser(
+        "progress-check",
+        help="one armed todo's stall verdict: exit 0 on "
+             "track, exit 3 with a STALLED line when "
+             "stalled (run by the todo's scheduler "
+             "entry)")
+    sp.add_argument("id", help="the todo id")
+    sp.set_defaults(fn=cmd_progress_check)
+
+    sub.add_parser("print-schedule").set_defaults(
+        fn=cmd_print_schedule)
+    return p
+
+
+def main(argv=None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        return args.fn(args)
+    except reg.RegistryError as e:
+        print(f"wb: refused: {e}", file=sys.stderr)
+        return 2
+    except bundle_mod.BundleError as e:
+        print(f"wb: refused: {e}", file=sys.stderr)
+        return 2
+    except active_mod.ActiveError as e:
+        print(f"wb: refused: {e}", file=sys.stderr)
+        return 2
+    except files_mod.FileError_ as e:
+        print(f"wb: refused: {e}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
