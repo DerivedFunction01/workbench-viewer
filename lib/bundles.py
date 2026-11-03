@@ -19,6 +19,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import progress_schedule as progress_schedule_mod
 from . import registry as reg
 from .plans import bundles as bundle_parser
 from .plans.parser import parse_plan
@@ -197,10 +198,17 @@ _FRONT_MATTER_ORDER = ("id", "title", "status", "feature",
                        "progress_check", "progress_armed")
 
 
-def _check_progress(progress, status):
+def _check_progress(progress, status, *,
+                    no_progress=False):
     """Validate an arming request: a cadence the parser
-    accepts, and never armed onto a status whose move
-    would disarm it in the same write."""
+    accepts, never armed onto a status whose move would
+    disarm it in the same write, and never combined
+    with the opt-out — a move declares a cadence, the
+    opt-out, or neither (the automatic default)."""
+    if no_progress and progress is not None:
+        raise BundleError(
+            "conflicting progress options: pass a "
+            "cadence or the opt-out, not both")
     if progress is None:
         return
     if bundle_parser.parse_cadence(progress) is None:
@@ -247,6 +255,7 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
                 created: str = None,
                 updated: str = None,
                 progress: str = None,
+                no_progress: bool = False,
                 armed_at: str = None) -> dict:
     """Write one todo file into a bundle's todos/ dir,
     with complete §3.2 front-matter. The id is assigned
@@ -254,9 +263,12 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
     the WHOLE repo's bundles). Refuses a duplicate title
     in the bundle. Defaults: plan → the bundle's plan.md
     when it has one; feature → the bundle plan's Feature
-    header when it declares one. `progress` arms a
-    progress schedule at creation (a cadence like `30m`;
-    `progress_armed` is stamped from `armed_at` or now).
+    header when it declares one. Progress schedules:
+    `progress` arms at creation with that cadence;
+    `no_progress` records the explicit opt-out; and a
+    todo created straight into `doing` with neither is
+    armed at the default cadence — monitored by
+    default, like the doing move in set_todo_status.
     """
     if not title or not title.strip() \
             or "\n" in title:
@@ -266,7 +278,21 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
     if status not in TODO_STATUSES:
         raise BundleError(
             f"todo status must be one of {TODO_STATUSES}")
-    _check_progress(progress, status)
+    _check_progress(progress, status,
+                    no_progress=no_progress)
+    if no_progress:
+        progress_value = bundle_parser.PROGRESS_OPT_OUT
+        armed_value = None
+    elif progress is not None:
+        progress_value = progress
+        armed_value = armed_at or now_iso()
+    elif status == "doing":
+        progress_value = \
+            bundle_parser.PROGRESS_DEFAULT_CADENCE
+        armed_value = armed_at or now_iso()
+    else:
+        progress_value = None
+        armed_value = None
     if step is not None and (not isinstance(step, int)
                              or step < 1):
         raise BundleError(
@@ -304,9 +330,8 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
         "worktree": worktree,
         "created": created or today,
         "updated": updated or created or today,
-        "progress_check": progress,
-        "progress_armed": (armed_at or now_iso())
-        if progress is not None else None,
+        "progress_check": progress_value,
+        "progress_armed": armed_value,
     }
     todos_dir = bundle_dir / "todos"
     todos_dir.mkdir(exist_ok=True)
@@ -321,6 +346,11 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
         todo_path.read_text(encoding="utf-8"), path=rel)
     result["bundle"] = bundle_dir.name
     result["file"] = str(todo_path)
+    # The armed todo's scheduler entry is derived state,
+    # synced in the same call (lib/progress_schedule.py);
+    # its outcome never fails this write.
+    result["progress_entry"] = \
+        progress_schedule_mod.sync_todo(plans_dir, result)
     return result
 
 
@@ -349,6 +379,7 @@ def set_todo_status(plans_dir, todo_id, status, *,
                     note: str = None,
                     today: str = None,
                     progress: str = None,
+                    no_progress: bool = False,
                     armed_at: str = None) -> dict:
     """Move one todo's status (todo|doing|blocked|done
     only — anything else refused), stamping `updated:`.
@@ -357,17 +388,25 @@ def set_todo_status(plans_dir, todo_id, status, *,
     is surgical: front-matter lines keep their order and
     unknown fields, the body is preserved verbatim.
 
-    Progress schedules: `progress` (a cadence) arms or
-    re-arms the todo's schedule in the same write,
-    stamping `progress_armed:` from `armed_at` or now;
-    a move to a stop status (done/blocked) clears both
-    progress fields in the same write. Arming onto a
-    stop status is refused."""
+    Progress schedules: arming is AUTOMATIC on a move
+    to `doing` — a todo that declares neither a cadence
+    nor the opt-out is armed at the default cadence in
+    the same write, so work never runs unmonitored for
+    want of a flag. `progress` (a cadence) overrides:
+    it arms or re-arms at that cadence, stamping
+    `progress_armed:` from `armed_at` or now. An
+    existing cadence or opt-out rides through a doing
+    move untouched; `no_progress` writes the opt-out
+    (progress_check: off, no armed stamp), disarming a
+    live schedule. A move to a stop status
+    (done/blocked) clears both progress fields in the
+    same write. Arming onto a stop status is refused."""
     if status not in TODO_STATUSES:
         raise BundleError(
             f"todo status must be one of {TODO_STATUSES}, "
             f"got {status!r}")
-    _check_progress(progress, status)
+    _check_progress(progress, status,
+                    no_progress=no_progress)
     plans_dir = Path(plans_dir)
     found = _find_todo_file(plans_dir, todo_id)
     if found is None:
@@ -383,6 +422,27 @@ def set_todo_status(plans_dir, todo_id, status, *,
     today = today or _today()
     disarm = status in PROGRESS_STOP_STATUSES
     armed_stamp = armed_at or now_iso()
+    # Resolve this move's progress write: arm_value is a
+    # cadence to stamp, opt_out writes the off marker,
+    # and neither means the existing fields ride through.
+    current_check = fields.get("progress_check") or None
+    arm_value = None
+    opt_out = False
+    if not disarm:
+        if no_progress:
+            opt_out = True
+        elif progress is not None:
+            arm_value = progress
+        elif status == "doing" \
+                and current_check \
+                != bundle_parser.PROGRESS_OPT_OUT \
+                and bundle_parser.parse_cadence(
+                    current_check) is None:
+            # No cadence declared (or an unreadable one):
+            # the automatic arm. An existing cadence or
+            # the opt-out is a declaration and rides.
+            arm_value = \
+                bundle_parser.PROGRESS_DEFAULT_CADENCE
     new_lines = []
     seen = set()
     for line in fm_lines:
@@ -397,8 +457,15 @@ def set_todo_status(plans_dir, todo_id, status, *,
         elif key in ("progress_check", "progress_armed"):
             if disarm:
                 continue
-            if progress is not None:
-                value = progress \
+            if opt_out:
+                if key == "progress_check":
+                    new_lines.append(
+                        f"progress_check: "
+                        f"{bundle_parser.PROGRESS_OPT_OUT}")
+                    seen.add(key)
+                continue
+            if arm_value is not None:
+                value = arm_value \
                     if key == "progress_check" \
                     else armed_stamp
                 new_lines.append(f"{key}: {value}")
@@ -411,9 +478,14 @@ def set_todo_status(plans_dir, todo_id, status, *,
         new_lines.append(f"status: {status}")
     if "updated" not in seen:
         new_lines.append(f"updated: {today}")
-    if progress is not None:
+    if opt_out and "progress_check" not in seen:
+        new_lines.append(
+            f"progress_check: "
+            f"{bundle_parser.PROGRESS_OPT_OUT}")
+    if arm_value is not None:
         if "progress_check" not in seen:
-            new_lines.append(f"progress_check: {progress}")
+            new_lines.append(
+                f"progress_check: {arm_value}")
         if "progress_armed" not in seen:
             new_lines.append(
                 f"progress_armed: {armed_stamp}")
@@ -431,6 +503,11 @@ def set_todo_status(plans_dir, todo_id, status, *,
     result["bundle"] = bundle_dir.name
     result["archived"] = archived
     result["file"] = str(todo_path)
+    # The armed todo's scheduler entry is derived state,
+    # synced in the same call (lib/progress_schedule.py);
+    # its outcome never fails this write.
+    result["progress_entry"] = \
+        progress_schedule_mod.sync_todo(plans_dir, result)
     return result
 
 

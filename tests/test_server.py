@@ -255,19 +255,26 @@ class TestFeeds(ServerCase):
         self.assertEqual(titles.count("Do the thing"), 2)
         self.assertTrue(all(t["bundle"] == "2026-10-25-fixture-work"
                             for t in feed["todos"]))
-        status, board = self.req("GET", "/api/board")
-        self.assertEqual(status, 200)
-        todo_titles = [t["title"]
-                       for t in board["todos"]["todo"]]
+        # The board is assembled from per-project portions
+        # (the /api/board monolith is dropped): the lanes
+        # across both portions carry the same cards.
+        portions = []
+        for slug in ("alpha", "beta"):
+            status, portion = self.req(
+                "GET", f"/api/projects/{slug}/board")
+            self.assertEqual(status, 200)
+            portions.append(portion)
+        todo_titles = [t["title"] for p in portions
+                       for t in p["todos"]["todo"]]
         self.assertEqual(todo_titles.count("Do the thing"), 2)
-        blocked = [t["title"]
-                   for t in board["todos"]["blocked"]]
+        blocked = [t["title"] for p in portions
+                   for t in p["todos"]["blocked"]]
         self.assertEqual(blocked.count("Blocked thing"), 2)
-        plan_projects = {p["project"]
-                         for p in board["plans"]["todo"]}
+        plan_projects = {pl["project"] for p in portions
+                         for pl in p["plans"]["todo"]}
         self.assertEqual(plan_projects, {"alpha", "beta"})
-        queue_projects = {q["project"]
-                          for q in board["review_queue"]}
+        queue_projects = {q["project"] for p in portions
+                          for q in p["review_queue"]}
         self.assertEqual(queue_projects, {"alpha", "beta"})
 
 
@@ -316,7 +323,8 @@ class TestArtifactsFeed(ServerCase):
         self.assertEqual(feed["triage"][0]["kind"], "mockup")
 
     def test_board_review_queue_unions_both_collections(self):
-        status, board = self.req("GET", "/api/board")
+        status, board = self.req(
+            "GET", "/api/projects/alpha/board")
         self.assertEqual(status, 200)
         mine = [i for i in board["review_queue"]
                 if i["project"] == "alpha"]
@@ -333,7 +341,8 @@ class TestArtifactsFeed(ServerCase):
                   self.alpha / "workbench" / "archive")
         reg.set_status(db, "sheet-q", "canonical",
                        ruling="answered", layout=layout)
-        status, board = self.req("GET", "/api/board")
+        status, board = self.req(
+            "GET", "/api/projects/alpha/board")
         self.assertEqual(status, 200)
         self.assertNotIn("sheet-q", [i["id"] for i in
                                      board["review_queue"]])

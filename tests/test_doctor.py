@@ -258,6 +258,26 @@ class TestPlanTodoChecks(unittest.TestCase):
                   "2026-10-26T09:00:00+00:00\n")
         self.assertEqual(self.checks(), [])
 
+    def test_progress_opt_out_doing_todo_is_clean(self):
+        # The explicit opt-out is a declaration, not a
+        # missing schedule: no unarmed finding.
+        bundle = self.plans / "2026-01-04-work"
+        self._progress_todo(
+            bundle, "a.md", status="doing",
+            extra="plan_step: 1\n"
+                  "progress_check: off\n")
+        self.assertEqual(self.checks(), [])
+
+    def test_progress_opt_out_archived_is_not_orphan(self):
+        # An opted-out todo archived by a plain bundle
+        # move carries its off marker with it; the
+        # orphan check governs cadences only.
+        bundle = self.plans / "finished" / "2026-01-04-old"
+        self._progress_todo(
+            bundle, "a.md", status="doing",
+            extra="progress_check: off\n")
+        self.assertEqual(self.checks(), [])
+
     def test_progress_orphan_done_but_armed(self):
         bundle = self.plans / "2026-01-04-work"
         self._progress_todo(

@@ -1,5 +1,7 @@
 // Board — a view over exactly three sources (SPEC §8.4,
-// live-work spec §3.5): the registry review queue (FIRST
+// live-work spec §3.5), fetched as one portion per project
+// (heavy-feed batching: card projections, done lanes
+// paginated) and assembled client-side: the registry review queue (FIRST
 // lane, read-only), bundle todo files (lanes by todo
 // status: todo / doing / blocked / done), and plan cards
 // derived from plan headers (read-only). ONLY todo cards
@@ -9,12 +11,18 @@
 // source. Deleting this section would lose no data: every
 // card's source record lives in its own store.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "../components/Button";
 import { Lane } from "../components/Lane";
 import { api } from "../lib/api";
-import type { BoardPayload, BoardPlan, ReviewItem, TodoItem } from "../lib/api-types";
+import type {
+  BoardPlan,
+  BoardProjectPayload,
+  ProjectsPayload,
+  ReviewItem,
+  TodoItem,
+} from "../lib/api-types";
 import { kindLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
@@ -125,10 +133,102 @@ export function BoardSection({
   const [dragOver, setDragOver] = useState<TodoLane | null>(null);
   const isPhone = useIsPhone();
   const queryClient = useQueryClient();
-  const query = useQuery({
-    queryKey: ["board"],
-    queryFn: () => api.getBoard({}),
+
+  // Portions (heavy-feed batching): the board assembles
+  // client-side from ONE call per project instead of the
+  // /api/board monolith. The project list rides the
+  // shell's shared ["projects"] query; each portion is its
+  // own query, so portions render as they land and one
+  // project's failure never parks the others. A project
+  // scope fetches only its own portion.
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => api.listProjects({}),
   });
+  const projectsPayload = projectsQuery.data?.payload as ProjectsPayload | undefined;
+  const allProjects = projectsPayload?.projects ?? [];
+  const targets = slug ? allProjects.filter((p) => p.slug === slug) : allProjects;
+
+  const portionQueries = useQueries({
+    queries: targets.map((p) => ({
+      queryKey: ["board", p.slug],
+      queryFn: () => api.getBoardProject({ slug: p.slug }),
+    })),
+  });
+  const portions: BoardProjectPayload[] = [];
+  const failedNames: string[] = [];
+  let pendingCount = 0;
+  targets.forEach((p, i) => {
+    const q = portionQueries[i];
+    if (!q) return;
+    if (q.isPending) {
+      pendingCount += 1;
+      return;
+    }
+    const payload = q.data?.payload as BoardProjectPayload | undefined;
+    if (q.isError || !payload) failedNames.push(p.name);
+    else portions.push(payload);
+  });
+
+  // Done-lane pagination: page 0 rides each portion; the
+  // expanded lane's "show more" fetches the next page per
+  // project (offset = pages * the portion page size) and
+  // accumulates the slices here. Any board mutation
+  // resets the accumulation alongside the invalidation.
+  const [doneExtra, setDoneExtra] = useState<
+    Record<string, { todos: TodoItem[]; plans: BoardPlan[] }>
+  >({});
+  const [donePages, setDonePages] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // A scope switch restarts pagination (the React-docs
+  // pattern for adjusting state when a prop changes:
+  // set during render, guarded by the previous value).
+  const [prevSlug, setPrevSlug] = useState(slug);
+  if (prevSlug !== slug) {
+    setPrevSlug(slug);
+    setDoneExtra({});
+    setDonePages(0);
+    setDoneExpanded(false);
+  }
+  const pageSize = portions[0]?.done_page.limit ?? 50;
+  const loadedDone = (kind: "todos" | "plans") =>
+    portions.reduce(
+      (sum, p) => sum + (p[kind].done ?? []).length + (doneExtra[p.slug]?.[kind].length ?? 0),
+      0,
+    );
+  const totalDone = (kind: "todos" | "plans") =>
+    portions.reduce((sum, p) => sum + (p.counts[kind].done ?? 0), 0);
+  const hasMoreDone =
+    loadedDone("todos") < totalDone("todos") || loadedDone("plans") < totalDone("plans");
+  const doneRemaining =
+    totalDone("todos") - loadedDone("todos") + (totalDone("plans") - loadedDone("plans"));
+  const loadMoreDone = async () => {
+    setLoadingMore(true);
+    try {
+      const offset = (donePages + 1) * pageSize;
+      const results = await Promise.all(
+        portions.map((p) =>
+          api.getBoardProject({ slug: p.slug, doneOffset: offset, doneLimit: pageSize }),
+        ),
+      );
+      setDoneExtra((prev) => {
+        const next = { ...prev };
+        portions.forEach((p, i) => {
+          const payload = results[i]?.payload as BoardProjectPayload | undefined;
+          if (!payload) return;
+          const cur = next[p.slug] ?? { todos: [], plans: [] };
+          next[p.slug] = {
+            todos: [...cur.todos, ...(payload.todos.done ?? [])],
+            plans: [...cur.plans, ...(payload.plans.done ?? [])],
+          };
+        });
+        return next;
+      });
+      setDonePages((n) => n + 1);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: (args: { project: string; id: string; status: string }) =>
@@ -137,31 +237,39 @@ export function BoardSection({
         body: { verb: "set-status", id: args.id, status: args.status },
       }),
     onSuccess: () => {
+      setDoneExtra({});
+      setDonePages(0);
       void queryClient.invalidateQueries({ queryKey: ["board"] });
       void queryClient.invalidateQueries({ queryKey: ["todos"] });
       void queryClient.invalidateQueries({ queryKey: ["plans"] });
     },
   });
 
-  if (query.isPending) return <SkeletonWell label="the board" />;
-  if (query.isError) {
+  if (projectsQuery.isPending) return <SkeletonWell label="the board" />;
+  if (targets.length > 0 && portions.length === 0 && failedNames.length === 0) {
+    return <SkeletonWell label="the board" />;
+  }
+  if (targets.length > 0 && portions.length === 0) {
     return <ErrorWell section="Board" message="the board feed could not be loaded." />;
   }
-  const { payload, error } = query.data;
-  if (!payload) {
-    return <ErrorWell section="Board" message={error ?? "the companion server did not answer."} />;
-  }
-  const board = payload as unknown as BoardPayload;
-  const inScope = (project: string | undefined) => slug == null || project === slug;
-  const review = board.review_queue.filter((item) => inScope(item.project));
-  const todosIn = (lane: TodoLane) =>
-    (board.todos[lane] ?? []).filter((todo) => inScope(todo.project));
-  const plansIn = (bucket: string) =>
-    (board.plans[bucket] ?? []).filter((plan) => inScope(plan.project));
-  const total =
-    review.length +
-    TODO_LANES.reduce((sum, lane) => sum + todosIn(lane).length, 0) +
-    (["todo", "doing", "done"] as const).reduce((sum, b) => sum + plansIn(b).length, 0);
+  const review = portions.flatMap((p) => p.review_queue);
+  const todosIn = (lane: TodoLane): TodoItem[] =>
+    portions.flatMap((p) => [
+      ...(p.todos[lane] ?? []),
+      ...(lane === "done" ? (doneExtra[p.slug]?.todos ?? []) : []),
+    ]);
+  const plansIn = (bucket: string): BoardPlan[] =>
+    portions.flatMap((p) => [
+      ...(p.plans[bucket] ?? []),
+      ...(bucket === "done" ? (doneExtra[p.slug]?.plans ?? []) : []),
+    ]);
+  const countOf = (lane: TodoLane) =>
+    portions.reduce((sum, p) => {
+      const plans = lane === "blocked" ? 0 : (p.counts.plans[lane] ?? 0);
+      return sum + (p.counts.todos[lane] ?? 0) + plans;
+    }, 0);
+  const reviewTotal = portions.reduce((sum, p) => sum + p.counts.review_queue, 0);
+  const total = reviewTotal + TODO_LANES.reduce((sum, lane) => sum + countOf(lane), 0);
   const scopeName = projectName ?? "all projects";
 
   const dropOn = (lane: TodoLane) => (e: React.DragEvent) => {
@@ -271,7 +379,17 @@ export function BoardSection({
           current state.
         </p>
       ) : null}
-      {total === 0 ? (
+      {pendingCount > 0 ? (
+        <p style={{ color: "var(--wb-content-muted)" }}>
+          Loading {pendingCount} project{pendingCount === 1 ? "" : "s"}…
+        </p>
+      ) : null}
+      {failedNames.length > 0 ? (
+        <p role="alert" style={{ color: "var(--wb-danger)" }}>
+          Could not load {failedNames.join(", ")} — the rest of the board is shown.
+        </p>
+      ) : null}
+      {total === 0 && pendingCount === 0 ? (
         <EmptyWell>Nothing in progress for {scopeName} — the board is empty.</EmptyWell>
       ) : (
         <div
@@ -286,7 +404,7 @@ export function BoardSection({
           }}
         >
           <div style={laneWrapStyle}>
-            <Lane title="Review queue" count={review.length} accent>
+            <Lane title="Review queue" count={reviewTotal} accent>
               {review.length === 0 ? (
                 <p style={{ color: "var(--wb-content-muted)", margin: 0 }}>
                   Nothing awaiting review
@@ -299,7 +417,7 @@ export function BoardSection({
           {TODO_LANES.map((lane) => {
             const todos = todosIn(lane);
             const plans = lane === "blocked" ? [] : plansIn(lane);
-            const count = todos.length + plans.length;
+            const count = countOf(lane);
             const collapsed = lane === "done" && count > 12 && !doneExpanded;
             return (
               // biome-ignore lint/a11y/noStaticElementInteractions: HTML5 drag-and-drop target; the identical status move is keyboard-available in the Todos section's status select
@@ -326,6 +444,22 @@ export function BoardSection({
                     <>
                       {todos.map(todoCard)}
                       {plans.map(planCard)}
+                      {lane === "done" && hasMoreDone ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => void loadMoreDone()}
+                          disabled={loadingMore}
+                        >
+                          {loadingMore ? (
+                            "Loading…"
+                          ) : (
+                            <>
+                              Show more done cards — <span className="num">{doneRemaining}</span>{" "}
+                              remaining
+                            </>
+                          )}
+                        </Button>
+                      ) : null}
                       {count === 0 ? (
                         <p style={{ color: "var(--wb-content-muted)", margin: 0 }}>
                           {dragOver === lane ? "Drop to move here" : "No cards"}

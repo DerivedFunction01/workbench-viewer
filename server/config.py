@@ -94,6 +94,16 @@ DEFAULTS = {
     # derivation is a per-repo git fan-out, seconds even
     # warm). Writes invalidate the cache immediately.
     "repos_ttl_s": 30,
+    # Board portions (heavy-feed batching): one portion
+    # per project; the done lanes serve this many cards
+    # per page (the lane totals always ride along, more
+    # pages ride the same endpoint with done_offset).
+    "board_done_page": 50,
+    # Feed fan-out (threadpool plan): the subprocess-bound
+    # derivations (per-repo git summaries, per-project
+    # home rows) compute on a pool of this many workers;
+    # 1 would restore the sequential derivations.
+    "feed_pool_workers": 8,
     "edit_audit_log": "edit-log.jsonl",
     # Datasets (datasets plan, step 3): the caps are
     # enforced in lib/datasets + lib/dataset_console;

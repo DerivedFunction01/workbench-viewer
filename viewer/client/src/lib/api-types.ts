@@ -419,12 +419,26 @@ export interface DiffPeekPayload {
   peek: DiffPeek;
 }
 
-export interface BoardPayload {
+/** One project's board portion (heavy-feed batching):
+ * card projections only — no bodies, markdown, or step
+ * lists — with the done lanes paginated: `counts` carries
+ * every lane's total, `done_page` says which slice of the
+ * done lanes this response carries, and further slices
+ * ride the same action with a doneOffset. The Board
+ * section assembles portions client-side. */
+export interface BoardProjectPayload {
+  slug: string;
+  name: string;
   todos: Record<string, TodoItem[]>;
   plans: Record<string, BoardPlan[]>;
   review_queue: ReviewItem[];
+  counts: {
+    todos: Record<string, number>;
+    plans: Record<string, number>;
+    review_queue: number;
+  };
+  done_page: { offset: number; limit: number };
   errors?: unknown[];
-  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------

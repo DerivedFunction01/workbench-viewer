@@ -29,6 +29,8 @@ from lib import active as active_mod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
 from lib import doctor as doctor_mod  # noqa: E402
 from lib import progress as progress_mod  # noqa: E402
+from lib import progress_schedule as \
+    progress_schedule_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
@@ -420,12 +422,13 @@ def cmd_todo_new(args):
         ctx.plans_dir, args.bundle, args.title,
         step=args.step, worktree=args.worktree,
         plan=args.plan, feature=args.feature,
-        body=args.body or "", progress=args.progress)
+        body=args.body or "", progress=args.progress,
+        no_progress=args.no_progress)
     _print({k: result[k] for k in
             ("id", "title", "status", "feature", "plan",
              "plan_step", "worktree", "created", "updated",
              "progress_check", "progress_armed",
-             "bundle", "file")})
+             "progress_entry", "bundle", "file")})
     return 0
 
 
@@ -433,11 +436,12 @@ def cmd_todo_file_set(args):
     ctx = PlansCtx(args)
     result = bundle_mod.set_todo_status(
         ctx.plans_dir, args.id, args.status, note=args.note,
-        progress=args.progress)
+        progress=args.progress,
+        no_progress=args.no_progress)
     _print({k: result[k] for k in
             ("id", "title", "status", "updated",
              "progress_check", "progress_armed",
-             "bundle", "file")})
+             "progress_entry", "bundle", "file")})
     return 0
 
 
@@ -565,14 +569,22 @@ def cmd_progress(args):
     verdicts (lib/progress.py), as JSON. Read-only —
     acting on a verdict (checkpointing through
     `wb todo set --note`, nudging, surfacing) is the
-    driver's business, and the schedule that runs it is
-    a platform concern. Sweep roots resolve through the
-    server config seam, like the doctor's."""
+    driver's business. The schedules themselves are the
+    harness's own mechanism now: arming a todo writes
+    its scheduler-registry entry in the same call
+    (lib/progress_schedule.py), and `--sync-entries`
+    reconciles the whole registry against the swept
+    armed set. Sweep roots resolve through the server
+    config seam, like the doctor's."""
     from server import config as cfgmod
     cfg = cfgmod.load()
     roots = [Path(r) for r in args.root] \
         if args.root else cfgmod.sweep_roots(cfg)
     result = sweep(roots)
+    if args.sync_entries:
+        _print({"sync": progress_schedule_mod.sync_all(
+            result.projects)})
+        return 0
     projects = []
     for project in result.projects:
         plans_dir = project.manifest.plans
@@ -582,6 +594,19 @@ def cmd_progress(args):
         projects.append({"slug": project.slug, **report})
     _print({"projects": projects})
     return 0
+
+
+def cmd_progress_check(args):
+    """One armed todo's stall verdict, for the scheduler
+    entry the harness wrote when the todo armed: exit 0
+    on track / disarmed / gone, exit 3 with a STALLED
+    line when the derivation says it stalled — the
+    entry's failure report carries the line as a ping."""
+    ctx = PlansCtx(args)
+    code, line = progress_schedule_mod.check_todo(
+        ctx.plans_dir, args.id)
+    print(line)
+    return code
 
 
 def cmd_print_schedule(args):
@@ -729,6 +754,10 @@ def build_parser():
     nt.add_argument("--progress",
                     help="arm a progress schedule with "
                          "this cadence (e.g. 30m)")
+    nt.add_argument("--no-progress",
+                    action="store_true",
+                    help="record the explicit opt-out: "
+                         "this todo is never monitored")
     nt.set_defaults(fn=cmd_todo_new)
 
     st = tsub.add_parser("set")
@@ -741,8 +770,15 @@ def build_parser():
     st.add_argument("--progress",
                     help="arm or re-arm the progress "
                          "schedule with this cadence "
-                         "(e.g. 30m); a move to done or "
+                         "(e.g. 30m), overriding the "
+                         "automatic 15m arm on a move to "
+                         "doing; a move to done or "
                          "blocked disarms it")
+    st.add_argument("--no-progress",
+                    action="store_true",
+                    help="record the explicit opt-out "
+                         "instead: progress_check off, "
+                         "no schedule, never monitored")
     st.set_defaults(fn=cmd_todo_file_set)
 
     lt = tsub.add_parser("list")
@@ -804,7 +840,23 @@ def build_parser():
                     help="sweep root (repeatable); "
                          "default: the server config's "
                          "sweep roots")
+    sp.add_argument("--sync-entries",
+                    action="store_true",
+                    help="reconcile the scheduler "
+                         "registry against the swept "
+                         "armed set (write missing "
+                         "entries, delete orphans) "
+                         "instead of reporting")
     sp.set_defaults(fn=cmd_progress)
+
+    sp = sub.add_parser(
+        "progress-check",
+        help="one armed todo's stall verdict: exit 0 on "
+             "track, exit 3 with a STALLED line when "
+             "stalled (run by the todo's scheduler "
+             "entry)")
+    sp.add_argument("id", help="the todo id")
+    sp.set_defaults(fn=cmd_progress_check)
 
     sub.add_parser("print-schedule").set_defaults(
         fn=cmd_print_schedule)

@@ -74,6 +74,23 @@ def parse_cadence(value):
     return timedelta(minutes=amount)
 
 
+# The progress_check field's two non-cadence states. A
+# todo whose progress_check is PROGRESS_OPT_OUT has
+# explicitly opted out of monitoring (the writer's
+# --no-progress): no schedule, no stall derivation, and
+# the doctor stays silent about it. A doing todo that
+# declares neither a cadence nor the opt-out is armed
+# by the writer at PROGRESS_DEFAULT_CADENCE on the
+# doing move — arming is automatic, so monitored work
+# never depends on someone remembering a flag. The
+# default is 15m (the owner's 2026-11-03 ruling: the
+# shorter interval catches dead or erroring work a lot
+# earlier); an explicit cadence remains the override,
+# and no cadence runs longer than 30m by convention.
+PROGRESS_OPT_OUT = "off"
+PROGRESS_DEFAULT_CADENCE = "15m"
+
+
 def _valid_instant(value: str) -> bool:
     try:
         datetime.fromisoformat(
@@ -158,11 +175,12 @@ def parse_todo(text: str, *, path: str = "") -> dict:
             plan_step = None
     progress_check = fields.get("progress_check") or None
     if progress_check is not None \
+            and progress_check != PROGRESS_OPT_OUT \
             and parse_cadence(progress_check) is None:
         errors.append(
             f"invalid progress_check "
             f"{progress_check!r}: expected a cadence "
-            f"like 30m or 2h")
+            f"like 30m or 2h, or off")
     progress_armed = fields.get("progress_armed") or None
     if progress_armed is not None \
             and not _valid_instant(progress_armed):
@@ -170,6 +188,12 @@ def parse_todo(text: str, *, path: str = "") -> dict:
             f"invalid progress_armed "
             f"{progress_armed!r}: expected an ISO-8601 "
             f"timestamp")
+    if progress_check == PROGRESS_OPT_OUT \
+            and progress_armed is not None:
+        errors.append(
+            "progress_armed is set while progress_check "
+            "is off: an opted-out todo carries no "
+            "armed stamp")
     return {
         "id": todo_id,
         "title": fields.get("title") or None,

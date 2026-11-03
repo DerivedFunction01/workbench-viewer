@@ -495,15 +495,33 @@ Plus `print-schedule` — emits the staleness-check job
 definition for a platform scheduler, IF one is later ruled;
 the harness builds the tool, not the schedule.
 
-Progress schedules for long work: `wb todo new --progress
-<cadence>` and `wb todo set --progress <cadence>` arm a
-per-todo progress schedule (the `progress_check` /
-`progress_armed` front-matter fields; a move to done or
-blocked disarms in the same write), and `wb progress`
+Progress schedules for long work: arming is automatic
+(the owner's 2026-11-03 ruling) — a move to `doing`
+arms the per-todo progress schedule at the default
+`15m` cadence in the same write whenever the todo
+declares neither a cadence nor the opt-out, so
+monitored work never depends on a remembered flag
+(the short default catches dead or erroring work
+earlier). `wb todo set --progress <cadence>`
+overrides the cadence;
+`--no-progress` records the explicit opt-out
+(`progress_check: off` — no schedule, no stall
+derivation, no doctor finding). The schedule lives in
+the `progress_check` / `progress_armed` front-matter
+fields; a move to done or blocked disarms in the same
+write. And `wb progress`
 serves every project's armed todos with their derived
-stall verdicts as JSON — the single read a platform
-driver consumes. The schedule itself stays a platform
-concern, exactly as with `print-schedule`; the
+stall verdicts as JSON — the single read a driver
+consumes. Since the owner's 2026-10-31 auto-create
+commission the harness also creates the schedule
+itself: arming writes a scheduler-registry entry
+(`lib/progress_schedule.py`; the scheduler server's
+registry is files, rescanned every tick) whose command
+is `wb progress-check <id>` at the todo's cadence, and
+disarming deletes it — `wb progress --sync-entries`
+reconciles the registry against the armed set, and the
+doctor flags drift. (The staleness check's
+`print-schedule` remains platform-scheduled.) The
 arm / run / disarm contract lives in
 `context/ai-workflow-rules.md`.
 
@@ -555,7 +573,9 @@ API (the feeds the artifact consumes):
   save)
 - `GET /api/projects/<slug>/todos` · `GET /api/todos` ·
   `POST /api/projects/<slug>/todos` (`{verb, ...}`)
-- `GET /api/board`
+- `GET /api/projects/<slug>/board` (one project's board
+  portion; the board screen assembles portions
+  client-side)
 
 The whole HTTP surface lives under `/api`. The 15 legacy
 unprefixed patterns were served as exact aliases for one
@@ -693,6 +713,24 @@ sources:
 Acting on a derived card opens its source (the plan, the
 review item), where the action lives. The board shows no
 card whose source record does not exist (§1.6).
+
+**Delivery (heavy-feed batching, 2026-11-01).** The board
+is NOT served by one monolith call. The client assembles
+it from one portion per project
+(`GET /api/projects/<slug>/board`): portions render as
+they land, one project's failure degrades only its own
+portion, and a project scope fetches only its own
+portion. A portion carries card projections — only the
+fields the cards render; bodies, raw markdown, and step
+lists stay in the section feeds — and its done lanes are
+paginated (`done_offset`/`done_limit`, page size
+`board_done_page`): the lane totals ride in `counts`, and
+the client's done-lane expander pages further slices in.
+The legacy `/api/board` monolith was dropped in the
+threadpool fan-out pass (2026-11-03): legacy and unused
+surfaces are removed, not carried — the route, its
+action, and its derivation are gone, and portions are
+the only board surface.
 
 ### 8.5 Artifacts
 

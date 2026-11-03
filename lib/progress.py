@@ -20,9 +20,15 @@ them. The todo file stays the progress record.
 
 This module is pure: same inputs → same report. Acting
 on a verdict (checkpointing, nudging, surfacing a
-blocker) is the driver's business, and the schedule
-that runs the driver is a platform concern — the
-harness builds the tool, not the schedule.
+blocker) is the driver's business. The schedule that
+runs the checks is the harness's own mechanism since
+the owner's 2026-10-31 auto-create commission:
+lib/progress_schedule.py writes a scheduler-registry
+entry when a todo arms and deletes it when the todo
+disarms, and each entry runs `wb progress-check` at
+the todo's cadence (the older scheduling-is-a-platform-
+concern doctrine survives only for the staleness
+check's `print-schedule`).
 """
 
 import re

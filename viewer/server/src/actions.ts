@@ -375,12 +375,28 @@ export const Actions = {
     },
   }),
 
-  getBoard: defineAction({
-    request: z.object({}),
+  // One project's board portion (heavy-feed batching):
+  // card projections with the done lanes paginated —
+  // the board screen assembles portions client-side.
+  getBoardProject: defineAction({
+    request: z.object({
+      slug: z.string(),
+      doneOffset: z.number().int().min(0).optional(),
+      doneLimit: z.number().int().min(1).max(500).optional(),
+    }),
     response: rawResult,
     privileged: [privileged.wbApi],
-    async handler(ctx) {
-      return callServer<unknown>(ctx, "/api/board");
+    async handler(ctx, args) {
+      const params = new URLSearchParams();
+      if (args.doneOffset !== undefined) {
+        params.set("done_offset", String(args.doneOffset));
+      }
+      if (args.doneLimit !== undefined) {
+        params.set("done_limit", String(args.doneLimit));
+      }
+      const query = params.toString();
+      const suffix = query ? `?${query}` : "";
+      return callServer<unknown>(ctx, `/api/projects/${enc(args.slug)}/board${suffix}`);
     },
   }),
 

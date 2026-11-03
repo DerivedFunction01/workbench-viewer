@@ -16,11 +16,16 @@
 // Every section's queries are scoped by the selected
 // project; switching project re-scopes them all.
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SectionBoundary } from "./components/SectionBoundary";
 import { api } from "./lib/api";
-import type { BoardPayload, HomePayload, MockupsFeed, ProjectSummary } from "./lib/api-types";
+import type {
+  BoardProjectPayload,
+  HomePayload,
+  MockupsFeed,
+  ProjectSummary,
+} from "./lib/api-types";
 import { formatUptime } from "./lib/format";
 import { groupProjects } from "./lib/grouping";
 import { sectionLabel } from "./lib/labels";
@@ -169,10 +174,6 @@ export function App() {
     queryFn: () => api.getHealth({}),
     refetchInterval: 30000,
   });
-  const boardQuery = useQuery({
-    queryKey: ["board"],
-    queryFn: () => api.getBoard({}),
-  });
   const homeQuery = useQuery({
     queryKey: ["home"],
     queryFn: () => api.getHome({}),
@@ -203,7 +204,25 @@ export function App() {
   const health = healthQuery.data?.payload ?? null;
   const projectGroups = useMemo(() => groupProjects(projects, homeRows), [projects, homeRows]);
   const serverOk = healthQuery.data?.status === 200 && health?.ok === true;
-  const board = boardQuery.data?.payload as unknown as BoardPayload | null;
+  // The doing badge assembles the same per-project board
+  // portions the Board section renders — same query keys,
+  // so the cache is shared and nothing fetches twice.
+  const portionQueries = useQueries({
+    queries: projects.map((p) => ({
+      queryKey: ["board", p.slug],
+      queryFn: () => api.getBoardProject({ slug: p.slug }),
+    })),
+  });
+  const portions: BoardProjectPayload[] = [];
+  let portionsPending = projects.length === 0;
+  portionQueries.forEach((q) => {
+    const payload = q.data?.payload as BoardProjectPayload | undefined;
+    if (q.isPending || !payload) {
+      portionsPending = true;
+      return;
+    }
+    portions.push(payload);
+  });
 
   const routeSlugValue = route.view === "section" ? route.slug : null;
   const selected = routeSlugValue
@@ -226,12 +245,16 @@ export function App() {
   });
   const artifactsTriageCount =
     (artifactsTriageQuery.data?.payload as unknown as MockupsFeed | null)?.triage.length ?? null;
-  const doingCount =
-    board != null
-      ? (board.todos.doing ?? []).length +
-        (board.plans.doing ?? []).length +
-        board.review_queue.length
-      : null;
+  const doingCount = portionsPending
+    ? null
+    : portions.reduce(
+        (sum, portion) =>
+          sum +
+          (portion.counts.todos.doing ?? 0) +
+          (portion.counts.plans.doing ?? 0) +
+          portion.counts.review_queue,
+        0,
+      );
 
   const breadcrumb = (() => {
     if (route.view === "settings") return "Settings";
@@ -347,11 +370,15 @@ export function App() {
       title = "Board";
       sub = "all projects";
       backHref = homeHref();
-      if (board) {
-        const total =
-          board.review_queue.length +
-          Object.values(board.todos).reduce((n, list) => n + list.length, 0) +
-          Object.values(board.plans).reduce((n, list) => n + list.length, 0);
+      if (!portionsPending) {
+        const total = portions.reduce(
+          (n, portion) =>
+            n +
+            portion.counts.review_queue +
+            Object.values(portion.counts.todos).reduce((m, c) => m + c, 0) +
+            Object.values(portion.counts.plans).reduce((m, c) => m + c, 0),
+          0,
+        );
         headerBadge = `${total} cards`;
       }
     } else if (route.view === "section") {
@@ -360,18 +387,12 @@ export function App() {
       if (route.section === "board") {
         title = "Board";
         sub = route.slug;
-        if (board) {
-          const inScope = (project: string | undefined) => project === route.slug;
+        const scoped = portions.find((portion) => portion.slug === route.slug);
+        if (scoped) {
           const total =
-            board.review_queue.filter((item) => inScope(item.project)).length +
-            Object.values(board.todos).reduce(
-              (n, list) => n + list.filter((todo) => inScope(todo.project)).length,
-              0,
-            ) +
-            Object.values(board.plans).reduce(
-              (n, list) => n + list.filter((plan) => inScope(plan.project)).length,
-              0,
-            );
+            scoped.counts.review_queue +
+            Object.values(scoped.counts.todos).reduce((m, c) => m + c, 0) +
+            Object.values(scoped.counts.plans).reduce((m, c) => m + c, 0);
           headerBadge = `${total} cards`;
         }
       } else if (route.section === "plans" && route.item) {

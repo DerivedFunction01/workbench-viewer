@@ -326,7 +326,7 @@ stays entry-pure).
 questions answered in place via lib composition + the
 guarded save) ·
 `GET /api/projects/<slug>/todos` · `GET /api/todos` ·
-`POST /api/projects/<slug>/todos` (`{verb, ...}`) · `GET /api/board`.
+`POST /api/projects/<slug>/todos` (`{verb, ...}`) · `GET /api/projects/<slug>/board`.
 
 The whole HTTP surface lives under `/api`. The 15 legacy
 unprefixed patterns were served as exact aliases for one

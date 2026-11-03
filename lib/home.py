@@ -36,7 +36,7 @@ from . import staleness
 from . import worktrees as wt_mod
 from .plans import bundles as bundle_parser
 from .plans import parser as plan_parser
-from .util import now_iso, parse_iso
+from .util import fan_out, now_iso, parse_iso
 
 
 def _git_block(project, stale_days, now):
@@ -248,12 +248,18 @@ def project_row(project, *, stale_days=14, now=None) -> dict:
     return row
 
 
-def home_feed(projects, *, stale_days=14, now=None) -> dict:
+def home_feed(projects, *, stale_days=14, now=None,
+              workers=1) -> dict:
     """The home rows for a sweep result's projects, sorted
     per §4. Sorting never raises: rows missing activity
-    sort last within their group."""
-    rows = [project_row(p, stale_days=stale_days, now=now)
-            for p in projects]
+    sort last within their group. `workers > 1` computes
+    the rows on the fan_out pool (each row is contained
+    per project and built from pure reads); the sort
+    makes the output independent of compute order."""
+    rows = fan_out(
+        lambda p: project_row(p, stale_days=stale_days,
+                              now=now),
+        projects, workers=workers)
     # Stable multi-pass sort, least significant key first:
     # name asc, then activity desc (ISO strings sort
     # chronologically), then in-progress-plan group first.

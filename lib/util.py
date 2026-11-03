@@ -7,6 +7,7 @@ beyond these helpers.
 
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -44,6 +45,27 @@ def write_text(path, text, *, encoding="utf-8") -> None:
     write strategy can change in exactly one place."""
     with open(path, "w", encoding=encoding) as f:
         f.write(text)
+
+
+def fan_out(fn, items, *, workers=1) -> list:
+    """Map `fn` over `items`, on a bounded thread pool when
+    `workers > 1`. Results come back in input order
+    regardless of completion order; `workers <= 1` (or a
+    single item) is a plain sequential map. An exception
+    from `fn` propagates exactly as the sequential map
+    would raise it — per-item containment stays with the
+    caller, whose derivations already contain per item.
+
+    The pool exists for subprocess- and IO-bound fan-outs
+    (the per-repo and per-project git derivations), where
+    the wait releases the GIL; it buys nothing for
+    pure-Python CPU work such as parsing, which stays
+    sequential by design."""
+    items = list(items)
+    if workers <= 1 or len(items) <= 1:
+        return [fn(item) for item in items]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(fn, items))
 
 
 def canonical_json(obj) -> str:

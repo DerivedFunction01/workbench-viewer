@@ -366,6 +366,102 @@ class TestWriters(Fixture):
         self.assertNotIn("progress_",
                          Path(todo["file"]).read_text())
 
+    def test_doing_move_auto_arms_at_default(self):
+        # The core auto-arm case (2026-11-03): a plain
+        # move to doing, no progress argument anywhere,
+        # arms the schedule at the default cadence.
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(self.plans, "b1",
+                                      "Long work")
+        moved = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "doing",
+            armed_at="2026-10-25T10:00:00+00:00")
+        self.assertEqual(moved["progress_check"], "15m")
+        self.assertEqual(moved["progress_armed"],
+                         "2026-10-25T10:00:00+00:00")
+        self.assertTrue(moved["valid"], moved["errors"])
+
+    def test_doing_move_explicit_cadence_overrides(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(self.plans, "b1",
+                                      "Delegated work")
+        moved = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "doing",
+            progress="15m")
+        self.assertEqual(moved["progress_check"], "15m")
+
+    def test_armed_todo_rides_through_doing_move(self):
+        # An existing cadence is a declaration: the
+        # automatic arm must not restamp or replace it.
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(
+            self.plans, "b1", "Watched work",
+            progress="45m",
+            armed_at="2026-10-25T09:00:00+00:00")
+        moved = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "doing",
+            armed_at="2026-10-25T12:00:00+00:00")
+        self.assertEqual(moved["progress_check"], "45m")
+        self.assertEqual(moved["progress_armed"],
+                         "2026-10-25T09:00:00+00:00")
+
+    def test_create_straight_into_doing_auto_arms(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(
+            self.plans, "b1", "Immediate work",
+            status="doing")
+        self.assertEqual(todo["progress_check"], "15m")
+        self.assertTrue(todo["progress_armed"])
+        self.assertTrue(todo["valid"], todo["errors"])
+
+    def test_opt_out_written_and_rides_through_doing(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(
+            self.plans, "b1", "Unwatched by design",
+            no_progress=True)
+        self.assertEqual(todo["progress_check"], "off")
+        self.assertIsNone(todo["progress_armed"])
+        self.assertTrue(todo["valid"], todo["errors"])
+        moved = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "doing")
+        self.assertEqual(moved["progress_check"], "off")
+        self.assertIsNone(moved["progress_armed"])
+        self.assertTrue(moved["valid"], moved["errors"])
+
+    def test_no_progress_move_disarms_a_live_schedule(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        todo = bundle_mod.create_todo(
+            self.plans, "b1", "Was watched",
+            status="doing", progress="30m")
+        moved = bundle_mod.set_todo_status(
+            self.plans, todo["id"], "doing",
+            no_progress=True)
+        self.assertEqual(moved["progress_check"], "off")
+        self.assertIsNone(moved["progress_armed"])
+        self.assertNotIn(
+            "progress_armed",
+            Path(todo["file"]).read_text())
+
+    def test_progress_and_no_progress_conflict(self):
+        bundle_mod.create_bundle(self.plans, "b1",
+                                 today="2026-10-25")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.create_todo(
+                self.plans, "b1", "Conflicted",
+                progress="30m", no_progress=True)
+        todo = bundle_mod.create_todo(self.plans, "b1",
+                                      "Plain work")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.set_todo_status(
+                self.plans, todo["id"], "doing",
+                progress="30m", no_progress=True)
+
     def test_todo_progress_refusals(self):
         bundle_mod.create_bundle(self.plans, "b1",
                                  today="2026-10-25")

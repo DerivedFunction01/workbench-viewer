@@ -67,21 +67,38 @@ the bundle is the unit of work.
 Long work never waits on the owner to ping for status: a
 schedule pings the work instead. Long = multi-step,
 delegated, detached, or expected to run past roughly an
-hour. The harness records the intent and the derivations;
-the schedule itself is a platform concern (the
-`print-schedule` precedent — this repo builds the tool,
-not the schedule).
+hour. The harness records the intent and the derivations
+— and, since the owner's 2026-10-31 auto-create
+commission, it also creates the schedule: arming a todo
+writes its scheduler-registry entry in the same call
+(`lib/progress_schedule.py`; one scripted entry per todo,
+running `wb progress-check <id>` at the todo's cadence,
+a stall exiting non-zero so the scheduler's failure
+report pings), and disarming deletes it. No hand-made
+schedule is needed or wanted; `wb progress
+--sync-entries` reconciles the registry against the
+armed set, and the doctor flags drift both ways
+(`todo-progress-entry-missing`,
+`todo-progress-entry-orphan`). The per-bundle driver
+template below remains the pattern for agent-driven
+follow-up where a thread runs one.
 
-- **Arm at the `doing` transition**, in the same pass as
-  the status move, when the work is long:
-  `.venv/bin/python wb todo set <id> doing --progress 30m`
-  (default cadence `30m`; arming at creation is
-  `wb todo new <bundle> "<title>" --progress 30m`). Arming
-  writes `progress_check` / `progress_armed` onto the todo
-  through lib/ — the only write path; never hand-edit the
-  fields. Then create ONE platform schedule per bundle
-  from the template below, and note its identity in the
-  todo body.
+- **Arming is automatic at the `doing` transition**:
+  `.venv/bin/python wb todo set <id> doing` arms the
+  schedule at the default `15m` cadence in the same
+  write whenever the todo declares neither a cadence
+  nor the opt-out — no flag to remember (15m is the
+  default because it catches dead or erroring work a
+  lot earlier). Pass `--progress <cadence>` to
+  override (or at creation via
+  `wb todo new <bundle> "<title>" --progress 30m`), and
+  `--no-progress` only for a todo that genuinely should
+  never be monitored (it records `progress_check: off`).
+  Arming writes `progress_check` / `progress_armed`
+  onto the todo through lib/ — the only write path;
+  never hand-edit the fields. The registry entry rides
+  the same write — its outcome shows in the command's
+  JSON as `progress_entry`.
 - **Checkpoints are todo-body lines**, appended through
   `wb todo set <id> doing --note "progress-checkpoint:
   <ISO-8601 UTC> — <what moved>"`. The todo file stays
@@ -89,9 +106,9 @@ not the schedule).
   does the work checkpoints at meaningful progress; a
   driver run checkpoints what it observes.
 - **Disarm is automatic**: a move to `done` or `blocked`
-  clears both progress fields in the same write. When no
-  armed todos remain in the bundle, delete the platform
-  schedule. The doctor backs the discipline both ways:
+  clears both progress fields in the same write, and the
+  same writer call deletes the todo's registry entry.
+  The doctor backs the discipline both ways:
   `todo-progress-unarmed` flags planned `doing` work with
   no schedule, `todo-progress-orphan` flags arming that
   outlived its work.

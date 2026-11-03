@@ -55,7 +55,8 @@ from common import (CFG, COMMIT, MAX_BODY,  # noqa: E402
                     STARTED_AT, VERSION, ApiError,
                     find_project, get_sweep)
 from feeds import (_home_invalidate_cache,  # noqa: E402
-                   artifacts_feed, board_feed, diff_feed,
+                   artifacts_feed, board_project_feed,
+                   diff_feed,
                    entry_detail, home_feed, mockups_feed,
                    plans_feed, todos_feed, worktrees_feed)
 from messages_api import (effective_settings,  # noqa: E402
@@ -262,8 +263,6 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["api", "projects"]:
             result = get_sweep()
             return self._send(200, result.summary())
-        if parts == ["api", "board"]:
-            return self._send(200, board_feed())
         if parts == ["api", "todos"]:
             items, errors = [], []
             for project in get_sweep().projects:
@@ -312,6 +311,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, doc)
             if len(parts) == 4 and parts[3] == "todos":
                 return self._send(200, todos_feed(project))
+            if len(parts) == 4 and parts[3] == "board":
+                return self._send(
+                    200, board_project_feed(project, query))
             if len(parts) == 5 and parts[3] == "entries":
                 db = _require_registry(project)
                 try:

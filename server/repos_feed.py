@@ -24,7 +24,7 @@ from lib import datasets as datasets_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import repo_state as repo_state_mod  # noqa: E402
 from lib import repos as repos_mod  # noqa: E402
-from lib.util import now_iso  # noqa: E402
+from lib.util import fan_out, now_iso  # noqa: E402
 
 from common import CFG, ApiError  # noqa: E402
 
@@ -75,9 +75,15 @@ def _compute_repos_feed() -> dict:
     if changed:
         repo_state_mod.save_registry(_repos_registry_path(),
                                      data)
+    # The summaries are a per-repo git fan-out — computed
+    # on the pool (fan_out preserves census order); the
+    # registry attach and the history recording stay
+    # serial, in the original iteration order.
+    records = list(census.values())
+    computed = fan_out(repos_mod.repo_summary, records,
+                       workers=CFG["feed_pool_workers"])
     summaries = []
-    for record in census.values():
-        s = repos_mod.repo_summary(record)
+    for record, s in zip(records, computed):
         s["registry"] = data["repos"].get(record["id"])
         if not s.get("error"):
             repo_state_mod.record_history(

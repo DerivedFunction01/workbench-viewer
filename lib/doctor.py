@@ -50,6 +50,21 @@ Check families:
                        archived — the writer disarms on
                        the terminal move, so the armed
                        state outlived the work
+  todo-progress-entry-missing
+                       an armed todo with no scheduler
+                       entry — arming writes the entry in
+                       the same call, so a missing one is
+                       drift (an arm that predates the
+                       mechanism, or a deleted file)
+  todo-progress-entry-orphan
+                       a wb-progress scheduler entry
+                       whose todo is gone, terminal,
+                       disarmed, or archived — the writer
+                       deletes the entry on the disarming
+                       move, so the entry outlived the
+                       todo (both entry checks skip when
+                       this machine has no scheduler
+                       registry)
   registry-validator   the validate_project suite's
                        findings, unchanged
   approval-coverage    an approved entry whose current
@@ -83,6 +98,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import messages as msg_mod
+from . import progress_schedule as \
+    progress_schedule_mod
 from . import registry as reg
 from . import staleness as stale_mod
 from . import validators as val_mod
@@ -306,7 +323,9 @@ def plan_todo_findings(project) -> list:
                     slug, "todo-missing-plan", t["path"],
                     f"plan reference {t['plan']!r} does "
                     f"not resolve to a file"))
-            if t["progress_check"]:
+            check = t["progress_check"]
+            if check and bundle_parser.parse_cadence(
+                    check) is not None:
                 if t["status"] == "done" or b["archived"]:
                     reason = "its bundle is archived" \
                         if b["archived"] else \
@@ -322,7 +341,8 @@ def plan_todo_findings(project) -> list:
                         f"schedule outlived the work; "
                         f"clear the progress fields or "
                         f"reopen the todo"))
-            elif t["status"] == "doing" \
+            elif not check \
+                    and t["status"] == "doing" \
                     and (t["plan"]
                          or t["plan_step"] is not None):
                 out.append(_finding(
@@ -330,10 +350,15 @@ def plan_todo_findings(project) -> list:
                     t["path"],
                     f"doing todo carries planned work "
                     f"but no progress schedule is armed "
-                    f"— arm one (wb todo set "
-                    f"{t['id'] or '<id>'} doing "
-                    f"--progress 30m) or the long work "
-                    f"runs unwatched"))
+                    f"— the writer arms one "
+                    f"automatically on the doing move, "
+                    f"so this todo reached doing without "
+                    f"it; re-move it through the writer "
+                    f"(wb todo set "
+                    f"{t['id'] or '<id>'} doing) or "
+                    f"record the opt-out (--no-progress) "
+                    f"— until then the long work runs "
+                    f"unwatched"))
     for todo_id, homes in todo_bundles.items():
         if len(homes) > 1:
             out.append(_finding(
@@ -402,6 +427,70 @@ def registry_findings(project) -> list:
 # The sweep-wide run
 # ----------------------------------------------------------------
 
+def progress_entry_findings(projects) -> list:
+    """Scheduler-entry drift, both ways: an armed todo
+    whose entry is missing, and a wb-progress entry whose
+    todo no longer wants one. Entries are derived state
+    (lib/progress_schedule.py) — the todo files rule, and
+    `wb progress --sync-entries` is the remedy either
+    way. Silent when this machine has no scheduler
+    registry: no registry, no drift."""
+    directory = progress_schedule_mod.jobs_dir()
+    if directory is None:
+        return []
+    wanted = {}
+    for project in projects:
+        plans_dir = project.manifest.plans
+        if plans_dir is None:
+            continue
+        for todo in bundle_parser.list_todos(plans_dir):
+            if progress_schedule_mod.is_armed(todo):
+                eid = progress_schedule_mod.entry_id(
+                    project.slug, todo["id"])
+                wanted[eid] = (project.slug, todo)
+    out = []
+    for eid, (slug, todo) in sorted(wanted.items()):
+        if not (directory / f"{eid}.yaml").is_file():
+            out.append(_finding(
+                slug, "todo-progress-entry-missing",
+                todo["path"],
+                f"todo is armed ({todo['progress_check']}) "
+                f"but no scheduler entry {eid}.yaml exists "
+                f"— arming writes the entry in the same "
+                f"call, so this is drift; run wb progress "
+                f"--sync-entries to reconcile"))
+    swept = {project.slug for project in projects}
+    for path in sorted(directory.glob(
+            f"{progress_schedule_mod.ENTRY_PREFIX}"
+            f"*.yaml")):
+        if path.stem in wanted:
+            continue
+        todo_id = progress_schedule_mod \
+            .parse_entry_todo_id(path)
+        if not todo_id:
+            continue  # unattributable — the scheduler's
+            # own validation quarantines malformed entries
+        slug = path.stem[
+            len(progress_schedule_mod.ENTRY_PREFIX):]
+        suffix = f"-{todo_id.lower()}"
+        if slug.endswith(suffix):
+            slug = slug[:-len(suffix)]
+        if slug not in swept:
+            continue  # a partial sweep cannot judge
+            # another project's entries
+        out.append(_finding(
+            slug, "todo-progress-entry-orphan",
+            path.name,
+            f"scheduler entry {path.stem}.yaml exists "
+            f"but its todo "
+            f"{todo_id or '(unreadable)'} is gone, "
+            f"terminal, disarmed, or archived — the "
+            f"writer deletes the entry on the disarming "
+            f"move, so the entry outlived the todo; run "
+            f"wb progress --sync-entries to reconcile"))
+    return out
+
+
 def run_checks(projects) -> list:
     """Every finding across the swept projects, sorted by
     identity for stable output and diffing."""
@@ -409,6 +498,7 @@ def run_checks(projects) -> list:
     for project in projects:
         out.extend(plan_todo_findings(project))
         out.extend(registry_findings(project))
+    out.extend(progress_entry_findings(projects))
     out.sort(key=lambda f: (finding_key(f), f["detail"]))
     return out
 

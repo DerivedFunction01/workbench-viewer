@@ -9,6 +9,7 @@ nothing here imports a sibling (no cycles).
 """
 
 import subprocess
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -30,6 +31,7 @@ CFG = cfgmod.load()
 STARTED_AT = datetime.now(timezone.utc)
 
 _sweep_cache = {"at": 0.0, "result": None}
+_sweep_compute_lock = threading.Lock()
 
 
 def _git_head() -> str | None:
@@ -51,18 +53,29 @@ COMMIT = _git_head()
 # ----------------------------------------------------------------
 
 def get_sweep(force: bool = False):
-    now = time.monotonic()
+    """The swept projects, TTL-cached. The compute is
+    single-flighted (the feed caches' double-checked
+    idiom): concurrent cold requests share one walk
+    instead of each re-walking the tree."""
     ttl = CFG["sweep_ttl_s"]
     if not force and _sweep_cache["result"] is not None \
-            and now - _sweep_cache["at"] < ttl:
+            and time.monotonic() - _sweep_cache["at"] < ttl:
         return _sweep_cache["result"]
-    result = sweep_mod.sweep(
-        cfgmod.sweep_roots(CFG),
-        manifest_name=CFG["sweep_manifest"],
-        max_depth=CFG["sweep_max_depth"],
-        prune=CFG["sweep_prune"])
-    _sweep_cache.update(at=now, result=result)
-    return result
+    with _sweep_compute_lock:
+        # A racing request may have filled the cache while
+        # this one waited for the lock.
+        if not force and _sweep_cache["result"] is not None \
+                and time.monotonic() - _sweep_cache["at"] \
+                < ttl:
+            return _sweep_cache["result"]
+        result = sweep_mod.sweep(
+            cfgmod.sweep_roots(CFG),
+            manifest_name=CFG["sweep_manifest"],
+            max_depth=CFG["sweep_max_depth"],
+            prune=CFG["sweep_prune"])
+        _sweep_cache.update(at=time.monotonic(),
+                            result=result)
+        return result
 
 
 def find_project(slug: str):

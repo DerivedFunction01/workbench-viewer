@@ -133,7 +133,7 @@ def _attach_work_staleness(bundles,
     return bundles
 
 
-def todos_feed(project) -> dict:
+def todos_feed(project, *, bundles=None) -> dict:
     """Todos read from bundle todo FILES (live-work spec
     §3.7: file todos supersede the registry DB). The DB is
     read ONLY as the §3.7 fallback — a project with DB
@@ -149,9 +149,10 @@ def todos_feed(project) -> dict:
     file_todos, errors = [], []
     if m.plans is not None and m.plans.is_dir():
         try:
-            bundles = _attach_work_staleness(
-                bundle_parser.list_bundles(m.plans),
-                CFG["stale_warning_days"])
+            if bundles is None:
+                bundles = _attach_work_staleness(
+                    bundle_parser.list_bundles(m.plans),
+                    CFG["stale_warning_days"])
             for bundle in bundles:
                 errors.extend(bundle["errors"])
                 file_todos.extend(bundle["todos"])
@@ -195,7 +196,7 @@ def todos_feed(project) -> dict:
             "todos": [], "errors": errors}
 
 
-def plans_feed(project) -> dict:
+def plans_feed(project, *, bundles=None) -> dict:
     m = project.manifest
     base = {"slug": project.slug, "name": project.name,
             "degraded": False,
@@ -209,8 +210,9 @@ def plans_feed(project) -> dict:
         for summary in plans:
             summary["derived"] = staleness.plan_staleness(
                 summary, threshold_days=threshold)
-        bundles = _attach_work_staleness(
-            bundle_parser.list_bundles(m.plans), threshold)
+        if bundles is None:
+            bundles = _attach_work_staleness(
+                bundle_parser.list_bundles(m.plans), threshold)
         return {**base, "available": True,
                 "plans": plans,
                 "bundles": bundles}
@@ -219,52 +221,124 @@ def plans_feed(project) -> dict:
                          "plans": [], "bundles": []}, e)
 
 
-def board_feed() -> dict:
-    result = get_sweep()
+# ----------------------------------------------------------------
+# Board portions (heavy-feed batching, 2026-11-01): the board
+# screen is assembled client-side from ONE PORTION PER
+# PROJECT — the large-scale pattern of one API call per
+# portion instead of one monolith that re-derives every
+# project before its first byte. A portion carries CARD
+# PROJECTIONS (only the fields the board cards render;
+# bodies, raw markdown, and step lists stay in the section
+# feeds) and its DONE lanes are paginated: the response
+# carries the first page plus the lane totals, and further
+# pages ride the same endpoint via done_offset/done_limit.
+# Portions are live-derived per request — each is
+# independently cheap, so no cache is needed — and one
+# project's degradation lands in its own portion's errors,
+# never in another portion's payload.
+# ----------------------------------------------------------------
+
+_TODO_CARD_KEYS = ("id", "title", "status", "bundle",
+                   "feature", "worktree", "path", "source",
+                   "valid")
+_PLAN_CARD_KEYS = ("title", "path", "step_count")
+
+
+def _todo_card(todo, project) -> dict:
+    card = {k: todo.get(k) for k in _TODO_CARD_KEYS}
+    card["project"] = project.slug
+    card["project_name"] = project.name
+    return card
+
+
+def _plan_card(plan, bundle, project) -> dict:
+    card = {k: plan.get(k) for k in _PLAN_CARD_KEYS}
+    card["bundle"] = bundle["id"]
+    card["bundle_kind"] = bundle["kind"]
+    card["feature"] = bundle.get("feature")
+    card["project"] = project.slug
+    card["project_name"] = project.name
+    return card
+
+
+def _page_arg(query, key, default):
+    try:
+        return int(query.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def board_project_feed(project, query=None) -> dict:
+    query = query or {}
+    offset = max(0, _page_arg(query, "done_offset", 0))
+    limit = _page_arg(query, "done_limit",
+                      CFG["board_done_page"])
+    limit = max(1, min(limit, 500))
+    errors = []
     lanes = {"todo": [], "doing": [], "blocked": [],
              "done": []}
+    # One bundle parse per portion, shared by the todos
+    # and plans feeds below (each used to parse the same
+    # tree for itself). A parse failure leaves shared
+    # None: each feed then re-derives — and degrades —
+    # exactly as it did before the dedupe.
+    shared = None
+    m = project.manifest
+    if m.plans is not None and m.plans.is_dir():
+        try:
+            shared = _attach_work_staleness(
+                bundle_parser.list_bundles(m.plans),
+                CFG["stale_warning_days"])
+        except Exception:
+            shared = None
+    tf = todos_feed(project, bundles=shared)
+    if tf["degraded"]:
+        errors.append({"slug": project.slug,
+                       "reason": tf["reason"]})
+    for err in tf.get("errors", []):
+        errors.append({"slug": project.slug, **err})
+    for todo in tf["todos"]:
+        if not todo.get("valid", True) \
+                or todo.get("status") not in lanes:
+            continue  # invalid todos surface as errors
+        lanes[todo["status"]].append(
+            _todo_card(todo, project))
     plan_cards = {"todo": [], "doing": [], "done": []}
-    review_queue = []
-    errors = []
-    for project in result.projects:
-        tf = todos_feed(project)
-        if tf["degraded"]:
+    pf = plans_feed(project, bundles=shared)
+    if pf.get("degraded"):
+        errors.append({"slug": project.slug,
+                       "reason": pf["reason"]})
+    for bundle in pf.get("bundles", []):
+        plan = bundle.get("plan")
+        if plan is None:
+            continue  # plan-less bundle: no plan card
+        plan_cards[plan["status_bucket"]].append(
+            _plan_card(plan, bundle, project))
+    review = []
+    for feed in (mockups_feed(project, archived=False),
+                 artifacts_feed(project, archived=False)):
+        if feed["degraded"]:
             errors.append({"slug": project.slug,
-                           "reason": tf["reason"]})
-        for err in tf.get("errors", []):
-            errors.append({"slug": project.slug, **err})
-        for todo in tf["todos"]:
-            if not todo.get("valid", True) \
-                    or todo.get("status") not in lanes:
-                continue  # invalid todos surface as errors
-            lanes[todo["status"]].append(
-                {**todo, "project": project.slug,
-                 "project_name": project.name})
-        pf = plans_feed(project)
-        for bundle in pf.get("bundles", []):
-            plan = bundle.get("plan")
-            if plan is None:
-                continue  # plan-less bundle: no plan card
-            plan_cards[plan["status_bucket"]].append(
-                {**plan, "bundle": bundle["id"],
-                 "bundle_kind": bundle["kind"],
-                 "feature": bundle.get("feature"),
-                 "project": project.slug,
-                 "project_name": project.name})
-        for feed in (mockups_feed(project, archived=False),
-                     artifacts_feed(project, archived=False)):
-            if feed["degraded"]:
-                errors.append({"slug": project.slug,
-                               "reason": feed["reason"]})
-            # The two collections' kinds are disjoint, so the
-            # union cannot double-count an item.
-            for item in feed.get("triage", []):
-                review_queue.append(
-                    {**item, "project": project.slug,
-                     "project_name": project.name})
-    return {"todos": lanes, "plans": plan_cards,
-            "review_queue": review_queue, "errors": errors,
-            "sweep_errors": result.errors}
+                           "reason": feed["reason"]})
+        for item in feed.get("triage", []):
+            review.append({**item, "project": project.slug,
+                           "project_name": project.name})
+    counts = {
+        "todos": {k: len(v) for k, v in lanes.items()},
+        "plans": {k: len(v) for k, v in plan_cards.items()},
+        "review_queue": len(review),
+    }
+    return {
+        "slug": project.slug, "name": project.name,
+        "degraded": False,
+        "todos": {**lanes,
+                  "done": lanes["done"][offset:offset + limit]},
+        "plans": {**plan_cards,
+                  "done": plan_cards["done"][offset:offset + limit]},
+        "review_queue": review, "counts": counts,
+        "done_page": {"offset": offset, "limit": limit},
+        "errors": errors,
+    }
 
 
 # ----------------------------------------------------------------
@@ -310,7 +384,8 @@ def _compute_home_feed() -> dict:
     result = get_sweep()
     feed = home_mod.home_feed(
         result.projects,
-        stale_days=CFG["worktree_stale_days"])
+        stale_days=CFG["worktree_stale_days"],
+        workers=CFG["feed_pool_workers"])
     feed["sweep_errors"] = result.errors
     feed["captured_at"] = now_iso()
     return feed

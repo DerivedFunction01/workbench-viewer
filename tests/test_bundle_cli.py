@@ -105,6 +105,30 @@ class BundleCli(unittest.TestCase):
         self.assertNotIn("progress_",
                          Path(todo["file"]).read_text())
 
+    def test_todo_doing_move_auto_arms_cli(self):
+        r = self.wb("bundle", "new", "auto")
+        bundle = json.loads(r.stdout)["id"]
+        r = self.wb("todo", "new", bundle, "Plain long work")
+        todo = json.loads(r.stdout)
+        self.assertIsNone(todo["progress_check"])
+        # no --progress flag: the doing move arms at the
+        # default cadence on its own
+        r = self.wb("todo", "set", todo["id"], "doing")
+        moved = json.loads(r.stdout)
+        self.assertEqual(moved["progress_check"], "15m")
+        self.assertTrue(moved["progress_armed"])
+        # the opt-out replaces the arm
+        r = self.wb("todo", "set", todo["id"], "doing",
+                    "--no-progress")
+        moved = json.loads(r.stdout)
+        self.assertEqual(moved["progress_check"], "off")
+        self.assertIsNone(moved["progress_armed"])
+        # cadence + opt-out together are refused
+        r = self.wb("todo", "set", todo["id"], "doing",
+                    "--progress", "15m", "--no-progress",
+                    expect=None)
+        self.assertEqual(r.returncode, 2)
+
     def test_todo_import_db_cli(self):
         self.wb("init")
         # seed the DB directly through lib (the legacy wb
