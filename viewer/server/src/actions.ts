@@ -9,9 +9,9 @@
 // shape, never as a hang or a thrown exception. The bridge
 // is boring on purpose: errors pass through with their
 // shape intact (SPEC §7 conventions: 400/403/404/409/413).
-import { type ActionsModule, type Ctx, defineAction, z } from "@hatch/space-sdk";
+import { type ActionsModule, defineAction, z } from "@hatch/space-sdk";
 import { privileged } from "@space/privileged";
-import { companionAddress, unreachableMessage } from "./config";
+import { callServer } from "./bridge";
 
 // ---------------------------------------------------------------------------
 // Payload schemas (loose: the server's fields, verbatim + typed where known)
@@ -75,46 +75,6 @@ export type ConfigResult = z.infer<typeof configResult>;
 export type FeedResult = z.infer<typeof feedResult>;
 export type RawResult = z.infer<typeof rawResult>;
 
-// ---------------------------------------------------------------------------
-// The proxy core
-// ---------------------------------------------------------------------------
-
-// The payload is the server's body verbatim; T is the
-// action's declared payload type (its looseObject schema is
-// the contract the server's shape is checked against at the
-// action boundary).
-interface BridgeReply<T> {
-  status: number;
-  payload: T | null;
-  error: string | null;
-}
-
-async function callServer<T>(
-  ctx: Ctx,
-  path: string,
-  method: "GET" | "POST" = "GET",
-  body?: unknown,
-): Promise<BridgeReply<T>> {
-  const address = companionAddress();
-  const res = await ctx.executePrivileged(privileged.wbApi, {
-    host: address.host,
-    port: address.port,
-    method,
-    path,
-    body: body != null ? JSON.stringify(body) : null,
-  });
-  const json = res.json;
-  const obj = json != null && typeof json === "object" ? (json as Record<string, unknown>) : null;
-  const serverError = obj && typeof obj.error === "string" ? obj.error : null;
-  if (res.status === 0) {
-    return { status: 0, payload: null, error: unreachableMessage(address) };
-  }
-  if (serverError != null) {
-    return { status: res.status, payload: null, error: serverError };
-  }
-  return { status: res.status, payload: json as T, error: null };
-}
-
 const slugArg = z.object({ slug: z.string().min(1) });
 const entryArg = z.object({ slug: z.string().min(1), entryId: z.string().min(1) });
 const repoArg = z.object({ repoId: z.string().min(1) });
@@ -133,6 +93,8 @@ const encRepoId = (id: string) => id.split("/").map(enc).join("/");
 
 export const Actions = {
   getHealth: defineAction({
+    description:
+      "Check whether the companion server is up and report its version and project count.",
     request: z.object({}),
     response: healthResult,
     privileged: [privileged.wbApi],
@@ -142,6 +104,7 @@ export const Actions = {
   }),
 
   getConfig: defineAction({
+    description: "Fetch the companion server's public configuration.",
     request: z.object({}),
     response: configResult,
     privileged: [privileged.wbApi],
@@ -151,6 +114,7 @@ export const Actions = {
   }),
 
   listProjects: defineAction({
+    description: "List the projects in the companion server's sweep.",
     request: z.object({}),
     response: projectsResult,
     privileged: [privileged.wbApi],
@@ -160,6 +124,8 @@ export const Actions = {
   }),
 
   rescanProjects: defineAction({
+    description:
+      "Ask the companion server to rescan the workspace and return the updated project list.",
     request: z.object({}),
     response: projectsResult,
     privileged: [privileged.wbApi],
@@ -173,6 +139,8 @@ export const Actions = {
   // the client then invalidates every query so the whole
   // shell re-reads fresh.
   forceRefresh: defineAction({
+    description:
+      "Force-refresh all viewer data: bust the companion server's sweep and feed caches so every feed re-derives from disk.",
     request: z.object({}),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -182,6 +150,7 @@ export const Actions = {
   }),
 
   getMockups: defineAction({
+    description: "Fetch one project's mockup feed, optionally including archived entries.",
     request: z.object({ slug: z.string().min(1), archived: z.boolean().optional() }),
     response: feedResult,
     privileged: [privileged.wbApi],
@@ -195,6 +164,7 @@ export const Actions = {
   }),
 
   getArtifacts: defineAction({
+    description: "Fetch one project's artifacts feed, optionally including archived entries.",
     request: z.object({ slug: z.string().min(1), archived: z.boolean().optional() }),
     response: feedResult,
     privileged: [privileged.wbApi],
@@ -208,6 +178,7 @@ export const Actions = {
   }),
 
   getEntry: defineAction({
+    description: "Fetch one mockup or artifact entry's detail, files, and history.",
     request: entryArg,
     // The entry-detail payload ({entry, files, history,
     // latest_review, approval, derived}) is NOT a feed
@@ -224,6 +195,8 @@ export const Actions = {
   }),
 
   getEntryFile: defineAction({
+    description:
+      "Read one file of a mockup or artifact entry, optionally revealing a withheld secret-shaped file.",
     request: z.object({
       slug: z.string().min(1),
       entryId: z.string().min(1),
@@ -246,6 +219,8 @@ export const Actions = {
   }),
 
   saveEntryFile: defineAction({
+    description:
+      "Save an edited entry file through the companion server with compare-and-swap protection.",
     request: z.object({
       slug: z.string().min(1),
       entryId: z.string().min(1),
@@ -272,6 +247,8 @@ export const Actions = {
   }),
 
   entryAction: defineAction({
+    description:
+      "Run a lifecycle action such as review, approve, or archive on a mockup or artifact entry.",
     request: z.object({
       slug: z.string().min(1),
       entryId: z.string().min(1),
@@ -290,6 +267,7 @@ export const Actions = {
   }),
 
   getPlans: defineAction({
+    description: "Fetch one project's plans and bundles feed.",
     request: slugArg,
     response: feedResult,
     privileged: [privileged.wbApi],
@@ -299,6 +277,7 @@ export const Actions = {
   }),
 
   getPlan: defineAction({
+    description: "Fetch one plan document's structured content.",
     request: z.object({ slug: z.string().min(1), path: z.string().min(1) }),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -311,6 +290,7 @@ export const Actions = {
   }),
 
   resolvePlanQuestions: defineAction({
+    description: "Record answers to a plan's open questions back into the plan file.",
     request: z.object({
       slug: z.string().min(1),
       path: z.string().min(1),
@@ -329,6 +309,7 @@ export const Actions = {
   }),
 
   getProjectTodos: defineAction({
+    description: "Fetch one project's todo feed.",
     request: slugArg,
     response: feedResult,
     privileged: [privileged.wbApi],
@@ -338,6 +319,7 @@ export const Actions = {
   }),
 
   todoAction: defineAction({
+    description: "Create, update, or complete a todo in one project.",
     request: z.object({
       slug: z.string().min(1),
       body: z.record(z.string(), z.unknown()),
@@ -350,6 +332,7 @@ export const Actions = {
   }),
 
   getDiff: defineAction({
+    description: "Fetch the anchored diff for one project's worktree, bundle, or commit.",
     request: z.object({
       slug: z.string().min(1),
       worktree: z.string().optional(),
@@ -383,6 +366,7 @@ export const Actions = {
   // card projections with the done lanes paginated —
   // the board screen assembles portions client-side.
   getBoardProject: defineAction({
+    description: "Fetch one project's board portion: card projections with paginated done lanes.",
     request: z.object({
       slug: z.string(),
       doneOffset: z.number().int().min(0).optional(),
@@ -410,6 +394,7 @@ export const Actions = {
   // home/messages/settings contracts in lib/, typed on the
   // client in lib/api-types.ts.
   getHome: defineAction({
+    description: "Fetch the workspace home feed with per-project status summaries.",
     request: z.object({}),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -419,6 +404,7 @@ export const Actions = {
   }),
 
   getWorktrees: defineAction({
+    description: "Fetch one project's git worktrees with their derivations.",
     request: slugArg,
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -428,6 +414,7 @@ export const Actions = {
   }),
 
   getEffectiveSettings: defineAction({
+    description: "Fetch the companion server's effective settings and message-store status.",
     request: z.object({}),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -437,6 +424,7 @@ export const Actions = {
   }),
 
   getMessages: defineAction({
+    description: "Fetch inbox messages, optionally filtered by project, state, anchor, or pickup.",
     request: z.object({
       project: z.string().optional(),
       state: z.string().optional(),
@@ -459,6 +447,7 @@ export const Actions = {
   }),
 
   updateMessageBody: defineAction({
+    description: "Replace the body of one inbox message.",
     request: z.object({ id: z.number().int(), body: z.string() }),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -470,6 +459,7 @@ export const Actions = {
   }),
 
   createMessage: defineAction({
+    description: "Create a new inbox message or annotation.",
     request: z.object({ body: z.record(z.string(), z.unknown()) }),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -479,6 +469,7 @@ export const Actions = {
   }),
 
   sendMessage: defineAction({
+    description: "Send one drafted inbox message.",
     request: z.object({ id: z.number().int() }),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -488,6 +479,7 @@ export const Actions = {
   }),
 
   doneMessage: defineAction({
+    description: "Mark one inbox message as done.",
     request: z.object({ id: z.number().int() }),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -497,6 +489,7 @@ export const Actions = {
   }),
 
   archiveMessage: defineAction({
+    description: "Archive one inbox message.",
     request: z.object({ id: z.number().int() }),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -506,6 +499,7 @@ export const Actions = {
   }),
 
   cleanupMessages: defineAction({
+    description: "Run the inbox cleanup policy over old messages.",
     request: z.object({ body: z.record(z.string(), z.unknown()) }),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -521,6 +515,7 @@ export const Actions = {
   // lib/files.py, lib/repo_state.py contracts, typed on
   // the client in lib/api-types-repos.ts.
   getRepos: defineAction({
+    description: "Fetch the workspace repo census with sync and exposure summaries.",
     request: z.object({}),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -530,6 +525,7 @@ export const Actions = {
   }),
 
   getRepoStatus: defineAction({
+    description: "Fetch one repo's detailed git status, commits, and branches.",
     request: repoArg,
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -539,6 +535,7 @@ export const Actions = {
   }),
 
   getRepoFiles: defineAction({
+    description: "List one directory of a repo's file tree, or the full tree, for the Files view.",
     request: z.object({
       repoId: z.string().min(1),
       all: z.boolean().optional(),
@@ -557,6 +554,8 @@ export const Actions = {
   }),
 
   getRepoFile: defineAction({
+    description:
+      "Read one repo file for the peek and editor, optionally revealing a withheld secret-shaped file.",
     request: z.object({
       repoId: z.string().min(1),
       path: z.string().min(1),
@@ -576,6 +575,8 @@ export const Actions = {
   }),
 
   saveRepoFile: defineAction({
+    description:
+      "Save an edited repo file with compare-and-swap protection, preserving its permissions.",
     request: z.object({
       repoId: z.string().min(1),
       path: z.string().min(1),
@@ -602,6 +603,7 @@ export const Actions = {
   // the lib/datasets.py + lib/dataset_console.py
   // contracts, typed on the client in lib/api-types-repos.ts.
   getRepoDataset: defineAction({
+    description: "Describe a dataset file's schema for the Table view.",
     request: z.object({
       repoId: z.string().min(1),
       path: z.string().min(1),
@@ -621,6 +623,7 @@ export const Actions = {
   }),
 
   getRepoDatasetRows: defineAction({
+    description: "Fetch one bounded, sortable, filterable page of dataset rows.",
     request: z.object({
       repoId: z.string().min(1),
       path: z.string().min(1),
@@ -650,6 +653,7 @@ export const Actions = {
   }),
 
   getRepoDatasetStats: defineAction({
+    description: "Compute on-demand column statistics for a dataset file.",
     request: z.object({
       repoId: z.string().min(1),
       path: z.string().min(1),
@@ -669,6 +673,7 @@ export const Actions = {
   }),
 
   postRepoDatasetSql: defineAction({
+    description: "Run one guarded read-only SQL query against a dataset file.",
     request: z.object({
       repoId: z.string().min(1),
       path: z.string().min(1),
@@ -687,6 +692,7 @@ export const Actions = {
   }),
 
   getRepoHistory: defineAction({
+    description: "Fetch one repo's recorded status history and timeline.",
     request: repoArg,
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -696,6 +702,7 @@ export const Actions = {
   }),
 
   getReposRegistry: defineAction({
+    description: "Fetch the repo tracking registry the harness keeps for browsed repos.",
     request: z.object({}),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -705,6 +712,7 @@ export const Actions = {
   }),
 
   updateReposRegistry: defineAction({
+    description: "Update one entry of the repo tracking registry.",
     request: z.object({
       id: z.string().min(1),
       patch: z.record(z.string(), z.unknown()),
