@@ -7,7 +7,6 @@ project degrades only its own payload (common.degraded),
 never the request.
 """
 
-import hashlib
 import sys
 import threading
 import time
@@ -362,29 +361,16 @@ def _page_arg(query, key, default):
 
 
 def _registry_state(project) -> str:
-    """A stat-shape hash of the project's registry store
-    (the DB, its WAL, and the sibling export): the board
+    """The board cache's registry freshness signal: the
     portion's review queue derives from the registry, NOT
     from the .plans corpus the fingerprint covers, so a
     registry write (a review, a status ruling — through
     the viewer or the wb CLI) must move the board cache's
     freshness signal or the queue would serve stale
-    indefinitely."""
-    m = project.manifest
-    if m.registry is None:
-        return ""
-    h = hashlib.sha256()
-    candidates = [m.registry,
-                  Path(f"{m.registry}-wal"),
-                  m.registry.parent / "registry.json"]
-    for path in candidates:
-        try:
-            st = path.stat()
-        except OSError:
-            continue
-        h.update(f"{path.name}\0{st.st_size}\0"
-                 f"{st.st_mtime_ns}\n".encode("utf-8"))
-    return h.hexdigest()
+    indefinitely. The token itself is lib's (the store's
+    file layout is the registry module's private
+    business)."""
+    return reg.registry_state_token(project.manifest.registry)
 
 
 def board_project_feed(project, query=None) -> dict:

@@ -36,7 +36,7 @@ from .constants import (ACTORS, ENTRY_FIELDS, KINDS,
                         UniformityRefused, VersionConflict,
                         check_slug)
 from .store import (_append_history, _tx, connect,
-                    connect_readonly)
+                    connect_readonly, registry_state_token)
 from .entries import (add_entry, apply_export,
                       archive_entry, entry_dict,
                       get_entry, history_for,

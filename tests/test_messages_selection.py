@@ -8,6 +8,7 @@ Re-location lives in test_annotations.py; the HTTP round
 trip in test_server_annotations.py.
 """
 
+import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -58,6 +59,10 @@ def bare_db(path, scripts, version):
 class SelectionCase(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wb-sel-"))
+        # The tmp store is per-test scratch: remove it, or
+        # every suite run leaks twenty store dirs into /tmp.
+        self.addCleanup(shutil.rmtree, self.tmp,
+                        ignore_errors=True)
         self.db = self.tmp / "state" / "messages.db"
 
     def version(self):

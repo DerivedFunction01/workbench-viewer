@@ -408,5 +408,35 @@ class TestIsolation(unittest.TestCase):
             self.assertEqual(reg.list_todos(dbs[1]), [])
 
 
+class TestStateToken(Fixture):
+    """The state token is the seam cache consumers key
+    on (the board feed's freshness signal): it must move
+    on any store write and hold still otherwise."""
+
+    def test_no_registry_is_the_empty_token(self):
+        self.assertEqual(reg.registry_state_token(None), "")
+
+    def test_missing_store_is_stable(self):
+        ghost = self.root / "ghost" / "registry.db"
+        self.assertEqual(reg.registry_state_token(ghost),
+                         reg.registry_state_token(ghost))
+
+    def test_stable_without_writes(self):
+        self.assertEqual(reg.registry_state_token(self.db),
+                         reg.registry_state_token(self.db))
+
+    def test_moves_on_registry_write(self):
+        before = reg.registry_state_token(self.db)
+        self.add()
+        self.assertNotEqual(reg.registry_state_token(self.db),
+                            before)
+
+    def test_moves_on_export_write(self):
+        before = reg.registry_state_token(self.db)
+        export_mod.build_export(self.db)
+        self.assertNotEqual(reg.registry_state_token(self.db),
+                            before)
+
+
 if __name__ == "__main__":
     unittest.main()

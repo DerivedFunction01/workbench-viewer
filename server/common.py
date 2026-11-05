@@ -35,7 +35,8 @@ STARTED_AT = datetime.now(timezone.utc)
 
 _sweep_cache = {"at": 0.0, "result": None}
 _sweep_compute_lock = threading.Lock()
-_fingerprint_cache = {"map": {}}
+_fingerprint_cache = {"map": {}, "at": 0.0, "sweep": None}
+_fingerprint_lock = threading.Lock()
 
 
 def _git_head() -> str | None:
@@ -79,23 +80,14 @@ def get_sweep(force: bool = False):
             prune=CFG["sweep_prune"])
         _sweep_cache.update(at=time.monotonic(),
                             result=result)
-        # Auxiliary to the sweep's real job: a result
-        # without projects (never in production) simply
-        # leaves every feed uncached, never breaks
-        # discovery.
-        _fingerprint_cache["map"] = \
-            _compute_fingerprints(
-                getattr(result, "projects", None) or [])
         return result
 
 
 def _compute_fingerprints(projects) -> dict:
-    """Per-project content fingerprints (lib/fingerprint),
-    computed alongside the sweep under the same lock and
-    lifecycle: the fingerprint cadence IS the sweep
-    cadence, at one stat walk per project per sweep. The
-    walks fan out over the feed pool — stat calls are
-    syscall-bound, so the pool's threads genuinely help."""
+    """Per-project content fingerprints (lib/fingerprint):
+    one stat walk per project, fanned out over the feed
+    pool — stat calls are syscall-bound, so the pool's
+    threads genuinely help."""
     pairs = fan_out(
         lambda p: (p.slug,
                    fingerprint_mod.project_fingerprint(
@@ -114,11 +106,43 @@ def _compute_fingerprints(projects) -> dict:
             for slug, fps in by_slug.items()}
 
 
+def _fingerprints_fresh(result) -> bool:
+    """The cached fingerprint map is current when it was
+    computed from THIS sweep result (a re-discovery —
+    forced or TTL-expired — replaces the roots the walks
+    stand on) and is younger than the sweep cadence."""
+    return _fingerprint_cache["sweep"] is result \
+        and time.monotonic() - _fingerprint_cache["at"] \
+        < CFG["sweep_ttl_s"]
+
+
 def get_fingerprints() -> dict:
     """{slug: fingerprint} for the currently swept
-    projects, from the sweep-lifecycle cache above."""
-    get_sweep()
-    return dict(_fingerprint_cache["map"])
+    projects. Decoupled from the sweep compute (B5): the
+    walks stand on the last sweep's known project roots
+    and refresh on their own path — same cadence value as
+    the sweep TTL, single-flighted under their own lock,
+    synchronously on the first read past the cadence, so
+    a .plans write moves the fingerprint within the same
+    bound it always had — but a discovery walk no longer
+    pays the stat walks inside its lock, and fingerprints
+    can refresh between discoveries."""
+    result = get_sweep()
+    if _fingerprints_fresh(result):
+        return dict(_fingerprint_cache["map"])
+    with _fingerprint_lock:
+        # A racing caller may have refreshed while this
+        # one waited for the lock.
+        if _fingerprints_fresh(result):
+            return dict(_fingerprint_cache["map"])
+        # A result without projects (never in production)
+        # simply leaves every feed uncached, never breaks
+        # discovery.
+        fmap = _compute_fingerprints(
+            getattr(result, "projects", None) or [])
+        _fingerprint_cache.update(
+            map=fmap, at=time.monotonic(), sweep=result)
+        return dict(fmap)
 
 
 def combined_fingerprint() -> str:
