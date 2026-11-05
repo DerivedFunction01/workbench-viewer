@@ -67,6 +67,37 @@ If the runtime space scaffold ships its own `build.mjs`,
 the repo canonical copy is what `viewer.sh` syncs — the
 shim travels with the source.
 
+## Actions are unified (2026-11-05)
+
+`server/src/actions.ts` is the single maintained form of
+the action set: the bridge (in `server/src/bridge.ts` —
+the socket attempt plus its retry policy) and every
+action's description live in this repo, and a publish
+copies the files byte-for-byte instead of merging them
+against a space-side variant. Two consequences are
+load-bearing:
+
+- `server/src/config.ts` carries its env default in the
+  form the artifact's action validator accepts (`{}`;
+  env resolution is host-side in `privileged.ts`, so
+  the behavior is identical). Do not "restore" the
+  donor-style default — the publish would reject it.
+- The one standing exception to byte-copy sync is
+  `client/index.html`'s generated slug line, which is
+  the space's own identity marker and stays space-side.
+
+## Vendored SDK vs platform version
+
+The vendored `vendor/space-sdk` in this repo was
+verified byte-identical to the space's tree on
+2026-11-05, against platform version **28** (236 files).
+Every publish brief must require the builder to report
+the platform version it built against; when that
+version moves past the vendored build, queue an SDK
+fold-back (builder write-back, byte-verified, then
+pull) as its own pass — do not wait for a publish to
+fail on the drift.
+
 ## Configuration
 
 No machine paths or addresses are hardcoded in the synced
