@@ -17,6 +17,7 @@ import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
 import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "./shared";
+import { UpdatedAgo } from "./UpdatedAgo";
 import { ActivePlanLine, WorktreeChildren } from "./worktreeViews";
 
 /** Outline count badge (derived values only — the
@@ -330,12 +331,18 @@ export function HomeSection() {
           >
             Projects
           </span>
-          <span className="num" style={countBadgeStyle}>
-            {feed.projects.length}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--wb-space-8)" }}>
+            <UpdatedAgo capturedAt={feed.captured_at} />
+            <span className="num" style={countBadgeStyle}>
+              {feed.projects.length}
+            </span>
           </span>
         </div>
       ) : (
-        <h1 style={sectionTitleStyle}>Workspace</h1>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "var(--wb-space-12)" }}>
+          <h1 style={sectionTitleStyle}>Workspace</h1>
+          <UpdatedAgo capturedAt={feed.captured_at} />
+        </div>
       )}
       {sweepErrors.length > 0 ? (
         <p style={{ color: "var(--wb-danger)" }}>

@@ -51,6 +51,7 @@ import { InboxSection } from "./sections/Inbox";
 import { MockupsSection } from "./sections/Mockups";
 import { OverviewSection } from "./sections/Overview";
 import { PlansSection } from "./sections/Plans";
+import { RefreshButton } from "./sections/RefreshButton";
 import { ReposSection } from "./sections/Repos";
 import { SettingsSection } from "./sections/Settings";
 import { badgeStyle } from "./sections/shared";
@@ -488,6 +489,7 @@ export function App() {
             ) : null}
           </div>
           {headerBadge ? <span style={badgeStyle}>{headerBadge}</span> : null}
+          <RefreshButton />
         </header>
 
         <main
@@ -757,6 +759,7 @@ export function App() {
             Workbench Viewer
           </a>
           <span style={{ color: "var(--wb-content-secondary)" }}>{breadcrumb}</span>
+          <RefreshButton style={{ marginLeft: "auto" }} />
         </header>
 
         <main

@@ -168,6 +168,19 @@ export const Actions = {
     },
   }),
 
+  // Manual refresh (cache-refresh plan, design point 5):
+  // busts the companion's sweep + feed caches server-side;
+  // the client then invalidates every query so the whole
+  // shell re-reads fresh.
+  forceRefresh: defineAction({
+    request: z.object({}),
+    response: rawResult,
+    privileged: [privileged.wbApi],
+    async handler(ctx) {
+      return callServer<unknown>(ctx, "/api/refresh", "POST", {});
+    },
+  }),
+
   getMockups: defineAction({
     request: z.object({ slug: z.string().min(1), archived: z.boolean().optional() }),
     response: feedResult,

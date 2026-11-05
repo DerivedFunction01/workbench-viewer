@@ -30,6 +30,7 @@ import {
   SkeletonWell,
   sectionTitleStyle,
 } from "./shared";
+import { UpdatedAgo } from "./UpdatedAgo";
 
 const STATUSES = ["todo", "doing", "blocked", "done"] as const;
 
@@ -171,6 +172,7 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
     queryKey: ["todos", slug],
     queryFn: () => api.getProjectTodos({ slug }),
     enabled: scope === "project",
+    refetchInterval: 30000,
   });
   // "All projects" is assembled from ONE CALL PER PROJECT
   // (heavy-feed batching, 2026-11-01), not the /api/todos
@@ -191,6 +193,7 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
       queryKey: ["todos", p.slug],
       queryFn: () => api.getProjectTodos({ slug: p.slug }),
       enabled: scope === "all",
+      refetchInterval: 30000,
     })),
   });
   const allPortions: TodosFeed[] = [];
@@ -285,6 +288,16 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
       />
     );
   }
+  // The header's freshness label: the project feed's own
+  // stamp, or the oldest portion stamp in combined view.
+  const capturedAt =
+    scope === "project"
+      ? feed.captured_at
+      : allPortions.reduce<string | undefined>((oldest, f) => {
+          if (!f.captured_at) return oldest;
+          if (!oldest) return f.captured_at;
+          return Date.parse(f.captured_at) < Date.parse(oldest) ? f.captured_at : oldest;
+        }, undefined);
   const todos = scope === "project" ? (feed.todos ?? []) : allTodos;
   const open = todos.filter((todo) => todo.status !== "done");
   const done = todos.filter((todo) => todo.status === "done");
@@ -292,7 +305,10 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
 
   return (
     <section>
-      <h1 style={sectionTitleStyle}>Todos</h1>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--wb-space-12)" }}>
+        <h1 style={sectionTitleStyle}>Todos</h1>
+        <UpdatedAgo capturedAt={capturedAt} />
+      </div>
       {scope === "project" ? <DegradedBanner feed={feed} /> : null}
       <SegmentedControl
         ariaLabel="Todo scope"
