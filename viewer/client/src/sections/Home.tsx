@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { HomePayload, HomeRow } from "../lib/api-types";
 import { formatDate, formatRelative } from "../lib/format";
+import { homeKey } from "../lib/keys";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
@@ -290,7 +291,7 @@ function ProjectRow({ row }: { row: HomeRow }) {
 export function HomeSection() {
   const isPhone = useIsPhone();
   const query = useQuery({
-    queryKey: ["home"],
+    queryKey: homeKey,
     queryFn: () => api.getHome({}),
     refetchInterval: 30000,
   });

@@ -44,6 +44,7 @@ import { SegmentedControl } from "../../components/SegmentedControl";
 import { Toggle } from "../../components/Toggle";
 import { api } from "../../lib/api";
 import type { PlanDoc, PlanQuestion } from "../../lib/api-types";
+import { plansKey } from "../../lib/keys";
 import { scrollContentBy } from "../../lib/scroll";
 import { anchor } from "./anchors";
 import { MarkdownBlock } from "./PlanBody";
@@ -254,7 +255,7 @@ export function QuestionsPanel({ slug, path, doc }: { slug: string; path: string
           .catch(() => {
             void queryClient.invalidateQueries({ queryKey: ["plan", slug, path] });
           });
-        queryClient.invalidateQueries({ queryKey: ["plans", slug] });
+        queryClient.invalidateQueries({ queryKey: plansKey(slug) });
       } else if (result.status === 409) {
         // The file changed on disk: surface it, keep the
         // staged answers visible, write nothing.

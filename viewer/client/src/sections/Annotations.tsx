@@ -25,6 +25,7 @@ import type {
   TextSelection,
 } from "../lib/api-types";
 import { formatRelative } from "../lib/format";
+import { messagesKey, messagesRootKey } from "../lib/keys";
 import { useIsPhone } from "../lib/responsive";
 import { locateInText, type RelocationStatus } from "./plans/relocation";
 
@@ -74,7 +75,7 @@ export function groupThreads(messages: MessageItem[], anchorRef: string): Annota
  * acknowledged / done (archived never counts). */
 export function useAnnotationThreads(slug: string, anchorRef: string) {
   const query = useQuery({
-    queryKey: ["messages", slug],
+    queryKey: messagesKey(slug),
     queryFn: () => api.getMessages({ project: slug }),
   });
   const messages = useMemo(() => {
@@ -224,7 +225,7 @@ export function AnnotationComposer({
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["messages"] });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: messagesRootKey });
 
   async function ensureDraft(): Promise<number> {
     if (draftId.current != null) return draftId.current;
@@ -451,7 +452,7 @@ export function AnnotationThreadCard({
       }
       setReplyBody("");
       setReplyError(null);
-      queryClient.invalidateQueries({ queryKey: ["messages"] });
+      queryClient.invalidateQueries({ queryKey: messagesRootKey });
     },
   });
   const sel = root.selection;

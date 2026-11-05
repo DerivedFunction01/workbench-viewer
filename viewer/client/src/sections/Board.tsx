@@ -23,6 +23,7 @@ import type {
   ReviewItem,
   TodoItem,
 } from "../lib/api-types";
+import { boardKey, boardRootKey, plansRootKey, projectsKey, todosRootKey } from "../lib/keys";
 import { kindLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
@@ -143,7 +144,7 @@ export function BoardSection({
   // project's failure never parks the others. A project
   // scope fetches only its own portion.
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
+    queryKey: projectsKey,
     queryFn: () => api.listProjects({}),
   });
   const projectsPayload = projectsQuery.data?.payload as ProjectsPayload | undefined;
@@ -152,7 +153,7 @@ export function BoardSection({
 
   const portionQueries = useQueries({
     queries: targets.map((p) => ({
-      queryKey: ["board", p.slug],
+      queryKey: boardKey(p.slug),
       queryFn: () => api.getBoardProject({ slug: p.slug }),
       refetchInterval: 30000,
     })),
@@ -241,9 +242,9 @@ export function BoardSection({
     onSuccess: () => {
       setDoneExtra({});
       setDonePages(0);
-      void queryClient.invalidateQueries({ queryKey: ["board"] });
-      void queryClient.invalidateQueries({ queryKey: ["todos"] });
-      void queryClient.invalidateQueries({ queryKey: ["plans"] });
+      void queryClient.invalidateQueries({ queryKey: boardRootKey });
+      void queryClient.invalidateQueries({ queryKey: todosRootKey });
+      void queryClient.invalidateQueries({ queryKey: plansRootKey });
     },
   });
 

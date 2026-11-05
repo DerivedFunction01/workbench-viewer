@@ -16,6 +16,7 @@ import { Button } from "../../components/Button";
 import { api } from "../../lib/api";
 import type { EffectiveSettingsPayload } from "../../lib/api-types";
 import { formatCount, formatDateTime } from "../../lib/format";
+import { messagesRootKey } from "../../lib/keys";
 import { messageStateLabel } from "../../lib/labels";
 import { ErrorWell, SkeletonWell } from "../shared";
 
@@ -110,7 +111,7 @@ function MessagesPanel({ settings }: { settings: EffectiveSettingsPayload }) {
       void queryClient.invalidateQueries({
         queryKey: ["settings-effective"],
       });
-      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+      void queryClient.invalidateQueries({ queryKey: messagesRootKey });
     },
     onError: () => setResult("the cleanup call failed."),
   });

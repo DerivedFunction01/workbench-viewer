@@ -17,6 +17,7 @@ import { Badge } from "../components/Badge";
 import { api } from "../lib/api";
 import type { BundleItem, PlanSummary } from "../lib/api-types";
 import { formatDate, formatRelative } from "../lib/format";
+import { plansKey } from "../lib/keys";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
@@ -248,7 +249,7 @@ export function PlansSection({
   item: string | null;
 }) {
   const query = useQuery({
-    queryKey: ["plans", slug],
+    queryKey: plansKey(slug),
     queryFn: () => api.getPlans({ slug }),
     refetchInterval: 30000,
   });

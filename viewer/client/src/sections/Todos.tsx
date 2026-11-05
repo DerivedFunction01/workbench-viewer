@@ -17,6 +17,7 @@ import { Button } from "../components/Button";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { api } from "../lib/api";
 import type { TodoItem, TodosFeed } from "../lib/api-types";
+import { boardRootKey, plansRootKey, projectsKey, todosKey, todosRootKey } from "../lib/keys";
 import { todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
@@ -169,7 +170,7 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
   const queryClient = useQueryClient();
 
   const projectQuery = useQuery({
-    queryKey: ["todos", slug],
+    queryKey: todosKey(slug),
     queryFn: () => api.getProjectTodos({ slug }),
     enabled: scope === "project",
     refetchInterval: 30000,
@@ -183,14 +184,14 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
   // the per-project view uses, so they render as they land
   // and one project's failure never parks the others.
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
+    queryKey: projectsKey,
     queryFn: () => api.listProjects({}),
     enabled: scope === "all",
   });
   const allProjects = projectsQuery.data?.payload?.projects ?? [];
   const portionQueries = useQueries({
     queries: allProjects.map((p) => ({
-      queryKey: ["todos", p.slug],
+      queryKey: todosKey(p.slug),
       queryFn: () => api.getProjectTodos({ slug: p.slug }),
       enabled: scope === "all",
       refetchInterval: 30000,
@@ -245,9 +246,9 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
         body: { verb: "set-status", id: args.id, status: args.status },
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["todos"] });
-      void queryClient.invalidateQueries({ queryKey: ["board"] });
-      void queryClient.invalidateQueries({ queryKey: ["plans"] });
+      void queryClient.invalidateQueries({ queryKey: todosRootKey });
+      void queryClient.invalidateQueries({ queryKey: boardRootKey });
+      void queryClient.invalidateQueries({ queryKey: plansRootKey });
     },
   });
 

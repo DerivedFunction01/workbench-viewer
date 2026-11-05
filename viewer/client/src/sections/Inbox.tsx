@@ -16,6 +16,7 @@ import { SegmentedControl } from "../components/SegmentedControl";
 import { api } from "../lib/api";
 import type { MessageItem, MessagesPayload, ProjectSummary } from "../lib/api-types";
 import { formatDateTime } from "../lib/format";
+import { messagesKey, messagesRootKey, projectsKey } from "../lib/keys";
 import { messageStateLabel } from "../lib/labels";
 import { MessageComposer } from "./inbox/MessageComposer";
 import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "./shared";
@@ -83,7 +84,7 @@ function MessageActions({ message, onSelect }: { message: MessageItem; onSelect:
           ? api.doneMessage({ id: message.id })
           : api.archiveMessage({ id: message.id }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+      void queryClient.invalidateQueries({ queryKey: messagesRootKey });
     },
   });
   const busy = act.isPending;
@@ -164,7 +165,7 @@ export function InboxSection() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
+    queryKey: projectsKey,
     queryFn: () => api.listProjects({}),
   });
   const projects = useMemo<ProjectSummary[]>(
@@ -172,7 +173,7 @@ export function InboxSection() {
     [projectsQuery.data],
   );
   const messagesQuery = useQuery({
-    queryKey: ["messages", projectFilter],
+    queryKey: messagesKey(projectFilter),
     queryFn: () => api.getMessages(projectFilter ? { project: projectFilter } : {}),
     refetchInterval: 30000,
   });

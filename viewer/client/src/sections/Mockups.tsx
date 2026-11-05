@@ -18,6 +18,7 @@ import { SegmentedControl } from "../components/SegmentedControl";
 import { Toggle } from "../components/Toggle";
 import { TriageRow } from "../components/TriageRow";
 import { api } from "../lib/api";
+import { mockupsKey } from "../lib/keys";
 import { kindLabel, ruledStatusLabel } from "../lib/labels";
 import { AnchoredComment } from "./inbox/AnchoredComment";
 import {
@@ -116,7 +117,7 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
           feedEntry={entryById.get(selectedId) ?? null}
           onClose={() => setSelectedId(null)}
           onMutated={() => {
-            queryClient.invalidateQueries({ queryKey: ["mockups", slug] });
+            queryClient.invalidateQueries({ queryKey: mockupsKey(slug) });
           }}
         />
         {/* D7's second compose surface: a comment box

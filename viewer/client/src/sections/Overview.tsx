@@ -21,6 +21,7 @@ import { Card } from "../components/Card";
 import { api } from "../lib/api";
 import type { ActiveResolution, HomePayload, HomeRow, WorktreesPayload } from "../lib/api-types";
 import { formatDate, formatRelative } from "../lib/format";
+import { homeKey } from "../lib/keys";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { sectionHref } from "../lib/routing";
 import { AnchoredComment } from "./inbox/AnchoredComment";
@@ -212,7 +213,7 @@ function WorktreesCard({
 
 export function OverviewSection({ slug, projectName }: { slug: string; projectName: string }) {
   const homeQuery = useQuery({
-    queryKey: ["home"],
+    queryKey: homeKey,
     queryFn: () => api.getHome({}),
     refetchInterval: 30000,
   });
