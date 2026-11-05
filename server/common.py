@@ -8,6 +8,7 @@ the HTTP layer renders. Siblings import from here;
 nothing here imports a sibling (no cycles).
 """
 
+import hashlib
 import subprocess
 import threading
 import time
@@ -22,7 +23,9 @@ sys.path.insert(0, str(REPO_ROOT))  # for lib/
 sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 
 import config as cfgmod  # noqa: E402
+from lib import fingerprint as fingerprint_mod  # noqa: E402
 from lib import sweep as sweep_mod  # noqa: E402
+from lib.util import fan_out  # noqa: E402
 
 VERSION = "1.0.0"
 MAX_BODY = 1024 * 1024
@@ -32,6 +35,7 @@ STARTED_AT = datetime.now(timezone.utc)
 
 _sweep_cache = {"at": 0.0, "result": None}
 _sweep_compute_lock = threading.Lock()
+_fingerprint_cache = {"map": {}}
 
 
 def _git_head() -> str | None:
@@ -75,7 +79,57 @@ def get_sweep(force: bool = False):
             prune=CFG["sweep_prune"])
         _sweep_cache.update(at=time.monotonic(),
                             result=result)
+        # Auxiliary to the sweep's real job: a result
+        # without projects (never in production) simply
+        # leaves every feed uncached, never breaks
+        # discovery.
+        _fingerprint_cache["map"] = \
+            _compute_fingerprints(
+                getattr(result, "projects", None) or [])
         return result
+
+
+def _compute_fingerprints(projects) -> dict:
+    """Per-project content fingerprints (lib/fingerprint),
+    computed alongside the sweep under the same lock and
+    lifecycle: the fingerprint cadence IS the sweep
+    cadence, at one stat walk per project per sweep. The
+    walks fan out over the feed pool — stat calls are
+    syscall-bound, so the pool's threads genuinely help."""
+    pairs = fan_out(
+        lambda p: (p.slug,
+                   fingerprint_mod.project_fingerprint(
+                       p.root)),
+        projects, workers=CFG["feed_pool_workers"])
+    by_slug: dict = {}
+    for slug, fp in pairs:
+        by_slug.setdefault(slug, []).append(fp)
+    # A slug borne by two swept roots (a repo and its
+    # checkout) folds both walks into one value, so a
+    # write to either root moves the slug's fingerprint.
+    return {slug: fps[0] if len(fps) == 1 else
+            hashlib.sha256(
+                "\n".join(sorted(fps)).encode("utf-8"))
+            .hexdigest()
+            for slug, fps in by_slug.items()}
+
+
+def get_fingerprints() -> dict:
+    """{slug: fingerprint} for the currently swept
+    projects, from the sweep-lifecycle cache above."""
+    get_sweep()
+    return dict(_fingerprint_cache["map"])
+
+
+def combined_fingerprint() -> str:
+    """One hash over every project's fingerprint (sorted
+    slug:fp pairs) — the home feed's change signal: any
+    project's corpus moving moves the combination."""
+    fps = get_fingerprints()
+    h = hashlib.sha256()
+    for slug in sorted(fps):
+        h.update(f"{slug}:{fps[slug]}\n".encode("utf-8"))
+    return h.hexdigest()
 
 
 def find_project(slug: str):

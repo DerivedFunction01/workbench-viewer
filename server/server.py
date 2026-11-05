@@ -40,6 +40,7 @@ sys.path.insert(0, str(REPO_ROOT))  # for lib/
 sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 
 import config as cfgmod  # noqa: E402
+import feedcache  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import messages as msg_mod  # noqa: E402
@@ -349,6 +350,21 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["api", "projects", "rescan"]:
             result = get_sweep(force=True)
             return self._send(200, result.summary())
+        if parts == ["api", "refresh"]:
+            # The manual escape hatch (cache-refresh plan,
+            # 2026-11-05): force the sweep — which also
+            # recomputes the per-project fingerprints —
+            # and bust every feed cache, so the next read
+            # of any feed re-derives from disk.
+            result = get_sweep(force=True)
+            _repos_invalidate_cache()
+            _home_invalidate_cache()
+            feedcache.invalidate_all()
+            return self._send(200, {
+                "ok": True,
+                "projects": len(result.projects),
+                "invalidated": ["sweep", "home", "repos",
+                                "feeds"]})
         if parts == ["api", "repos", "registry"]:
             body = self._body()
             repo_id = body.get("id")
@@ -407,16 +423,23 @@ class Handler(BaseHTTPRequestHandler):
                 and parts[1] == "projects" \
                 and parts[3] == "todos":
             project = self._project_or_404(parts[2])
-            return self._send(200,
-                              todo_action(project, self._body()))
+            result = todo_action(project, self._body())
+            # The server's own .plans writes invalidate
+            # the keyed feed caches immediately (the
+            # registry-curation precedent): the fingerprint
+            # only re-derives on the sweep cadence, and the
+            # client's post-drag refetch must not be served
+            # the pre-move payload.
+            feedcache.invalidate_all()
+            return self._send(200, result)
         if len(parts) == 5 and parts[0] == "api" \
                 and parts[1] == "projects" \
                 and parts[3] == "plan" \
                 and parts[4] == "resolve":
             project = self._project_or_404(parts[2])
-            return self._send(200,
-                              plan_resolve(project,
-                                           self._body()))
+            result = plan_resolve(project, self._body())
+            feedcache.invalidate_all()
+            return self._send(200, result)
         if len(parts) == 6 and parts[0] == "api" \
                 and parts[1] == "projects" \
                 and parts[3] == "entries" \
