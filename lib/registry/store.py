@@ -6,6 +6,7 @@ user_version migration), the one-transaction context,
 and the row/history helpers every mutation builds on.
 """
 
+import hashlib
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -29,6 +30,33 @@ def connect(db_path, *, busy_timeout_ms: int = 5000,
     conn.execute("PRAGMA journal_mode = WAL")
     _migrate(conn)
     return conn
+
+
+def registry_state_token(db_path) -> str:
+    """A stat-shape hash of the store's files: the DB,
+    its WAL, and the generated export beside it. Consumers
+    that cache derivations over the registry key on this
+    token instead of statting the store's files
+    themselves — which files make up the store is this
+    module's private business. No registry (None) reads
+    as the empty token; files that do not exist yet are
+    skipped, and any write to any of the three moves
+    the token."""
+    if db_path is None:
+        return ""
+    db_path = Path(db_path)
+    h = hashlib.sha256()
+    candidates = [db_path,
+                  Path(f"{db_path}-wal"),
+                  db_path.with_name("registry.json")]
+    for path in candidates:
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        h.update(f"{path.name}\0{st.st_size}\0"
+                 f"{st.st_mtime_ns}\n".encode("utf-8"))
+    return h.hexdigest()
 
 
 def connect_readonly(db_path, *, busy_timeout_ms: int = 250):

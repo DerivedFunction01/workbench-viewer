@@ -11,6 +11,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "../../components/Button";
 import { api } from "../../lib/api";
+import { messagesRootKey } from "../../lib/keys";
 import { metaStyle } from "../shared";
 
 const ANCHOR_TYPES = ["none", "plan", "todo", "entry", "repo"] as const;
@@ -74,7 +75,7 @@ export function MessageComposer({
       }
       setBody("");
       setError(null);
-      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+      void queryClient.invalidateQueries({ queryKey: messagesRootKey });
       onPosted?.();
     },
     onError: () => setError("the message could not be saved."),

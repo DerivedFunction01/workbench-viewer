@@ -17,6 +17,7 @@ import { Badge } from "../components/Badge";
 import { api } from "../lib/api";
 import type { BundleItem, PlanSummary } from "../lib/api-types";
 import { formatDate, formatRelative } from "../lib/format";
+import { plansKey } from "../lib/keys";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
@@ -34,6 +35,7 @@ import {
   SkeletonWell,
   sectionTitleStyle,
 } from "./shared";
+import { UpdatedAgo } from "./UpdatedAgo";
 
 function bundleTitle(bundle: BundleItem): string {
   return bundle.plan?.title || bundle.id;
@@ -247,8 +249,9 @@ export function PlansSection({
   item: string | null;
 }) {
   const query = useQuery({
-    queryKey: ["plans", slug],
+    queryKey: plansKey(slug),
     queryFn: () => api.getPlans({ slug }),
+    refetchInterval: 30000,
   });
 
   if (query.isPending) return <SkeletonWell label={`plans for ${projectName}`} />;
@@ -277,7 +280,10 @@ export function PlansSection({
 
   return (
     <section>
-      <h1 style={sectionTitleStyle}>Plans</h1>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--wb-space-12)" }}>
+        <h1 style={sectionTitleStyle}>Plans</h1>
+        <UpdatedAgo capturedAt={feed.captured_at} />
+      </div>
       <DegradedBanner feed={feed} />
       {item ? (
         <PlanReader

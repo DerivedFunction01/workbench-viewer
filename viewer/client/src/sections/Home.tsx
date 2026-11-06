@@ -13,10 +13,12 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { HomePayload, HomeRow } from "../lib/api-types";
 import { formatDate, formatRelative } from "../lib/format";
+import { homeKey } from "../lib/keys";
 import { planBucketLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
 import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "./shared";
+import { UpdatedAgo } from "./UpdatedAgo";
 import { ActivePlanLine, WorktreeChildren } from "./worktreeViews";
 
 /** Outline count badge (derived values only — the
@@ -289,7 +291,7 @@ function ProjectRow({ row }: { row: HomeRow }) {
 export function HomeSection() {
   const isPhone = useIsPhone();
   const query = useQuery({
-    queryKey: ["home"],
+    queryKey: homeKey,
     queryFn: () => api.getHome({}),
     refetchInterval: 30000,
   });
@@ -330,12 +332,18 @@ export function HomeSection() {
           >
             Projects
           </span>
-          <span className="num" style={countBadgeStyle}>
-            {feed.projects.length}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--wb-space-8)" }}>
+            <UpdatedAgo capturedAt={feed.captured_at} />
+            <span className="num" style={countBadgeStyle}>
+              {feed.projects.length}
+            </span>
           </span>
         </div>
       ) : (
-        <h1 style={sectionTitleStyle}>Workspace</h1>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "var(--wb-space-12)" }}>
+          <h1 style={sectionTitleStyle}>Workspace</h1>
+          <UpdatedAgo capturedAt={feed.captured_at} />
+        </div>
       )}
       {sweepErrors.length > 0 ? (
         <p style={{ color: "var(--wb-danger)" }}>

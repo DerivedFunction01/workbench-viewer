@@ -14,7 +14,7 @@ import tempfile
 import time
 import unittest
 import urllib.request
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 from lib import registry as reg
@@ -67,8 +67,11 @@ def make_project(ws: Path) -> Path:
         "1. One thing.\n", encoding="utf-8")
     (plans / f"{OLD}-done-plan.md").write_text(
         "# Done plan\n\nStatus: complete\n", encoding="utf-8")
-    # a fresh bundle + todo, born today
-    today = date.today().isoformat()
+    # a fresh bundle + todo, born today — on the derivation's
+    # clock (lib/staleness.py ages work against the UTC date;
+    # a local-date fixture reads as a day old whenever the
+    # local and UTC dates differ)
+    today = datetime.now(timezone.utc).date().isoformat()
     fresh = plans / f"{today}-fresh-work" / "todos"
     fresh.mkdir(parents=True)
     (fresh / "01-fresh-todo.md").write_text(TODO_TMPL.format(

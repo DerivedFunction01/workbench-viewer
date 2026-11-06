@@ -737,6 +737,25 @@ surfaces are removed, not carried — the route, its
 action, and its derivation are gone, and portions are
 the only board surface.
 
+**Refresh (cache-refresh, 2026-11-05).** Feeds are
+cached against what they derive from. A per-project
+content fingerprint — a stat walk of the project's
+`.plans` tree and manifest, recomputed with every
+sweep — keys the board, plans, and todos feed caches
+(the board key also carries the project's registry
+state, an input to its review queue): an unchanged
+fingerprint serves the cached payload; a moved one
+serves stale while one background thread recomputes.
+The home feed treats a moved combined fingerprint the
+same way; the repos census keeps its TTL, as git state
+has no file fingerprint. Every cached payload stamps
+`captured_at`, and the polling sections show its age.
+The client's Board, Plans, and Todos sections poll on
+the same 30 s cadence as the rest of the shell, and a
+shell refresh control (`POST /api/refresh`) forces the
+sweep and busts every feed cache, so a manual refresh
+never waits out a bound.
+
 ### 8.5 Artifacts
 
 Per project: the sibling collection beside Mockups —

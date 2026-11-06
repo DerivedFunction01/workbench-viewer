@@ -19,9 +19,7 @@ export interface CompanionAddress {
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8792;
 
-export function companionAddress(
-  env: Record<string, string | undefined> = Bun.env,
-): CompanionAddress {
+export function companionAddress(env: Record<string, string | undefined> = {}): CompanionAddress {
   const rawPort = env.WB_VIEWER_PORT;
   const parsed = rawPort ? Number.parseInt(rawPort, 10) : Number.NaN;
   const port = Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : DEFAULT_PORT;

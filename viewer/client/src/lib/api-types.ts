@@ -53,6 +53,7 @@ export interface FeedEnvelope {
   degraded: boolean;
   available: boolean;
   reason?: string;
+  captured_at?: string;
 }
 
 export interface MockupEntry {
@@ -429,6 +430,7 @@ export interface DiffPeekPayload {
 export interface BoardProjectPayload {
   slug: string;
   name: string;
+  captured_at?: string;
   todos: Record<string, TodoItem[]>;
   plans: Record<string, BoardPlan[]>;
   review_queue: ReviewItem[];

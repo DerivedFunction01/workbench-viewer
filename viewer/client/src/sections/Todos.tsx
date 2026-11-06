@@ -17,6 +17,7 @@ import { Button } from "../components/Button";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { api } from "../lib/api";
 import type { TodoItem, TodosFeed } from "../lib/api-types";
+import { boardRootKey, plansRootKey, projectsKey, todosKey, todosRootKey } from "../lib/keys";
 import { todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
@@ -30,6 +31,7 @@ import {
   SkeletonWell,
   sectionTitleStyle,
 } from "./shared";
+import { UpdatedAgo } from "./UpdatedAgo";
 
 const STATUSES = ["todo", "doing", "blocked", "done"] as const;
 
@@ -168,9 +170,10 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
   const queryClient = useQueryClient();
 
   const projectQuery = useQuery({
-    queryKey: ["todos", slug],
+    queryKey: todosKey(slug),
     queryFn: () => api.getProjectTodos({ slug }),
     enabled: scope === "project",
+    refetchInterval: 30000,
   });
   // "All projects" is assembled from ONE CALL PER PROJECT
   // (heavy-feed batching, 2026-11-01), not the /api/todos
@@ -181,16 +184,17 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
   // the per-project view uses, so they render as they land
   // and one project's failure never parks the others.
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
+    queryKey: projectsKey,
     queryFn: () => api.listProjects({}),
     enabled: scope === "all",
   });
   const allProjects = projectsQuery.data?.payload?.projects ?? [];
   const portionQueries = useQueries({
     queries: allProjects.map((p) => ({
-      queryKey: ["todos", p.slug],
+      queryKey: todosKey(p.slug),
       queryFn: () => api.getProjectTodos({ slug: p.slug }),
       enabled: scope === "all",
+      refetchInterval: 30000,
     })),
   });
   const allPortions: TodosFeed[] = [];
@@ -242,9 +246,9 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
         body: { verb: "set-status", id: args.id, status: args.status },
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["todos"] });
-      void queryClient.invalidateQueries({ queryKey: ["board"] });
-      void queryClient.invalidateQueries({ queryKey: ["plans"] });
+      void queryClient.invalidateQueries({ queryKey: todosRootKey });
+      void queryClient.invalidateQueries({ queryKey: boardRootKey });
+      void queryClient.invalidateQueries({ queryKey: plansRootKey });
     },
   });
 
@@ -285,6 +289,16 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
       />
     );
   }
+  // The header's freshness label: the project feed's own
+  // stamp, or the oldest portion stamp in combined view.
+  const capturedAt =
+    scope === "project"
+      ? feed.captured_at
+      : allPortions.reduce<string | undefined>((oldest, f) => {
+          if (!f.captured_at) return oldest;
+          if (!oldest) return f.captured_at;
+          return Date.parse(f.captured_at) < Date.parse(oldest) ? f.captured_at : oldest;
+        }, undefined);
   const todos = scope === "project" ? (feed.todos ?? []) : allTodos;
   const open = todos.filter((todo) => todo.status !== "done");
   const done = todos.filter((todo) => todo.status === "done");
@@ -292,7 +306,10 @@ export function TodosSection({ slug, projectName }: { slug: string; projectName:
 
   return (
     <section>
-      <h1 style={sectionTitleStyle}>Todos</h1>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--wb-space-12)" }}>
+        <h1 style={sectionTitleStyle}>Todos</h1>
+        <UpdatedAgo capturedAt={capturedAt} />
+      </div>
       {scope === "project" ? <DegradedBanner feed={feed} /> : null}
       <SegmentedControl
         ariaLabel="Todo scope"

@@ -23,11 +23,13 @@ import type {
   ReviewItem,
   TodoItem,
 } from "../lib/api-types";
+import { boardKey, boardRootKey, plansRootKey, projectsKey, todosRootKey } from "../lib/keys";
 import { kindLabel, todoStatusLabel } from "../lib/labels";
 import { useIsPhone } from "../lib/responsive";
 import { sectionHref } from "../lib/routing";
 import { anchor } from "./plans/anchors";
 import { EmptyWell, ErrorWell, SkeletonWell, sectionTitleStyle } from "./shared";
+import { UpdatedAgo } from "./UpdatedAgo";
 
 const TODO_LANES = ["todo", "doing", "blocked", "done"] as const;
 type TodoLane = (typeof TODO_LANES)[number];
@@ -142,7 +144,7 @@ export function BoardSection({
   // project's failure never parks the others. A project
   // scope fetches only its own portion.
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
+    queryKey: projectsKey,
     queryFn: () => api.listProjects({}),
   });
   const projectsPayload = projectsQuery.data?.payload as ProjectsPayload | undefined;
@@ -151,8 +153,9 @@ export function BoardSection({
 
   const portionQueries = useQueries({
     queries: targets.map((p) => ({
-      queryKey: ["board", p.slug],
+      queryKey: boardKey(p.slug),
       queryFn: () => api.getBoardProject({ slug: p.slug }),
+      refetchInterval: 30000,
     })),
   });
   const portions: BoardProjectPayload[] = [];
@@ -239,9 +242,9 @@ export function BoardSection({
     onSuccess: () => {
       setDoneExtra({});
       setDonePages(0);
-      void queryClient.invalidateQueries({ queryKey: ["board"] });
-      void queryClient.invalidateQueries({ queryKey: ["todos"] });
-      void queryClient.invalidateQueries({ queryKey: ["plans"] });
+      void queryClient.invalidateQueries({ queryKey: boardRootKey });
+      void queryClient.invalidateQueries({ queryKey: todosRootKey });
+      void queryClient.invalidateQueries({ queryKey: plansRootKey });
     },
   });
 
@@ -252,6 +255,14 @@ export function BoardSection({
   if (targets.length > 0 && portions.length === 0) {
     return <ErrorWell section="Board" message="the board feed could not be loaded." />;
   }
+  // The header's freshness label reads the OLDEST
+  // portion stamp — the board is only as fresh as its
+  // stalest project.
+  const capturedAt = portions.reduce<string | undefined>((oldest, p) => {
+    if (!p.captured_at) return oldest;
+    if (!oldest) return p.captured_at;
+    return Date.parse(p.captured_at) < Date.parse(oldest) ? p.captured_at : oldest;
+  }, undefined);
   const review = portions.flatMap((p) => p.review_queue);
   const todosIn = (lane: TodoLane): TodoItem[] =>
     portions.flatMap((p) => [
@@ -372,7 +383,10 @@ export function BoardSection({
 
   return (
     <section>
-      <h1 style={sectionTitleStyle}>Board</h1>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--wb-space-12)" }}>
+        <h1 style={sectionTitleStyle}>Board</h1>
+        <UpdatedAgo capturedAt={capturedAt} />
+      </div>
       {mutation.isError ? (
         <p role="alert" style={{ color: "var(--wb-danger)" }}>
           The move was refused — the card&rsquo;s file was not changed. Reload the board to see its

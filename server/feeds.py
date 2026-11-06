@@ -30,8 +30,27 @@ from lib.plans import bundles as bundle_parser  # noqa: E402
 from lib.plans import parser as plan_parser  # noqa: E402
 from lib.util import now_iso  # noqa: E402
 
-from common import (CFG, ApiError, degraded,  # noqa: E402
-                    get_sweep, layout_of)
+import feedcache  # noqa: E402
+from common import (CFG, ApiError,  # noqa: E402
+                    combined_fingerprint, degraded,
+                    get_fingerprints, get_sweep, layout_of)
+
+# ----------------------------------------------------------------
+# Fingerprint-keyed feed caches (cache-refresh plan,
+# 2026-11-05): the file-derived per-project feeds (todos,
+# plans, board portions) serve from these keyed SWR
+# caches, fresh-tested against the project's sweep
+# fingerprint (common.get_fingerprints) instead of a
+# wall-clock TTL — an untouched corpus serves cache
+# indefinitely, and any write in it recomputes exactly
+# that project's feeds on the next read. A project the
+# sweep does not know (a unit-test fixture) has no
+# fingerprint and computes directly, uncached.
+# ----------------------------------------------------------------
+
+_todos_cache = feedcache.KeyedFeedCache()
+_plans_cache = feedcache.KeyedFeedCache()
+_board_cache = feedcache.KeyedFeedCache()
 
 # ----------------------------------------------------------------
 # Feed builders (reads; each contained per project)
@@ -134,6 +153,21 @@ def _attach_work_staleness(bundles,
 
 
 def todos_feed(project, *, bundles=None) -> dict:
+    """The project's todos feed, fingerprint-cached (see
+    the cache note at the top of this module). A caller
+    passing a shared bundles parse (the board portion)
+    bypasses the cache and computes directly."""
+    if bundles is not None:
+        return _todos_feed_compute(project, bundles)
+    fp = get_fingerprints().get(project.slug)
+    if fp is None:
+        return _todos_feed_compute(project)
+    return _todos_cache.get(
+        project.slug, fp,
+        lambda: _todos_feed_compute(project))
+
+
+def _todos_feed_compute(project, bundles=None) -> dict:
     """Todos read from bundle todo FILES (live-work spec
     §3.7: file todos supersede the registry DB). The DB is
     read ONLY as the §3.7 fallback — a project with DB
@@ -144,7 +178,7 @@ def todos_feed(project, *, bundles=None) -> dict:
     parser errors ride on the feed — never a silent skip."""
     m = project.manifest
     base = {"slug": project.slug, "name": project.name,
-            "degraded": False,
+            "degraded": False, "captured_at": now_iso(),
             "stale_warning_days": CFG["stale_warning_days"]}
     file_todos, errors = [], []
     if m.plans is not None and m.plans.is_dir():
@@ -197,9 +231,24 @@ def todos_feed(project, *, bundles=None) -> dict:
 
 
 def plans_feed(project, *, bundles=None) -> dict:
+    """The project's plans feed, fingerprint-cached (see
+    the cache note at the top of this module). A caller
+    passing a shared bundles parse (the board portion)
+    bypasses the cache and computes directly."""
+    if bundles is not None:
+        return _plans_feed_compute(project, bundles)
+    fp = get_fingerprints().get(project.slug)
+    if fp is None:
+        return _plans_feed_compute(project)
+    return _plans_cache.get(
+        project.slug, fp,
+        lambda: _plans_feed_compute(project))
+
+
+def _plans_feed_compute(project, bundles=None) -> dict:
     m = project.manifest
     base = {"slug": project.slug, "name": project.name,
-            "degraded": False,
+            "degraded": False, "captured_at": now_iso(),
             "stale_warning_days": CFG["stale_warning_days"]}
     if m.plans is None or not m.plans.is_dir():
         return {**base, "available": False, "plans": [],
@@ -275,8 +324,8 @@ def _plans_bundle(bundle) -> dict:
 # feeds) and its DONE lanes are paginated: the response
 # carries the first page plus the lane totals, and further
 # pages ride the same endpoint via done_offset/done_limit.
-# Portions are live-derived per request — each is
-# independently cheap, so no cache is needed — and one
+# Portions are fingerprint-cached per done-page (the
+# cache note at the top of this module), and one
 # project's degradation lands in its own portion's errors,
 # never in another portion's payload.
 # ----------------------------------------------------------------
@@ -311,12 +360,46 @@ def _page_arg(query, key, default):
         return default
 
 
+def _registry_state(project) -> str:
+    """The board cache's registry freshness signal: the
+    portion's review queue derives from the registry, NOT
+    from the .plans corpus the fingerprint covers, so a
+    registry write (a review, a status ruling — through
+    the viewer or the wb CLI) must move the board cache's
+    freshness signal or the queue would serve stale
+    indefinitely. The token itself is lib's (the store's
+    file layout is the registry module's private
+    business)."""
+    return reg.registry_state_token(project.manifest.registry)
+
+
 def board_project_feed(project, query=None) -> dict:
+    """One project's board portion, fingerprint-cached
+    per normalized done-page (see the cache note at the
+    top of this module): the cache key carries the page
+    because the payload's done lanes are sliced by it,
+    plus the registry state (see _registry_state): a
+    registry write changes the key, so the next read
+    computes fresh on the request path rather than
+    serving the pre-review queue stale."""
     query = query or {}
     offset = max(0, _page_arg(query, "done_offset", 0))
     limit = _page_arg(query, "done_limit",
                       CFG["board_done_page"])
     limit = max(1, min(limit, 500))
+    fp = get_fingerprints().get(project.slug)
+    if fp is None:
+        return _board_project_feed_compute(project, offset,
+                                           limit)
+    return _board_cache.get(
+        (project.slug, offset, limit,
+         _registry_state(project)), fp,
+        lambda: _board_project_feed_compute(project, offset,
+                                            limit))
+
+
+def _board_project_feed_compute(project, offset,
+                                limit) -> dict:
     errors = []
     lanes = {"todo": [], "doing": [], "blocked": [],
              "done": []}
@@ -334,7 +417,7 @@ def board_project_feed(project, query=None) -> dict:
                 CFG["stale_warning_days"])
         except Exception:
             shared = None
-    tf = todos_feed(project, bundles=shared)
+    tf = _todos_feed_compute(project, bundles=shared)
     if tf["degraded"]:
         errors.append({"slug": project.slug,
                        "reason": tf["reason"]})
@@ -347,7 +430,7 @@ def board_project_feed(project, query=None) -> dict:
         lanes[todo["status"]].append(
             _todo_card(todo, project))
     plan_cards = {"todo": [], "doing": [], "done": []}
-    pf = plans_feed(project, bundles=shared)
+    pf = _plans_feed_compute(project, bundles=shared)
     if pf.get("degraded"):
         errors.append({"slug": project.slug,
                        "reason": pf["reason"]})
@@ -373,7 +456,7 @@ def board_project_feed(project, query=None) -> dict:
     }
     return {
         "slug": project.slug, "name": project.name,
-        "degraded": False,
+        "degraded": False, "captured_at": now_iso(),
         "todos": {**lanes,
                   "done": lanes["done"][offset:offset + limit]},
         "plans": {**plan_cards,
@@ -397,10 +480,14 @@ def board_project_feed(project, query=None) -> dict:
 # derives (registry curation, a guarded repo save)
 # invalidate — and the generation counter keeps a
 # payload computed across an invalidation from being
-# stored.
+# stored. The combined sweep fingerprint is a second,
+# external-write invalidation source: the payload also
+# records the fingerprint it was computed under, and a
+# read that finds it moved serves stale and refreshes
+# exactly as a TTL expiry does.
 # ----------------------------------------------------------------
 
-_home_cache = {"at": 0.0, "result": None}
+_home_cache = {"at": 0.0, "result": None, "fp": None}
 _home_state_lock = threading.Lock()
 _home_compute_lock = threading.Lock()
 _home_refreshing = False
@@ -411,14 +498,14 @@ def _home_invalidate_cache() -> None:
     global _home_generation
     with _home_state_lock:
         _home_generation += 1
-        _home_cache.update(at=0.0, result=None)
+        _home_cache.update(at=0.0, result=None, fp=None)
 
 
-def _home_store(result, generation: int) -> None:
+def _home_store(result, generation: int, fp) -> None:
     with _home_state_lock:
         if generation == _home_generation:
             _home_cache.update(at=time.monotonic(),
-                               result=result)
+                               result=result, fp=fp)
 
 
 def _compute_home_feed() -> dict:
@@ -439,7 +526,8 @@ def _home_refresh_background() -> None:
     try:
         with _home_state_lock:
             generation = _home_generation
-        _home_store(_compute_home_feed(), generation)
+        fp = combined_fingerprint()
+        _home_store(_compute_home_feed(), generation, fp)
     except Exception as e:
         # The stale payload keeps serving; the next stale
         # request kicks another refresh.
@@ -463,11 +551,18 @@ def _home_kick_refresh() -> None:
 def home_feed() -> dict:
     """GET /api/home: the cached home payload (see the
     cache note above); captured_at is when the payload
-    was computed, not when it was served."""
+    was computed, not when it was served. Fresh means
+    BOTH inside the TTL and computed under the current
+    combined fingerprint (cache-refresh plan, 2026-11-05):
+    any project's corpus moving makes the payload stale
+    on the next read, however much TTL remains — it still
+    serves stale while the refresh runs behind it."""
     cached = _home_cache["result"]
     if cached is not None:
         if time.monotonic() - _home_cache["at"] \
-                < CFG["repos_ttl_s"]:
+                < CFG["repos_ttl_s"] \
+                and _home_cache["fp"] \
+                == combined_fingerprint():
             return cached
         _home_kick_refresh()
         return cached
@@ -479,8 +574,9 @@ def home_feed() -> dict:
             return cached
         with _home_state_lock:
             generation = _home_generation
+        fp = combined_fingerprint()
         result = _compute_home_feed()
-        _home_store(result, generation)
+        _home_store(result, generation, fp)
         return result
 
 

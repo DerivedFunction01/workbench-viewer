@@ -19,6 +19,7 @@ import { SegmentedControl } from "../components/SegmentedControl";
 import { Toggle } from "../components/Toggle";
 import { TriageRow } from "../components/TriageRow";
 import { api } from "../lib/api";
+import { artifactsKey } from "../lib/keys";
 import { sectionHref } from "../lib/routing";
 import { ArtifactDetail } from "./artifacts/ArtifactDetail";
 import type { ArtifactsFeed, Envelope, FullEntry } from "./artifacts/types";
@@ -126,7 +127,7 @@ export function ArtifactsSection({
           feedEntry={entryById.get(selectedId) ?? null}
           onClose={closeDetail}
           onMutated={() => {
-            queryClient.invalidateQueries({ queryKey: ["artifacts", slug] });
+            queryClient.invalidateQueries({ queryKey: artifactsKey(slug) });
           }}
         />
         <div style={{ marginTop: "var(--wb-space-16)" }}>
