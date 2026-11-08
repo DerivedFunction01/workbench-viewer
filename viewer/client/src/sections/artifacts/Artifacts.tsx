@@ -10,20 +10,18 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Button } from "../components/Button";
-import { Chip } from "../components/Chip";
-import { DegradedBanner as KitDegradedBanner } from "../components/DegradedBanner";
-import { EmptyState } from "../components/EmptyState";
-import { Frame } from "../components/Frame";
-import { SegmentedControl } from "../components/SegmentedControl";
-import { Toggle } from "../components/Toggle";
-import { TriageRow } from "../components/TriageRow";
-import { api } from "../lib/api";
-import { artifactsKey } from "../lib/keys";
-import { sectionHref } from "../lib/routing";
-import { ArtifactDetail } from "./artifacts/ArtifactDetail";
-import type { ArtifactsFeed, Envelope, FullEntry } from "./artifacts/types";
-import { AnchoredComment } from "./inbox/AnchoredComment";
+import { Button } from "../../components/Button";
+import { Chip } from "../../components/Chip";
+import { DegradedBanner as KitDegradedBanner } from "../../components/DegradedBanner";
+import { EmptyState } from "../../components/EmptyState";
+import { Frame } from "../../components/Frame";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { Toggle } from "../../components/Toggle";
+import { TriageRow } from "../../components/TriageRow";
+import { api } from "../../lib/api";
+import { artifactsKey } from "../../lib/keys";
+import { sectionHref } from "../../lib/routing";
+import { AnchoredComment } from "../inbox/AnchoredComment";
 import {
   DEFAULT_FILTERS,
   EntryBadges,
@@ -32,9 +30,11 @@ import {
   filterEntries,
   isRuledStatus,
   PreviewSummary,
-} from "./mockups/helpers";
-import { RULED_STATUSES } from "./mockups/types";
-import { DegradedBanner, ErrorWell, SkeletonWell, sectionTitleStyle } from "./shared";
+} from "../mockups/helpers";
+import { RULED_STATUSES } from "../mockups/types";
+import { DegradedBanner, ErrorWell, SkeletonWell, sectionTitleStyle } from "../shared";
+import { ArtifactDetail } from "./ArtifactDetail";
+import type { ArtifactsFeed, Envelope, FullEntry } from "./types";
 
 const headingStyle: React.CSSProperties = {
   fontSize: "var(--wb-font-size-xs)",

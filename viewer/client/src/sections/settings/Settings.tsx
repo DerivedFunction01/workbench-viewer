@@ -14,14 +14,14 @@
 // switching over the shipped themes bundle, SPEC §11.2) and
 // persisted client-side by the caller (lib/preferences).
 
-import { DensityToggle } from "../components/DensityToggle";
-import { ModeControl } from "../components/ModeControl";
-import { PaletteSelect } from "../components/PaletteSelect";
-import type { Appearance, Density, Mode } from "../lib/preferences";
-import { PALETTE_OPTIONS } from "../lib/preferences";
-import { ReposTrackingPanel } from "./settings/ReposTrackingPanel";
-import { SettingsPanels } from "./settings/SettingsPanels";
-import { sectionTitleStyle } from "./shared";
+import { DensityToggle } from "../../components/DensityToggle";
+import { ModeControl } from "../../components/ModeControl";
+import { PaletteSelect } from "../../components/PaletteSelect";
+import type { Appearance, Density, Mode } from "../../lib/preferences";
+import { PALETTE_OPTIONS } from "../../lib/preferences";
+import { sectionTitleStyle } from "../shared";
+import { ReposTrackingPanel } from "./ReposTrackingPanel";
+import { SettingsPanels } from "./SettingsPanels";
 
 const rowStyle: React.CSSProperties = {
   display: "flex",

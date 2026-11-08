@@ -9,18 +9,19 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Button } from "../components/Button";
-import { Chip } from "../components/Chip";
-import { DegradedBanner as KitDegradedBanner } from "../components/DegradedBanner";
-import { EmptyState } from "../components/EmptyState";
-import { Frame } from "../components/Frame";
-import { SegmentedControl } from "../components/SegmentedControl";
-import { Toggle } from "../components/Toggle";
-import { TriageRow } from "../components/TriageRow";
-import { api } from "../lib/api";
-import { mockupsKey } from "../lib/keys";
-import { kindLabel, ruledStatusLabel } from "../lib/labels";
-import { AnchoredComment } from "./inbox/AnchoredComment";
+import { Button } from "../../components/Button";
+import { Chip } from "../../components/Chip";
+import { DegradedBanner as KitDegradedBanner } from "../../components/DegradedBanner";
+import { EmptyState } from "../../components/EmptyState";
+import { Frame } from "../../components/Frame";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { Toggle } from "../../components/Toggle";
+import { TriageRow } from "../../components/TriageRow";
+import { api } from "../../lib/api";
+import { mockupsKey } from "../../lib/keys";
+import { kindLabel, ruledStatusLabel } from "../../lib/labels";
+import { AnchoredComment } from "../inbox/AnchoredComment";
+import { DegradedBanner, ErrorWell, SkeletonWell, sectionTitleStyle } from "../shared";
 import {
   DEFAULT_FILTERS,
   EntryBadges,
@@ -30,11 +31,10 @@ import {
   filterEntries,
   isRuledStatus,
   PreviewSummary,
-} from "./mockups/helpers";
-import { MockupDetail } from "./mockups/MockupDetail";
-import type { Envelope, FullEntry, MockupsFeedFull } from "./mockups/types";
-import { ENTRY_KINDS, RULED_STATUSES } from "./mockups/types";
-import { DegradedBanner, ErrorWell, SkeletonWell, sectionTitleStyle } from "./shared";
+} from "./helpers";
+import { MockupDetail } from "./MockupDetail";
+import type { Envelope, FullEntry, MockupsFeedFull } from "./types";
+import { ENTRY_KINDS, RULED_STATUSES } from "./types";
 
 type ViewMode = "storyboard" | "contact-sheet";
 

@@ -6,13 +6,13 @@
 // anything — pickup is an agent act.
 
 import { type RefObject, useEffect, useState } from "react";
+import { normalizeText } from "../plans/relocation";
 import {
   AnnotationComposer,
   clearAnnotationMarks,
   highlightSelectionInElement,
   useAnnotationThreads,
-} from "../Annotations";
-import { normalizeText } from "../plans/relocation";
+} from "./Annotations";
 import { labelForComponent, type Selected } from "./labels";
 import type { FullEntry } from "./types";
 

@@ -13,23 +13,23 @@
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Button } from "../components/Button";
-import { Lane } from "../components/Lane";
-import { api } from "../lib/api";
+import { Button } from "../../components/Button";
+import { Lane } from "../../components/Lane";
+import { api } from "../../lib/api";
 import type {
   BoardPlan,
   BoardProjectPayload,
   ProjectsPayload,
   ReviewItem,
   TodoItem,
-} from "../lib/api-types";
-import { boardKey, boardRootKey, plansRootKey, projectsKey, todosRootKey } from "../lib/keys";
-import { kindLabel, todoStatusLabel } from "../lib/labels";
-import { useIsPhone } from "../lib/responsive";
-import { sectionHref } from "../lib/routing";
-import { anchor } from "./plans/anchors";
-import { EmptyWell, ErrorWell, SkeletonWell, sectionTitleStyle } from "./shared";
-import { UpdatedAgo } from "./UpdatedAgo";
+} from "../../lib/api-types";
+import { boardKey, boardRootKey, plansRootKey, projectsKey, todosRootKey } from "../../lib/keys";
+import { kindLabel, todoStatusLabel } from "../../lib/labels";
+import { useIsPhone } from "../../lib/responsive";
+import { sectionHref } from "../../lib/routing";
+import { anchor } from "../plans/anchors";
+import { EmptyWell, ErrorWell, SkeletonWell, sectionTitleStyle } from "../shared";
+import { UpdatedAgo } from "../UpdatedAgo";
 
 const TODO_LANES = ["todo", "doing", "blocked", "done"] as const;
 type TodoLane = (typeof TODO_LANES)[number];

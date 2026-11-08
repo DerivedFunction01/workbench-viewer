@@ -10,16 +10,16 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Button } from "../components/Button";
-import { Card } from "../components/Card";
-import { SegmentedControl } from "../components/SegmentedControl";
-import { api } from "../lib/api";
-import type { MessageItem, MessagesPayload, ProjectSummary } from "../lib/api-types";
-import { formatDateTime } from "../lib/format";
-import { messagesKey, messagesRootKey, projectsKey } from "../lib/keys";
-import { messageStateLabel } from "../lib/labels";
-import { MessageComposer } from "./inbox/MessageComposer";
-import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "./shared";
+import { Button } from "../../components/Button";
+import { Card } from "../../components/Card";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { api } from "../../lib/api";
+import type { MessageItem, MessagesPayload, ProjectSummary } from "../../lib/api-types";
+import { formatDateTime } from "../../lib/format";
+import { messagesKey, messagesRootKey, projectsKey } from "../../lib/keys";
+import { messageStateLabel } from "../../lib/labels";
+import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "../shared";
+import { MessageComposer } from "./MessageComposer";
 
 const STATE_FILTERS = [
   { value: "", label: "All" },

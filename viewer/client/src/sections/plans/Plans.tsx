@@ -13,19 +13,14 @@
 // open plan, under the checklist strip.
 
 import { useQuery } from "@tanstack/react-query";
-import { Badge } from "../components/Badge";
-import { api } from "../lib/api";
-import type { BundleItem, PlanSummary } from "../lib/api-types";
-import { formatDate, formatRelative } from "../lib/format";
-import { plansKey } from "../lib/keys";
-import { planBucketLabel, todoStatusLabel } from "../lib/labels";
-import { useIsPhone } from "../lib/responsive";
-import { sectionHref } from "../lib/routing";
-import { anchor } from "./plans/anchors";
-import { WorktreeChanges } from "./plans/ChangesPanel";
-import { ChecklistStrip, STATUS_GLYPH } from "./plans/ChecklistStrip";
-import { groupBundles, type PlanGroupEntry, type PlanGrouping } from "./plans/grouping";
-import { PlanReader } from "./plans/PlanReader";
+import { Badge } from "../../components/Badge";
+import { api } from "../../lib/api";
+import type { BundleItem, PlanSummary } from "../../lib/api-types";
+import { formatDate, formatRelative } from "../../lib/format";
+import { plansKey } from "../../lib/keys";
+import { planBucketLabel, todoStatusLabel } from "../../lib/labels";
+import { useIsPhone } from "../../lib/responsive";
+import { sectionHref } from "../../lib/routing";
 import {
   DegradedBanner,
   EmptyWell,
@@ -34,8 +29,13 @@ import {
   metaStyle,
   SkeletonWell,
   sectionTitleStyle,
-} from "./shared";
-import { UpdatedAgo } from "./UpdatedAgo";
+} from "../shared";
+import { UpdatedAgo } from "../UpdatedAgo";
+import { anchor } from "./anchors";
+import { WorktreeChanges } from "./ChangesPanel";
+import { ChecklistStrip, STATUS_GLYPH } from "./ChecklistStrip";
+import { groupBundles, type PlanGroupEntry, type PlanGrouping } from "./grouping";
+import { PlanReader } from "./PlanReader";
 
 function bundleTitle(bundle: BundleItem): string {
   return bundle.plan?.title || bundle.id;
@@ -262,7 +262,7 @@ export function PlansSection({
   if (!payload) {
     return <ErrorWell section="Plans" message={error ?? "the companion server did not answer."} />;
   }
-  const feed = payload as unknown as import("../lib/api-types").PlansFeed;
+  const feed = payload as unknown as import("../../lib/api-types").PlansFeed;
   // §21 grouping: claimed subplans leave the top level
   // and nest under their first declaring parent, in
   // whichever list (active or finished) the parent

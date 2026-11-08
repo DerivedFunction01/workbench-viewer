@@ -15,13 +15,13 @@
 // section-level component; Home does not opt in).
 
 import { useState } from "react";
-import { Button } from "../components/Button";
-import type { ActiveResolution, WorktreeItem } from "../lib/api-types";
-import { formatDate, formatRelative } from "../lib/format";
-import { activeSourceLabel, planBucketLabel } from "../lib/labels";
-import { sectionHref } from "../lib/routing";
-import { ChangesPanel } from "./plans/ChangesPanel";
-import { metaStyle } from "./shared";
+import { Button } from "../../components/Button";
+import type { ActiveResolution, WorktreeItem } from "../../lib/api-types";
+import { formatDate, formatRelative } from "../../lib/format";
+import { activeSourceLabel, planBucketLabel } from "../../lib/labels";
+import { sectionHref } from "../../lib/routing";
+import { ChangesPanel } from "../plans/ChangesPanel";
+import { metaStyle } from "../shared";
 
 const pillBase: React.CSSProperties = {
   display: "inline-flex",

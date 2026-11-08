@@ -21,6 +21,7 @@ import { highlightWithLanguage } from "../../lib/highlight";
 import { planBucketLabel } from "../../lib/labels";
 import { useIsPhone } from "../../lib/responsive";
 import { sectionHref } from "../../lib/routing";
+import { AnchoredComment } from "../inbox/AnchoredComment";
 import {
   AnnotationComposer,
   AnnotationList,
@@ -30,8 +31,7 @@ import {
   highlightSelectionInElement,
   SelectionTintStyle,
   useAnnotationThreads,
-} from "../Annotations";
-import { AnchoredComment } from "../inbox/AnchoredComment";
+} from "../mockups/Annotations";
 import { ErrorWell, listRowStyle, metaStyle, SkeletonWell } from "../shared";
 import { anchor } from "./anchors";
 import { ChangesPanel } from "./ChangesPanel";

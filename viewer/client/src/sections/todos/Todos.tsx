@@ -12,16 +12,16 @@
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Badge } from "../components/Badge";
-import { Button } from "../components/Button";
-import { SegmentedControl } from "../components/SegmentedControl";
-import { api } from "../lib/api";
-import type { TodoItem, TodosFeed } from "../lib/api-types";
-import { boardRootKey, plansRootKey, projectsKey, todosKey, todosRootKey } from "../lib/keys";
-import { todoStatusLabel } from "../lib/labels";
-import { useIsPhone } from "../lib/responsive";
-import { sectionHref } from "../lib/routing";
-import { anchor } from "./plans/anchors";
+import { Badge } from "../../components/Badge";
+import { Button } from "../../components/Button";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { api } from "../../lib/api";
+import type { TodoItem, TodosFeed } from "../../lib/api-types";
+import { boardRootKey, plansRootKey, projectsKey, todosKey, todosRootKey } from "../../lib/keys";
+import { todoStatusLabel } from "../../lib/labels";
+import { useIsPhone } from "../../lib/responsive";
+import { sectionHref } from "../../lib/routing";
+import { anchor } from "../plans/anchors";
 import {
   DegradedBanner,
   EmptyWell,
@@ -30,8 +30,8 @@ import {
   metaStyle,
   SkeletonWell,
   sectionTitleStyle,
-} from "./shared";
-import { UpdatedAgo } from "./UpdatedAgo";
+} from "../shared";
+import { UpdatedAgo } from "../UpdatedAgo";
 
 const STATUSES = ["todo", "doing", "blocked", "done"] as const;
 

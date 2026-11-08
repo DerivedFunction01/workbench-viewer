@@ -16,18 +16,23 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Button } from "../components/Button";
-import { Card } from "../components/Card";
-import { api } from "../lib/api";
-import type { ActiveResolution, HomePayload, HomeRow, WorktreesPayload } from "../lib/api-types";
-import { formatDate, formatRelative } from "../lib/format";
-import { homeKey } from "../lib/keys";
-import { planBucketLabel, todoStatusLabel } from "../lib/labels";
-import { sectionHref } from "../lib/routing";
-import { AnchoredComment } from "./inbox/AnchoredComment";
-import { ChangesPanel } from "./plans/ChangesPanel";
-import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "./shared";
-import { ActivePlanLine, ProvenanceMark, WorktreeChildren, WorktreeMeta } from "./worktreeViews";
+import { Button } from "../../components/Button";
+import { Card } from "../../components/Card";
+import { api } from "../../lib/api";
+import type { ActiveResolution, HomePayload, HomeRow, WorktreesPayload } from "../../lib/api-types";
+import { formatDate, formatRelative } from "../../lib/format";
+import { homeKey } from "../../lib/keys";
+import { planBucketLabel, todoStatusLabel } from "../../lib/labels";
+import { sectionHref } from "../../lib/routing";
+import {
+  ActivePlanLine,
+  ProvenanceMark,
+  WorktreeChildren,
+  WorktreeMeta,
+} from "../board/worktreeViews";
+import { AnchoredComment } from "../inbox/AnchoredComment";
+import { ChangesPanel } from "../plans/ChangesPanel";
+import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "../shared";
 
 function ShowcaseCard({
   slug,

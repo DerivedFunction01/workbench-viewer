@@ -7,16 +7,16 @@
 import type { ProjectSummary } from "../../lib/api-types";
 import type { Appearance } from "../../lib/preferences";
 import { homeHref, type Route } from "../../lib/routing";
-import { ArtifactsSection } from "../Artifacts";
-import { BoardSection } from "../Board";
-import { HomeSection } from "../Home";
-import { InboxSection } from "../Inbox";
-import { MockupsSection } from "../Mockups";
-import { OverviewSection } from "../Overview";
-import { PlansSection } from "../Plans";
-import { ReposSection } from "../Repos";
-import { SettingsSection } from "../Settings";
-import { TodosSection } from "../Todos";
+import { ArtifactsSection } from "../artifacts/Artifacts";
+import { BoardSection } from "../board/Board";
+import { HomeSection } from "../homepage/Home";
+import { InboxSection } from "../inbox/Inbox";
+import { MockupsSection } from "../mockups/Mockups";
+import { OverviewSection } from "../overview/Overview";
+import { PlansSection } from "../plans/Plans";
+import { ReposSection } from "../repos/Repos";
+import { SettingsSection } from "../settings/Settings";
+import { TodosSection } from "../todos/Todos";
 
 export function ShellRoutes({
   route,

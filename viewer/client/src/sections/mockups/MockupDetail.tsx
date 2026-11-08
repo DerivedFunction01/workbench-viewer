@@ -18,7 +18,7 @@ import { Frame } from "../../components/Frame";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { StateControls } from "../../components/StateControls";
 import { useIsPhone } from "../../lib/responsive";
-import { AnnotationList, AnnotationThreadCard, SelectionTintStyle } from "../Annotations";
+import { AnnotationList, AnnotationThreadCard, SelectionTintStyle } from "./Annotations";
 import { ApprovalCard } from "./ApprovalCard";
 import { ApproveSheet, DispositionCard, useDisposition } from "./Disposition";
 import { FilePanel } from "./FilePanel";

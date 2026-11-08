@@ -10,17 +10,17 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { SegmentedControl } from "../components/SegmentedControl";
-import { api } from "../lib/api";
-import type { RepoHistoryPayload, RepoStatusPayload, RepoSummary } from "../lib/api-types-repos";
-import { formatDate, formatRelative, formatShortHash } from "../lib/format";
-import { reposHref } from "../lib/routing";
-import { FilesTab } from "./repos/FilesTab";
-import { HistoryTab } from "./repos/HistoryTab";
-import { AheadBehind, DirtyMark, ExposureMark, PublicationMark, SyncMark } from "./repos/marks";
-import { RepoList } from "./repos/RepoList";
-import { StatusTab } from "./repos/StatusTab";
-import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "./shared";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { api } from "../../lib/api";
+import type { RepoHistoryPayload, RepoStatusPayload, RepoSummary } from "../../lib/api-types-repos";
+import { formatDate, formatRelative, formatShortHash } from "../../lib/format";
+import { reposHref } from "../../lib/routing";
+import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "../shared";
+import { FilesTab } from "./FilesTab";
+import { HistoryTab } from "./HistoryTab";
+import { AheadBehind, DirtyMark, ExposureMark, PublicationMark, SyncMark } from "./marks";
+import { RepoList } from "./RepoList";
+import { StatusTab } from "./StatusTab";
 
 type RepoTab = "status" | "files" | "history";
 

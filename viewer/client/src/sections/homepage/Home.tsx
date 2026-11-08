@@ -10,16 +10,16 @@
 // worktree strip never renders as an empty shell.
 
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api";
-import type { HomePayload, HomeRow } from "../lib/api-types";
-import { formatDate, formatRelative } from "../lib/format";
-import { homeKey } from "../lib/keys";
-import { planBucketLabel, todoStatusLabel } from "../lib/labels";
-import { useIsPhone } from "../lib/responsive";
-import { sectionHref } from "../lib/routing";
-import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "./shared";
-import { UpdatedAgo } from "./UpdatedAgo";
-import { ActivePlanLine, WorktreeChildren } from "./worktreeViews";
+import { api } from "../../lib/api";
+import type { HomePayload, HomeRow } from "../../lib/api-types";
+import { formatDate, formatRelative } from "../../lib/format";
+import { homeKey } from "../../lib/keys";
+import { planBucketLabel, todoStatusLabel } from "../../lib/labels";
+import { useIsPhone } from "../../lib/responsive";
+import { sectionHref } from "../../lib/routing";
+import { ActivePlanLine, WorktreeChildren } from "../board/worktreeViews";
+import { EmptyWell, ErrorWell, metaStyle, SkeletonWell, sectionTitleStyle } from "../shared";
+import { UpdatedAgo } from "../UpdatedAgo";
 
 /** Outline count badge (derived values only — the
  * mockup's Home form carries the row's counts as badges). */
