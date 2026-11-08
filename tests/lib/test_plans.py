@@ -34,34 +34,60 @@ requires_corpus = unittest.skipUnless(
     f"{CORPUS_ENV} is not set to a corpus directory — "
     "live-corpus tests skipped")
 
-# The companion project's checkout directory, assembled
-# from parts on purpose: its name may not appear in a
-# tracked file (the portability rule), not even here.
-_OTHER_PROJECT = "example-" + "project"
 # This repo's own checkout directory name, for locating its
 # .plans inside the corpus tree; derived, never hardcoded.
 _REPO_CHECKOUT = Path(__file__).resolve().parent.parent.parent.name
+
+# The companion project's checkout: its name may not appear
+# in a tracked file (the portability rule) — not even split
+# into fragments, since a split construction still tells a
+# reader the name. So the checkout is DISCOVERED, never
+# named: the corpus directory whose .plans holds both of
+# the founding-era plan files below.
+_COMPANION_MARKERS = (
+    "2026-10-25-living-workbench-storyboard.md",
+    "2026-10-25-rebuild-program.md",
+)
+
+
+def _find_companion(corpus):
+    for child in sorted(corpus.iterdir()):
+        plans = child / ".plans"
+        if plans.is_dir() and all(
+                (plans / marker).is_file()
+                for marker in _COMPANION_MARKERS):
+            return child
+    return None
+
+
+COMPANION = (_find_companion(CORPUS)
+             if CORPUS is not None else None)
+requires_companion = unittest.skipUnless(
+    COMPANION is not None,
+    "no companion checkout found in the corpus directory — "
+    "companion-corpus tests skipped")
 
 if CORPUS is not None:
     WS = CORPUS
     FOUNDING = (WS / _REPO_CHECKOUT / ".plans"
                 / "2026-10-25-workbench-viewer-repo.md")
-    SUBPLAN09 = (WS / _OTHER_PROJECT / ".plans"
-                 / "2026-10-25-living-workbench-storyboard.md")
-    MASTER = (WS / _OTHER_PROJECT / ".plans"
-              / "2026-10-25-rebuild-program.md")
+    SUBPLAN09 = (COMPANION / ".plans" / _COMPANION_MARKERS[0]
+                 if COMPANION is not None else None)
+    MASTER = (COMPANION / ".plans" / _COMPANION_MARKERS[1]
+              if COMPANION is not None else None)
     BOOTSTRAP = (WS / ".plans"
                  / "2026-10-22-machine-bootstrap-reproducibility.md")
     BACKSTAGE = (WS / ".plans"
                  / "2026-10-23-powerbi-backstage-implementation-plan.md")
     STATUS_DOC = WS / ".plans" / "current-status-2026-10-25.md"
     TRACKER_DOC = WS / ".plans" / "mockup-status-tracker.md"
-    V2_PLANS = WS / _OTHER_PROJECT / ".plans"
+    COMPANION_PLANS = (COMPANION / ".plans"
+                       if COMPANION is not None else None)
     VIEWER_PLANS = WS / _REPO_CHECKOUT / ".plans"
 else:
     WS = FOUNDING = SUBPLAN09 = MASTER = BOOTSTRAP = None
-    BACKSTAGE = STATUS_DOC = TRACKER_DOC = V2_PLANS = None
-    VIEWER_PLANS = None
+    BACKSTAGE = STATUS_DOC = TRACKER_DOC = None
+    COMPANION_PLANS = VIEWER_PLANS = None
 
 
 def parse(path):
@@ -88,6 +114,7 @@ class TestNamedPlans(unittest.TestCase):
             self.assertTrue(step["done_when"],
                             f"step {step['n']} lost done when:")
 
+    @requires_companion
     def test_subplan09_both_step_groups(self):
         doc = parse(SUBPLAN09)
         self.assertTrue(doc["conforming"])
@@ -100,6 +127,7 @@ class TestNamedPlans(unittest.TestCase):
             self.assertTrue(step["files"])
             self.assertTrue(step["verify"])
 
+    @requires_companion
     def test_master_plan_no_steps_but_lossless(self):
         doc = parse(MASTER)
         self.assertTrue(doc["conforming"])
@@ -146,9 +174,10 @@ class TestDegradation(unittest.TestCase):
 
 @requires_corpus
 class TestCorpusLossless(unittest.TestCase):
+    @requires_companion
     def test_every_corpus_plan_reconstructs(self):
         files = []
-        for base in (WS / ".plans", V2_PLANS):
+        for base in (WS / ".plans", COMPANION_PLANS):
             files += sorted(base.glob("*.md"))
             finished = base / "finished"
             if finished.is_dir():
@@ -438,9 +467,10 @@ class TestSubplanPrecisionCorpus(unittest.TestCase):
 
 
 @requires_corpus
+@requires_companion
 class TestListing(unittest.TestCase):
-    def test_list_v2_plans(self):
-        summaries = parser.list_plans(V2_PLANS)
+    def test_list_companion_plans(self):
+        summaries = parser.list_plans(COMPANION_PLANS)
         names = [s["path"] for s in summaries]
         self.assertIn("2026-10-25-rebuild-program.md", names)
         # the spec-extraction working dir is not plans
@@ -456,11 +486,11 @@ class TestListing(unittest.TestCase):
             "finished/ plans should list as archived")
 
     def test_load_plan_confined(self):
-        doc = parser.load_plan(V2_PLANS,
+        doc = parser.load_plan(COMPANION_PLANS,
                                "2026-10-25-rebuild-program.md")
         self.assertEqual(doc["title"][:12], "Master plan:")
         with self.assertRaises(ValueError):
-            parser.load_plan(V2_PLANS, "../SPEC.md")
+            parser.load_plan(COMPANION_PLANS, "../SPEC.md")
 
 
 if __name__ == "__main__":

@@ -4,8 +4,8 @@ auto = "disable"
 saveTextLockfile = true
 
 # Each TypeScript web artifact gets its OWN bun install cache. The shared
-# ~/.bun/install/cache/ is owned by the artifact daemon; if a TS web artifact install ran
-# under a different uid (e.g. a developer testing via `sudo`), the
+# ~/.bun/install/cache/ is owned by the artifact daemon; if a TS web artifact
+# install ran under a different uid (e.g. a developer testing via sudo), the
 # shared cache would acquire entries the daemon can't overwrite later
 # (ENOTEMPTY on @hatch/space-sdk et al when bun renames the .tmp slot).
 [install.cache]

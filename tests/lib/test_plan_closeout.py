@@ -11,9 +11,12 @@ directories are not plan files and never flag.
 The fixture matrix runs on a scratch .plans tree; the
 real-corpus pass runs the same feed over this repo's own
 .plans/ (post-2026-10-25 closeout sweep) and requires
-zero flags.
+zero flags. The real-corpus pass is a live-corpus test,
+gated on WB_LIVE_CORPUS like the plan-parser corpus
+tests: a fresh clone with no corpus present skips it.
 """
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -191,10 +194,26 @@ class TestCloseoutFeed(unittest.TestCase):
             self.errors("2026-10-25-planned-bundle"), [])
 
 
-WS = Path(__file__).resolve().parent.parent.parent.parent
-REAL_PLANS = WS / "workbench-viewer" / ".plans"
+# The real-corpus pass is gated exactly like the
+# plan-parser corpus tests: WB_LIVE_CORPUS names the
+# directory containing the project checkouts, and with it
+# unset (or not a directory) the pass skips. This repo's
+# own checkout directory name is derived from this file's
+# location, never hardcoded.
+CORPUS_ENV = "WB_LIVE_CORPUS"
+_raw_corpus = os.environ.get(CORPUS_ENV)
+CORPUS = Path(_raw_corpus) if _raw_corpus else None
+CORPUS_AVAILABLE = CORPUS is not None and CORPUS.is_dir()
+requires_corpus = unittest.skipUnless(
+    CORPUS_AVAILABLE,
+    f"{CORPUS_ENV} is not set to a corpus directory — "
+    "live-corpus tests skipped")
+_REPO_CHECKOUT = Path(__file__).resolve().parent.parent.parent.name
+REAL_PLANS = (CORPUS / _REPO_CHECKOUT / ".plans"
+              if CORPUS is not None else None)
 
 
+@requires_corpus
 class TestRealCorpusCloseout(unittest.TestCase):
     def test_viewer_corpus_yields_zero_closeout_flags(self):
         self.assertTrue(REAL_PLANS.is_dir())
