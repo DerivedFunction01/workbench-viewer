@@ -1254,13 +1254,25 @@ driven by a JSON spec: sections, plus choices declared once
 `input-number`). A section's `controls[]` renders a choice
 inline beside its content; the summary renders the same
 choice over the same state — one declaration, many views.
-One Copy button emits one JSON payload
-(`{artifact, answers, feedback}`); feedback mode annotates
-targets with events disabled. `wb artifact new <slug>`
-scaffolds an entry (kind `artifact`) from the kit and derives
-its registry `state_schema` from the spec; `wb artifact
-build <slug>` re-embeds an edited `spec.json`. The contract
-of record is `templates/choice-kit/README.md`.
+One Copy button emits one JSON payload; feedback mode
+annotates targets with events disabled. `wb artifact new
+<slug>` scaffolds an entry (kind `artifact`) from the kit and
+derives its registry `state_schema` from the spec; `wb
+artifact build <slug>` re-embeds an edited `spec.json`. The
+contract of record is `templates/choice-kit/README.md`.
+
+Answer state (2026-11-08): a choice is answered only when
+the reader changes it or commits it — a displayed default
+is never an answer. The payload is
+`{artifact, answers, unanswered, feedback}` with `answers`
+holding answered choices only and `unanswered` naming the
+rest. The bar carries an answered counter plus two controls:
+Commit current (adopt everything shown as answered) and
+Clear all (answers reset to defaults and unanswered;
+feedback untouched). Persistence stores `{values, answered}`;
+a first-version record (bare values) loads with nothing
+counted as answered, so an upgrade never discards a pick
+nor promotes one silently.
 
 ## 16. Entry attribution (2026-11-08)
 

@@ -143,7 +143,8 @@ payload to the clipboard:
 ```json
 {
   "artifact": "reading-app-settings-study",
-  "answers": { "dark-mode": true, "layout": "compact" },
+  "answers": { "dark-mode": true },
+  "unanswered": ["layout"],
   "feedback": [
     { "target": "Reading comfort section",
       "text": "Long-form text stays readable when the type size…",
@@ -153,24 +154,56 @@ payload to the clipboard:
 ```
 
 - `artifact` — the spec `id`.
-- `answers` — **every** choice id mapped to its current value,
-  answered or not (unanswered choices carry their default).
+- `answers` — the **answered** choices only, each mapped to
+  its value (see Answer state below). An untouched choice
+  never appears here: its displayed default is not an answer.
+- `unanswered` — the ids of the choices not yet answered, in
+  spec order; `[]` when every choice is answered.
 - `feedback` — the feedback entries in the order they were
   added; `[]` when there are none.
 
 The paste is the transport: the reader copies it into the
 thread (or sends it through the viewer's messages) and the
 receiving agent parses it. There is no YAML or text variant
-and no per-part button — one format, one payload.
+and no per-part button — one format, one payload. Copying
+with nothing answered still emits the payload (a
+feedback-only response is legitimate); `answers` is then
+`{}` and every id sits in `unanswered`.
+
+## Answer state
+
+Every choice is **unanswered** until the reader answers it.
+Controls always display a value — the spec default before
+any touch — but display is not an answer: the summary row
+of an unanswered choice reads "Not answered yet", and the
+bar shows a live counter, `N of M answered`.
+
+- Changing a choice (in either view — inline or summary)
+  marks exactly that choice answered.
+- **Commit current** (bar) marks every choice answered at
+  its currently displayed value — the deliberate wholesale
+  adoption of what is on screen, defaults included.
+- **Clear all** (bar) returns every choice to its default
+  value and to unanswered, and rewrites the stored record.
+  It clears answers only: feedback entries are a separate
+  list with their own per-entry removal and are untouched.
 
 ## Persistence
 
 Answers persist in the page's `localStorage` under the key
 `ck:<spec id>`, saved on every change and reloaded on open, so
-a reload or a revisit never loses picks. Stored values are
-checked against the spec (unknown ids dropped, wrong shapes
-ignored) before they override the defaults. Feedback entries
-are **not** persisted — they live until copied.
+a reload or a revisit never loses picks. The stored record is
+`{values, answered}` — the current values plus the list of
+answered choice ids. Stored values are checked against the
+spec (unknown ids dropped, wrong shapes ignored) before they
+override the defaults.
+
+A record written by the first kit version (a bare values
+object, no `answered` list) still loads: its values display,
+and **none** of them count as answered — **Commit current**
+adopts them in one tap. The upgrade never discards a pick.
+Feedback entries are **not** persisted — they live until
+copied.
 
 ## Feedback mode
 
