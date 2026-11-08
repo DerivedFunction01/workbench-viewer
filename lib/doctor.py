@@ -403,6 +403,25 @@ def registry_findings(project) -> list:
         if f["validator"] == "archived-folder-agreement":
             reported_archive.add(f["entry"])
     for e in reg.list_entries(db_path, archived=None):
+        if not e["archived"] \
+                and e["kind"] in ("mockup", "artifact") \
+                and not e.get("owner_thread"):
+            out.append(_finding(
+                slug, "entry-owner-missing", e["id"],
+                "no owner attribution — the cleanup cannot "
+                "trace this entry to its owning thread; the "
+                "owning thread claims it with wb set-owner"))
+        if not e["archived"] and e.get("plan_ref") \
+                and manifest.plans is not None:
+            link = bundle_parser.resolve_plan_link(
+                manifest.plans, e["plan_ref"])
+            if not link["found"]:
+                out.append(_finding(
+                    slug, "entry-plan-missing", e["id"],
+                    f"plan_ref {e['plan_ref']!r} resolves to "
+                    "no plan in this project — the attribution "
+                    "anchor is broken; fix the ref or clear "
+                    "it (wb set <id> plan_ref=)"))
         if not e["archived"]:
             coverage = stale_mod.approval_coverage(
                 e, reg.latest_review(db_path, e["id"]))

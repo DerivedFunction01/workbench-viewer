@@ -213,7 +213,11 @@ def cmd_add(args):
         kind=args.kind, actor="cli", status=args.status,
         ruling=args.ruling, source_kind=args.source_kind,
         source_ref=args.source_ref, main_file=args.main_file,
-        state_schema=schema)
+        state_schema=schema,
+        plan_ref=args.plan_ref,
+        owner_thread=args.owner_thread,
+        owner_label=args.owner_label,
+        deploy_class=args.deploy_class)
     ctx.regenerate()
     _print(entry)
     return 0
@@ -411,6 +415,26 @@ def cmd_review(args):
 KIT_TEMPLATE_DIR = REPO_ROOT / "templates" / "choice-kit"
 
 
+def cmd_set_owner(args):
+    ctx = Ctx(args)
+    thread = None if args.clear else args.thread
+    label = None if args.clear else args.label
+    entry = reg.set_owner(
+        ctx.db_path, args.id, thread, label, actor="cli")
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
+def cmd_set_class(args):
+    ctx = Ctx(args)
+    entry = reg.set_deploy_class(
+        ctx.db_path, args.id, args.deploy_class, actor="cli")
+    ctx.regenerate()
+    _print(entry)
+    return 0
+
+
 def cmd_artifact_new(args):
     ctx = Ctx(args)
     spec = None
@@ -419,7 +443,11 @@ def cmd_artifact_new(args):
     entry = kit_mod.create_kit(
         ctx.db_path, ctx.layout, args.slug,
         title=args.title, spec=spec,
-        template_dir=KIT_TEMPLATE_DIR)
+        template_dir=KIT_TEMPLATE_DIR,
+        plan_ref=args.plan_ref,
+        owner_thread=args.owner_thread,
+        owner_label=args.owner_label,
+        deploy_class=args.deploy_class)
     ctx.regenerate()
     _print(entry)
     print()
@@ -691,6 +719,16 @@ def build_parser():
     sp.add_argument("--main-file", default="mock.html")
     sp.add_argument("--state-schema",
                     help="path to a JSON state-schema file")
+    sp.add_argument("--owner-thread",
+                    help="owning chat id (attribution)")
+    sp.add_argument("--owner-label",
+                    help="owning thread title (display)")
+    sp.add_argument("--plan", dest="plan_ref",
+                    help="plan/bundle this entry was made "
+                         "for (attribution anchor)")
+    sp.add_argument("--class", dest="deploy_class",
+                    default="standard",
+                    help="deploy class: standard | deployed")
     sp.set_defaults(fn=cmd_add)
 
     sp = sub.add_parser("list")
@@ -717,6 +755,22 @@ def build_parser():
     sp.add_argument("--gate")
     sp.add_argument("--expect-version", type=int)
     sp.set_defaults(fn=cmd_set_status)
+
+    sp = sub.add_parser("set-owner")
+    sp.add_argument("id")
+    sp.add_argument("--thread",
+                    help="owning chat id")
+    sp.add_argument("--label",
+                    help="owning thread title (display)")
+    sp.add_argument("--clear", action="store_true",
+                    help="clear the attribution")
+    sp.set_defaults(fn=cmd_set_owner)
+
+    sp = sub.add_parser("set-class")
+    sp.add_argument("id")
+    sp.add_argument("deploy_class",
+                    help="standard | deployed")
+    sp.set_defaults(fn=cmd_set_class)
 
     sp = sub.add_parser("supersede")
     sp.add_argument("old")
@@ -780,6 +834,16 @@ def build_parser():
     na.add_argument("--spec",
                     help="path to a spec JSON file "
                          "(default: the demo scaffold)")
+    na.add_argument("--owner-thread",
+                    help="owning chat id (attribution)")
+    na.add_argument("--owner-label",
+                    help="owning thread title (display)")
+    na.add_argument("--plan", dest="plan_ref",
+                    help="plan/bundle this entry was made "
+                         "for (attribution anchor)")
+    na.add_argument("--class", dest="deploy_class",
+                    default="standard",
+                    help="deploy class: standard | deployed")
     na.set_defaults(fn=cmd_artifact_new)
     ba = asub.add_parser(
         "build",

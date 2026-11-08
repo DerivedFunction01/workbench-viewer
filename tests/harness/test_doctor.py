@@ -464,6 +464,25 @@ class TestRegistryChecks(unittest.TestCase):
     def findings(self):
         return doctor.registry_findings(self.project)
 
+    def test_owner_missing_until_claimed(self):
+        reg.add_entry(self.db, self.layout, "bare")
+        reg.add_entry(self.db, self.layout, "claimed",
+                      owner_thread="chat-1")
+        reg.add_entry(self.db, self.layout, "sheet",
+                      kind="artifact")
+        reg.add_entry(self.db, self.layout, "arc")
+        reg.archive_entry(self.db, self.layout, "arc")
+        subjects = {(f["check"], f["subject"])
+                    for f in self.findings()}
+        self.assertIn(("entry-owner-missing", "bare"),
+                      subjects)
+        self.assertIn(("entry-owner-missing", "sheet"),
+                      subjects)
+        self.assertNotIn(("entry-owner-missing", "claimed"),
+                         subjects)
+        self.assertNotIn(("entry-owner-missing", "arc"),
+                         subjects)
+
     def test_validator_violation(self):
         reg.add_entry(self.db, self.layout, "a")
         import sqlite3
@@ -482,7 +501,8 @@ class TestRegistryChecks(unittest.TestCase):
                            "options": ["a", "b"],
                            "default": "a"}}
         reg.add_entry(self.db, self.layout, "cov",
-                      state_schema=schema)
+                      state_schema=schema,
+                      owner_thread="chat-1")
         reg.review_entry(self.db, "cov", "approve",
                          actor="test", layout=self.layout)
         reg.set_state(self.db, "cov", {"mode": "b"},
@@ -515,7 +535,8 @@ class TestRegistryChecks(unittest.TestCase):
               "archived-folder-agreement:arc")])
 
     def test_clean_registry_has_no_findings(self):
-        reg.add_entry(self.db, self.layout, "tidy")
+        reg.add_entry(self.db, self.layout, "tidy",
+                      owner_thread="chat-1")
         reg.verify_entry(self.db, "tidy")
         self.assertEqual(self.findings(), [])
 

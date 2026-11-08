@@ -22,9 +22,11 @@ ENTRY_FIELDS = ("id", "title", "kind", "status", "gate",
                 "plan_ref", "source_kind", "source_ref",
                 "entry_dir", "main_file", "content_sha256",
                 "config_path", "state_schema", "state_json",
+                "owner_thread", "owner_label", "deploy_class",
                 "created_at", "updated_at", "status_changed_at",
                 "last_verified_at", "archived", "archived_at",
                 "superseded_by", "version")
+DEPLOY_CLASSES = ("standard", "deployed")
 SETTABLE_FIELDS = ("title", "gate", "ruling_text", "spec_ref",
                    "plan_ref", "config_path", "main_file",
                    "source_ref")
@@ -50,6 +52,9 @@ CREATE TABLE entries (
   config_path TEXT,
   state_schema TEXT,
   state_json TEXT,
+  owner_thread TEXT,
+  owner_label TEXT,
+  deploy_class TEXT NOT NULL DEFAULT 'standard',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   status_changed_at TEXT NOT NULL,

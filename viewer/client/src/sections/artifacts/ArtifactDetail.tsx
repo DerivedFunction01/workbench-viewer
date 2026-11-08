@@ -25,7 +25,7 @@ import { ruledStatusLabel } from "../../lib/labels";
 import { useIsPhone } from "../../lib/responsive";
 import { FilePanel } from "../mockups/FilePanel";
 import { HistoryList, ReviewLog } from "../mockups/HistoryLog";
-import { EntryBadges, hasState, stateValues } from "../mockups/helpers";
+import { EntryBadges, hasState, OwnerLine, stateValues } from "../mockups/helpers";
 import { RULED_STATUSES } from "../mockups/types";
 import { labelStyle, MetaCard, MetaRow, toStateValues } from "./meta";
 import { PreviewStage } from "./PreviewStage";
@@ -265,6 +265,7 @@ export function ArtifactDetail({
           {entry.title}
         </h2>
         <EntryBadges derived={derived} approval={approval} needsChanges={needsChanges} />
+        <OwnerLine entry={entry} />
         {entry.archived ? (
           <span style={{ color: "var(--wb-content-secondary)" }}>Archived</span>
         ) : null}

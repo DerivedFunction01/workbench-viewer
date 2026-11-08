@@ -61,6 +61,20 @@ export function EntryBadges({
   return <>{badges}</>;
 }
 
+/** Attribution line for the detail header: who owns this
+ * entry (owner label, else the thread id) and its deploy
+ * class when deployed. Plain text — attribution is a record,
+ * not a control. Renders nothing when unattributed. */
+export function OwnerLine({ entry }: { entry: FullEntry }) {
+  const owner = entry.owner_label ?? entry.owner_thread;
+  const parts: string[] = [];
+  if (entry.plan_ref) parts.push(`Plan: ${entry.plan_ref}`);
+  if (owner) parts.push(`Owner: ${owner}`);
+  if (entry.deploy_class === "deployed") parts.push("Deployed");
+  if (parts.length === 0) return null;
+  return <span style={{ color: "var(--wb-content-secondary)" }}>{parts.join(" · ")}</span>;
+}
+
 export function stateValues(entry: FullEntry): Record<string, unknown> {
   return entry.state_json ?? {};
 }

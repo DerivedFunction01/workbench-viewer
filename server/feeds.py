@@ -101,6 +101,20 @@ def _entries_feed(project, *, archived: bool, kinds) -> dict:
         entries = [e for e in data["entries"]
                    if bool(e["archived"]) == archived
                    and e["kind"] in kinds]
+        # Attribution anchor (§16): resolve each entry's
+        # plan_ref against the project's own plans corpus and
+        # serve the plan's disposition ready-made — the
+        # cleanup consumes plan_link.terminal, never a
+        # re-parse. One bundle census per feed build.
+        if m.plans is not None and m.plans.is_dir() \
+                and any(e.get("plan_ref") for e in entries):
+            bundles = bundle_parser.list_bundles(m.plans)
+            for e in entries:
+                if e.get("plan_ref"):
+                    e["plan_link"] = \
+                        bundle_parser.resolve_plan_link(
+                            m.plans, e["plan_ref"],
+                            bundles=bundles)
         triage = []
         for e in data["entries"]:
             if e["archived"] or e["kind"] not in kinds:

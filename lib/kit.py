@@ -362,7 +362,9 @@ def _read_template(template_dir) -> str:
 
 
 def create_kit(db_path, layout, slug, *, title=None,
-               spec=None, template_dir) -> dict:
+               spec=None, template_dir, owner_thread=None,
+               owner_label=None, plan_ref=None,
+               deploy_class="standard") -> dict:
     """Stamp out a kit artifact entry: register it (kind
     "artifact", main_file index.html, derived
     state_schema), render index.html from the template,
@@ -387,7 +389,10 @@ def create_kit(db_path, layout, slug, *, title=None,
         db_path, layout, slug,
         title=title or spec.get("title"),
         kind="artifact", main_file="index.html",
-        state_schema=derive_state_schema(spec))
+        state_schema=derive_state_schema(spec),
+        plan_ref=plan_ref,
+        owner_thread=owner_thread, owner_label=owner_label,
+        deploy_class=deploy_class)
     entry_dir = Path(entry["entry_dir"])
     write_text(entry_dir / "index.html",
                render_index(template, spec))

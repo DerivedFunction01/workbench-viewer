@@ -27,7 +27,8 @@ and every current importer keep working unchanged.
 import json
 
 from ..util import sha256_file
-from .constants import (ACTORS, ENTRY_FIELDS, KINDS,
+from .constants import (ACTORS, DEPLOY_CLASSES,
+                        ENTRY_FIELDS, KINDS,
                         REVIEW_DISPOSITIONS,
                         SETTABLE_FIELDS, SOURCE_KINDS,
                         STATUSES, TODO_FIELDS,
@@ -42,7 +43,8 @@ from .entries import (add_entry, apply_export,
                       get_entry, history_for,
                       init_registry, latest_review,
                       list_entries, record_stale_check,
-                      review_entry, set_fields,
+                      review_entry, set_deploy_class,
+                      set_fields, set_owner,
                       set_state, set_state_schema,
                       set_status, supersede,
                       unarchive_entry, verify_entry)

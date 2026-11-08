@@ -40,6 +40,9 @@ export interface FullEntry {
   config_path?: string | null;
   state_schema?: Record<string, unknown> | null;
   state_json?: Record<string, unknown> | null;
+  owner_thread?: string | null;
+  owner_label?: string | null;
+  deploy_class?: string;
   created_at: string;
   updated_at: string;
   status_changed_at: string;

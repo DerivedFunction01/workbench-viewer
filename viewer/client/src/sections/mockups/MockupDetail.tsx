@@ -23,7 +23,7 @@ import { ApprovalCard } from "./ApprovalCard";
 import { ApproveSheet, DispositionCard, useDisposition } from "./Disposition";
 import { FilePanel } from "./FilePanel";
 import { HistoryList, ReviewLog } from "./HistoryLog";
-import { EntryBadges, hasState, PreviewSummary } from "./helpers";
+import { EntryBadges, hasState, OwnerLine, PreviewSummary } from "./helpers";
 import { LifecycleCard } from "./LifecycleCard";
 import { MetaCard } from "./meta";
 import type { FullEntry } from "./types";
@@ -130,6 +130,7 @@ export function MockupDetail({
           {entry.title}
         </h2>
         <EntryBadges derived={derived} approval={approval} needsChanges={needsChanges} />
+        <OwnerLine entry={entry} />
         {entry.archived ? (
           <span style={{ color: "var(--wb-content-secondary)" }}>Archived</span>
         ) : null}

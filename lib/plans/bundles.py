@@ -406,3 +406,59 @@ def all_todo_ids(plans_dir) -> set:
             if t["id"]:
                 ids.add(t["id"])
     return ids
+
+
+# Terminal plan words for the attribution derivation: a plan
+# declaring one of these is finished work; the entries made
+# for it carry that disposition as their cleanup signal.
+PLAN_TERMINAL_WORDS = ("complete", "completed", "done",
+                       "finished", "implemented",
+                       "superseded")
+
+
+def resolve_plan_link(plans_dir, plan_ref, *, bundles=None):
+    """Resolve an entry's plan_ref against a project's plans
+    dir — the attribution anchor. Candidates, in order: the
+    ref as given, minus a trailing .md, minus a bundle's
+    trailing /plan.md. Matched against each bundle's id,
+    slug, and plan path, active and finished alike.
+
+    Returns {"ref", "found", "bundle_id", "path", "archived",
+    "status", "terminal"}: status is the plan's declared
+    status word (declared_status), terminal True when that
+    word is a finished-work word OR the plan sits in
+    finished/. found False — with the rest None/False — when
+    no plan matches: a broken anchor, never a disposition."""
+    miss = {"ref": plan_ref, "found": False,
+            "bundle_id": None, "path": None, "archived": False,
+            "status": None, "terminal": False}
+    if not plan_ref or plans_dir is None:
+        return miss
+    ref = str(plan_ref).strip()
+    candidates = {ref}
+    if ref.endswith(".md"):
+        candidates.add(ref[:-3])
+    if ref.endswith("/plan"):
+        candidates.add(ref[:-5])
+    for b in (bundles if bundles is not None
+              else list_bundles(plans_dir)):
+        plan = b.get("plan")
+        keys = {b.get("id"), b.get("slug")}
+        if plan:
+            keys.add(plan.get("path"))
+            if plan.get("path", "").endswith(".md"):
+                keys.add(plan["path"][:-3])
+        if not candidates & {k for k in keys if k}:
+            continue
+        status = declared_status(
+            plan["status_raw"]) if plan else None
+        return {
+            "ref": plan_ref, "found": True,
+            "bundle_id": b.get("id"),
+            "path": plan.get("path") if plan else None,
+            "archived": bool(b.get("archived")),
+            "status": status,
+            "terminal": bool(b.get("archived"))
+            or status in PLAN_TERMINAL_WORDS,
+        }
+    return miss

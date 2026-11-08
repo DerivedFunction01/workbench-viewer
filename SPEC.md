@@ -1261,3 +1261,35 @@ scaffolds an entry (kind `artifact`) from the kit and derives
 its registry `state_schema` from the spec; `wb artifact
 build <slug>` re-embeds an edited `spec.json`. The contract
 of record is `templates/choice-kit/README.md`.
+
+## 16. Entry attribution (2026-11-08)
+
+Every mockup/artifact entry carries its owner link and its
+class, so scripted cleanup can work mechanically: schema v2
+adds `owner_thread` (the owning chat's id — the stable key),
+`owner_label` (a display snapshot), and `deploy_class`
+(`standard` by default, or `deployed`). A `deployed` entry
+is live: never stale by class, excluded by the cleanup's
+scripted leg from the field alone. Repo attribution needs
+no field — the registry is per-project. Mutations ride the
+one path (`wb set-owner`, `wb set-class`, `--owner-thread` /
+`--class` at add time); the doctor's `entry-owner-missing`
+class lists unclaimed live entries as the backfill queue.
+
+Plan link (owner's addition, 2026-11-08): the entry's
+`plan_ref` — the plan/bundle it was made for — is the
+attribution ANCHOR. The plan already carries the lifecycle
+status the cleanup consumes: the entries feed serves each
+linked entry a derived `plan_link` block
+({found, bundle_id, path, archived, status, terminal}),
+resolved by `resolve_plan_link` against the project's own
+plans corpus; `terminal` (the plan declares a finished-work
+status, or sits in finished/) is the disposition signal —
+an entry whose plan is terminal is a removal candidate on
+evidence, never on age. Repo derives through the plan's
+project (the entry's own registry). `owner_thread` remains
+the route for anything the plan signal cannot settle,
+because plans do not record their thread. A plan_ref that
+resolves to nothing is doctor class `entry-plan-missing`:
+a broken anchor is surfaced, never treated as a
+disposition.

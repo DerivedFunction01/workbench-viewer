@@ -13,8 +13,8 @@ from pathlib import Path
 
 from ..util import (now_iso, sha256_file, state_sha256,
                    write_text)
-from .constants import (ENTRY_FIELDS, KINDS,
-                        REVIEW_DISPOSITIONS,
+from .constants import (DEPLOY_CLASSES, ENTRY_FIELDS,
+                        KINDS, REVIEW_DISPOSITIONS,
                         SETTABLE_FIELDS, SOURCE_KINDS,
                         STATUSES, TODO_FIELDS,
                         RegistryError, RulingRequired,
@@ -96,10 +96,16 @@ def init_registry(db_path) -> Path:
 def add_entry(db_path, layout, slug, *, title=None, kind="mockup",
               actor="cli", status="unexplored", ruling=None,
               source_kind="entry-dir", source_ref=None,
-              main_file="mock.html", state_schema=None) -> dict:
+              main_file="mock.html", state_schema=None,
+              plan_ref=None,
+              owner_thread=None, owner_label=None,
+              deploy_class="standard") -> dict:
     check_slug(slug)
     if kind not in KINDS:
         raise RegistryError(f"kind must be one of {KINDS}")
+    if deploy_class not in DEPLOY_CLASSES:
+        raise RegistryError(
+            f"deploy_class must be one of {DEPLOY_CLASSES}")
     if status not in STATUSES:
         raise RegistryError(f"status must be one of {STATUSES}")
     if status in ("canonical", "hard-gate") and not ruling:
@@ -140,20 +146,73 @@ def add_entry(db_path, layout, slug, *, title=None, kind="mockup",
                 " ruling_text, ruling_date, source_kind,"
                 " source_ref, entry_dir, main_file,"
                 " content_sha256, state_schema, state_json,"
+                " plan_ref, owner_thread, owner_label,"
+                " deploy_class,"
                 " created_at, updated_at, status_changed_at,"
                 " version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,"
-                "?,?,?,1)",
+                "?,?,?,?,?,?,?,1)",
                 (slug, title or slug, kind, status,
                  ruling, ts[:10] if ruling else None,
                  source_kind, source_ref, entry_dir, main_file,
                  sha,
                  json.dumps(state_schema) if state_schema else None,
                  json.dumps({}) if state_schema else None,
+                 plan_ref, owner_thread, owner_label,
+                 deploy_class,
                  ts, ts, ts))
             _append_history(conn, slug, actor, "add",
                             note=ruling)
             row = _row(conn, slug)
         return entry_dict(row)
+    finally:
+        conn.close()
+
+
+def set_owner(db_path, entry_id, owner_thread, owner_label=None,
+              *, actor="cli") -> dict:
+    """Set (or clear, with owner_thread=None) an entry's owner
+    attribution. The thread id is the stable key the cleanup
+    follows; the label is a display snapshot."""
+    conn = connect(db_path)
+    try:
+        with _tx(conn):
+            row = _row(conn, entry_id)
+            conn.execute(
+                "UPDATE entries SET owner_thread = ?,"
+                " owner_label = ?, updated_at = ?,"
+                " version = version + 1 WHERE id = ?",
+                (owner_thread, owner_label, now_iso(), entry_id))
+            _append_history(conn, entry_id, actor, "set-owner",
+                            field="owner_thread",
+                            old=row["owner_thread"],
+                            new=owner_thread)
+            return entry_dict(_row(conn, entry_id))
+    finally:
+        conn.close()
+
+
+def set_deploy_class(db_path, entry_id, deploy_class, *,
+                     actor="cli") -> dict:
+    """Set an entry's deploy class. 'deployed' marks a live
+    artifact: never stale by class, excluded mechanically by
+    scripted cleanup. 'standard' is cleanup-eligible."""
+    if deploy_class not in DEPLOY_CLASSES:
+        raise RegistryError(
+            f"deploy_class must be one of {DEPLOY_CLASSES}")
+    conn = connect(db_path)
+    try:
+        with _tx(conn):
+            row = _row(conn, entry_id)
+            conn.execute(
+                "UPDATE entries SET deploy_class = ?,"
+                " updated_at = ?, version = version + 1"
+                " WHERE id = ?",
+                (deploy_class, now_iso(), entry_id))
+            _append_history(conn, entry_id, actor, "set-class",
+                            field="deploy_class",
+                            old=row["deploy_class"],
+                            new=deploy_class)
+            return entry_dict(_row(conn, entry_id))
     finally:
         conn.close()
 

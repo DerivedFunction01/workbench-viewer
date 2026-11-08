@@ -77,8 +77,17 @@ def _migrate(conn):
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version == 0:
         conn.executescript(SCHEMA_V1)
-        conn.execute("PRAGMA user_version = 1")
-    elif version != 1:
+        conn.execute("PRAGMA user_version = 2")
+    elif version == 1:
+        conn.execute(
+            "ALTER TABLE entries ADD COLUMN owner_thread TEXT")
+        conn.execute(
+            "ALTER TABLE entries ADD COLUMN owner_label TEXT")
+        conn.execute(
+            "ALTER TABLE entries ADD COLUMN deploy_class"
+            " TEXT NOT NULL DEFAULT 'standard'")
+        conn.execute("PRAGMA user_version = 2")
+    elif version != 2:
         raise RegistryError(
             f"unsupported registry schema version {version}")
 
