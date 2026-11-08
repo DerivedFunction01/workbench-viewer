@@ -2,7 +2,7 @@
 // the canonical use). Escape (document listener) + backdrop
 // button close; focus moves to the panel on open; the visible
 // title is the accessible name.
-// Contract: docs/component-contracts.md#sheet.
+// Contract: context/component-contracts.md#sheet.
 import { type ReactNode, useEffect, useRef } from "react";
 
 export type SheetProps = {

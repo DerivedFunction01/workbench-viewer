@@ -2,7 +2,7 @@
 // opens the entry. Chip + Badges arrive as slots so the
 // ruled/derived split stays visible. Chips inside the row
 // are the inert form; badges are always inert.
-// Contract: docs/component-contracts.md#triagerow.
+// Contract: context/component-contracts.md#triagerow.
 import { type CSSProperties, type ReactNode, useState } from "react";
 
 export type TriageRowProps = {

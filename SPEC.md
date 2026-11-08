@@ -435,7 +435,7 @@ set's `state_sha256` (approval binds to state, §1):
 - `deferred`, `hard-gate`, `abandoned` — as above.
 
 Rendering of the question set is the StateControls
-decision-block form (docs/component-contracts.md#statecontrols):
+decision-block form (context/component-contracts.md#statecontrols):
 a select question's options render as full-width rows,
 and each option's explanation lives inside its row —
 stated once, with the recommended badge in the same

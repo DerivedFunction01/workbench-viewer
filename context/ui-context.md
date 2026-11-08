@@ -332,7 +332,7 @@ component is coded; the standing rules here bind that work:
   label, prompt, and — for a select — full-width option
   rows carrying the recommended badge and the option's
   explanation inside the row, each fact stated once
-  (contract: docs/component-contracts.md#statecontrols).
+  (contract: context/component-contracts.md#statecontrols).
 - **Empty states:** empty is a state, not an error — a
   sunken well, one line ("No mockups match these filters",
   "Nothing awaiting review"), styled as content. Error

@@ -1,7 +1,7 @@
 // Lane — one board column: surface-1 body, uppercase section
 // head + count chip, sunken inner well for cards. Scroll
 // styling is the themes CSS's alone, never a component's.
-// Contract: docs/component-contracts.md#lane.
+// Contract: context/component-contracts.md#lane.
 import type { ReactNode } from "react";
 
 export type LaneProps = {

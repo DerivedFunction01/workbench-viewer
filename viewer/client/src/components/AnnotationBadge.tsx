@@ -8,7 +8,7 @@
 // NO badge: the state word renders in muted text (the
 // annotation mockup shows no badge for them; nothing is
 // invented to fill the gap). Display only: state in,
-// nothing out. Contract: docs/component-contracts.md#annotationbadge.
+// nothing out. Contract: context/component-contracts.md#annotationbadge.
 //
 // The two annotation mark tints live here too (one kit
 // home for the annotation marks): a LIVE selection wears

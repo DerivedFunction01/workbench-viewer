@@ -1,5 +1,5 @@
 // Toggle — one boolean, rendered as <button role="switch"> so
-// Space/Enter toggle natively. Contract: docs/component-contracts.md#toggle.
+// Space/Enter toggle natively. Contract: context/component-contracts.md#toggle.
 import { type CSSProperties, useState } from "react";
 
 export type ToggleProps = {

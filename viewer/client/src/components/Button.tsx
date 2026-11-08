@@ -1,5 +1,5 @@
 // Button — the kit's only button. Sections never hand-roll one.
-// Variants × states per docs/component-contracts.md#button.
+// Variants × states per context/component-contracts.md#button.
 import { type CSSProperties, type MouseEvent, type ReactNode, useState } from "react";
 
 export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";

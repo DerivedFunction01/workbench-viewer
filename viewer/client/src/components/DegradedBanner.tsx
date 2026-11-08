@@ -1,7 +1,7 @@
 // DegradedBanner — per-project degraded state + plan
 // source-format flags. An error names the section + the
 // recovery in one sentence, once. Never danger tokens.
-// Contract: docs/component-contracts.md#degradedbanner.
+// Contract: context/component-contracts.md#degradedbanner.
 export type DegradedBannerProps = {
   tone?: "degraded" | "source-format";
   /** Section + problem, one sentence. */

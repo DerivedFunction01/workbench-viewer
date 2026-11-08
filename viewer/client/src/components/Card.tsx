@@ -1,5 +1,5 @@
 // Card — the static content card. No shadow (elevation is the
-// surface ladder + border). Contract: docs/component-contracts.md#card.
+// surface ladder + border). Contract: context/component-contracts.md#card.
 import type { ReactNode } from "react";
 
 export type CardProps = {

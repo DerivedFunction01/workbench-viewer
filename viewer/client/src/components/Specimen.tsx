@@ -3,7 +3,7 @@
 // component in its contracted variants with local fixture
 // state, so the contracts matrix is reviewable in one render.
 // Justified past the ~300-line guideline in
-// docs/component-contracts.md#specimen on exactly that ground.
+// context/component-contracts.md#specimen on exactly that ground.
 import { type ReactNode, useState } from "react";
 import { AnnotationBadge, annotationMarkStyle, selectionMarkStyle } from "./AnnotationBadge";
 import { Badge } from "./Badge";

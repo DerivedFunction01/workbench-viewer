@@ -3,7 +3,7 @@
 // hover / selected per contract; rows are keyboard-operable
 // when selectable: Tab reaches a row, Enter/Space selects,
 // Enter on the selected row activates.
-// Contract: docs/component-contracts.md#datatable.
+// Contract: context/component-contracts.md#datatable.
 import { type CSSProperties, type KeyboardEvent, type ReactNode, useState } from "react";
 
 export type DataTableColumn<T> = {

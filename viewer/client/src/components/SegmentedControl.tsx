@@ -4,7 +4,7 @@
 // free — one Tab stop per group, arrow keys move + select.
 // The primitive under ModeControl, PaletteSelect (few-option
 // form), DensityToggle and StateControls select fields.
-// Contract: docs/component-contracts.md#segmentedcontrol.
+// Contract: context/component-contracts.md#segmentedcontrol.
 import { useId } from "react";
 
 export type SegmentedOption<V extends string> = { value: V; label: string };
@@ -18,7 +18,7 @@ export type SegmentedControlProps<V extends string> = {
   className?: string;
 };
 
-// Wrap guarantee (contract: docs/component-contracts.md
+// Wrap guarantee (contract: context/component-contracts.md
 // #segmentedcontrol): no `whitespace-nowrap` — a segment's
 // label wraps INSIDE its pill, and `min-w-0` on the label
 // and the span lets the pill shrink to the fieldset's

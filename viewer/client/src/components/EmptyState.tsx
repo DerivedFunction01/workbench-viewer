@@ -1,6 +1,6 @@
 // EmptyState — honest empty: a sunken well, one line, styled
 // as content. Empty is a state, not an error.
-// Contract: docs/component-contracts.md#emptystate.
+// Contract: context/component-contracts.md#emptystate.
 import type { ReactNode } from "react";
 
 export type EmptyStateProps = {

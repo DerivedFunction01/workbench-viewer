@@ -1,7 +1,7 @@
 // Frame — the standard mockup frame (SPEC §9): header, SUNKEN
 // preview well holding the mock, optional footer (Chip + Badges
 // live there). Archived frames render at 60% saturation with
-// their ruled chip intact. Contract: docs/component-contracts.md#frame.
+// their ruled chip intact. Contract: context/component-contracts.md#frame.
 import type { ReactNode } from "react";
 
 export type FrameProps = {

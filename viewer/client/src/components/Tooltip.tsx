@@ -2,7 +2,7 @@
 // No native title, no second system. The tip appears on hover
 // and on focus-within after a 300ms delay; it is a label aid
 // only (icon Buttons still carry aria-label).
-// Contract: docs/component-contracts.md#tooltip.
+// Contract: context/component-contracts.md#tooltip.
 import type { ReactNode } from "react";
 
 export type TooltipProps = {

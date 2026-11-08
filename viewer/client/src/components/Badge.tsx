@@ -2,7 +2,7 @@
 // Outline pill: glyph + word + magnitude; `text` is required
 // because a badge without its word is a defect. `approved`
 // is the one filled badge (it aliases the implemented tones).
-// Contract: docs/component-contracts.md#badge.
+// Contract: context/component-contracts.md#badge.
 import type { CSSProperties } from "react";
 
 export type BadgeKind = "stale" | "not-covered" | "needs-changes" | "approved" | "in-triage";

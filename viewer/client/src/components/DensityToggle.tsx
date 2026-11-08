@@ -1,7 +1,7 @@
 // DensityToggle — appearance setting, EXACT ruled contract
 // (the owner, 2026-10-25 16:53 EDT; Subplan 05 codes #/settings
 // against this signature). Pure: the shell applies + persists.
-// Contract: docs/component-contracts.md#densitytoggle.
+// Contract: context/component-contracts.md#densitytoggle.
 import { SegmentedControl } from "./SegmentedControl";
 
 export type DensityValue = "comfortable" | "compact";

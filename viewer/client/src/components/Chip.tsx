@@ -1,7 +1,7 @@
 // Chip — the ONE rendering of a ruled status (SPEC §5.1).
 // Filled pill: 8px dot + glyph + one word, always all three.
 // Pressable form (filter chips) renders a <button aria-pressed>.
-// Contract: docs/component-contracts.md#chip.
+// Contract: context/component-contracts.md#chip.
 import { type CSSProperties, type ReactNode, useState } from "react";
 
 export type RuledStatus =

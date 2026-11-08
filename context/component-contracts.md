@@ -11,8 +11,8 @@ themes CSS: `viewer/client/src/themes/index.css` +
 not exist, that is a blocker reported against this doc —
 components never invent values.
 
-Path note: the parent task for Subplan 04 froze this doc
-at `docs/component-contracts.md`; it supersedes the
+Path note: this doc lives in `context/` (moved there by
+the repo consolidation, 2026-11-08); it supersedes the
 `viewer/COMPONENTS.md` placeholder path named in the
 frozen layout sketch.
 

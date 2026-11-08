@@ -14,7 +14,7 @@
 // untrusted at this boundary: it is validated defensively at
 // render — an invalid schema yields honest error rows, never a
 // crash, and valid fields still render.
-// Contract: docs/component-contracts.md#statecontrols.
+// Contract: context/component-contracts.md#statecontrols.
 import { type CSSProperties, type ReactNode, useId } from "react";
 import { useIsPhone } from "../lib/responsive";
 import { Button } from "./Button";

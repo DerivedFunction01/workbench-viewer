@@ -3,7 +3,7 @@
 // against this signature). Palette ids arrive via props —
 // never hardcoded here. ≤4 options ⇒ segmented; more ⇒ a
 // native select (same appearance cells as an input row).
-// Contract: docs/component-contracts.md#paletteselect.
+// Contract: context/component-contracts.md#paletteselect.
 import { useId } from "react";
 import { SegmentedControl } from "./SegmentedControl";
 
