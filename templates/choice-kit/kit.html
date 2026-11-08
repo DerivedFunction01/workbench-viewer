@@ -404,37 +404,86 @@
     }
   }
 
+  // Answer state (payload v2): a choice is ANSWERED only when
+  // the reader changes it or commits it. Controls always
+  // display a value (the default before any touch), but a
+  // displayed default is not an answer and never enters the
+  // payload as one. `answered` is the set of answered ids.
   function loadState() {
     var state = {};
+    var answered = {};
     spec.choices.forEach(function (c) { state[c.id] = defaultFor(c); });
     try {
       var raw = localStorage.getItem(LS_KEY);
       if (raw) {
         var stored = JSON.parse(raw);
+        // Current record: {values, answered}. Legacy record
+        // (kit v1): a bare values object — its values load
+        // for display, and nothing in it counts as answered.
+        var values = stored;
+        var marks = null;
+        if (stored && typeof stored === "object"
+            && stored.values && typeof stored.values === "object") {
+          values = stored.values;
+          marks = Array.isArray(stored.answered) ? stored.answered : [];
+        }
         spec.choices.forEach(function (c) {
-          if (Object.prototype.hasOwnProperty.call(stored, c.id)) {
-            var v = coerce(c, stored[c.id]);
+          if (Object.prototype.hasOwnProperty.call(values, c.id)) {
+            var v = coerce(c, values[c.id]);
             if (v !== undefined) state[c.id] = v;
           }
+          if (marks && marks.indexOf(c.id) !== -1) answered[c.id] = true;
         });
       }
     } catch (e) { /* storage unavailable: defaults stand */ }
-    return state;
+    return { state: state, answered: answered };
   }
 
-  var state = loadState();
+  var loaded = loadState();
+  var state = loaded.state;
+  var answered = loaded.answered;
   var feedback = [];
   var fbMode = false;
   var selection = null; // {el, target, text}
 
   function save() {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        values: state,
+        answered: Object.keys(answered).filter(function (id) { return answered[id]; })
+      }));
+    } catch (e) {}
   }
 
   function setValue(id, v) {
     state[id] = v;
+    answered[id] = true;
     save();
     syncChoice(id);
+  }
+
+  function answeredCount() {
+    return spec.choices.filter(function (c) { return answered[c.id]; }).length;
+  }
+
+  // Commit current: adopt everything on screen as answered,
+  // at its displayed value — the deliberate wholesale answer.
+  function commitCurrent() {
+    spec.choices.forEach(function (c) { answered[c.id] = true; });
+    save();
+    spec.choices.forEach(function (c) { syncChoice(c.id); });
+  }
+
+  // Clear all: values back to defaults, nothing answered,
+  // store rewritten. Feedback entries are not answers and
+  // are untouched.
+  function clearAll() {
+    spec.choices.forEach(function (c) {
+      state[c.id] = defaultFor(c);
+      delete answered[c.id];
+    });
+    save();
+    spec.choices.forEach(function (c) { syncChoice(c.id); });
   }
 
   /* ---------------- markdown-lite ---------------- */
@@ -626,8 +675,12 @@
       n.textContent = humanValue(c);
     });
     document.querySelectorAll('[data-ck-value-for="' + id + '"]').forEach(function (n) {
-      n.textContent = humanValue(c);
+      n.textContent = answered[id] ? humanValue(c) : "Not answered yet";
     });
+    var counter = document.getElementById("ck-answered-count");
+    if (counter) {
+      counter.textContent = answeredCount() + " of " + spec.choices.length + " answered";
+    }
   }
 
   function jumpTo(id) {
@@ -643,12 +696,24 @@
 
   var bar = el("header", "ck-bar ck-chrome");
   bar.appendChild(el("span", "ck-bar-title", spec.title || spec.id));
+  var answeredCountEl = el("span", "ck-fb-count",
+    answeredCount() + " of " + spec.choices.length + " answered");
+  answeredCountEl.id = "ck-answered-count";
+  bar.appendChild(answeredCountEl);
   var fbCount = el("span", "ck-fb-count");
   bar.appendChild(fbCount);
   var fbBtn = el("button", null, "Feedback mode");
   fbBtn.type = "button";
   fbBtn.setAttribute("aria-pressed", "false");
   bar.appendChild(fbBtn);
+  var commitBtn = el("button", null, "Commit current");
+  commitBtn.type = "button";
+  commitBtn.addEventListener("click", commitCurrent);
+  bar.appendChild(commitBtn);
+  var clearBtn = el("button", null, "Clear all");
+  clearBtn.type = "button";
+  clearBtn.addEventListener("click", clearAll);
+  bar.appendChild(clearBtn);
   var copyBtn = el("button", "ck-primary", "Copy");
   copyBtn.type = "button";
   bar.appendChild(copyBtn);
@@ -695,7 +760,7 @@
   summary.setAttribute("data-ck-section", "All choices");
   summary.appendChild(el("h2", null, "All choices"));
   summary.appendChild(el("p", "ck-summary-sub",
-    "Every pick in one place. Press Copy in the top bar to take the answers as JSON."));
+    "Every pick in one place. Only answered choices travel with Copy — a value shown here is a default until you change it or press Commit current."));
   spec.choices.forEach(function (c) {
     var rowCard = el("div", "ck-row");
     var head = el("div", "ck-row-head");
@@ -708,7 +773,7 @@
     }
     var val = el("span", "ck-row-value");
     val.setAttribute("data-ck-value-for", c.id);
-    val.textContent = humanValue(c);
+    val.textContent = answered[c.id] ? humanValue(c) : "Not answered yet";
     head.appendChild(val);
     rowCard.appendChild(head);
     if (c.place !== "section") {
@@ -863,10 +928,15 @@
 
   function copyPayload() {
     var answers = {};
-    spec.choices.forEach(function (c) { answers[c.id] = state[c.id]; });
+    var unanswered = [];
+    spec.choices.forEach(function (c) {
+      if (answered[c.id]) answers[c.id] = state[c.id];
+      else unanswered.push(c.id);
+    });
     return {
       artifact: spec.id,
       answers: answers,
+      unanswered: unanswered,
       feedback: feedback.map(function (f) {
         return { target: f.target, text: f.text, comment: f.comment };
       })
