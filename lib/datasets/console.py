@@ -44,8 +44,8 @@ import json
 import re
 import threading
 
-from . import datasets as datasets_mod
-from .datasets import DatasetError, _json_safe
+from . import derivations as datasets_mod
+from .derivations import DatasetError, _json_safe
 
 MAX_SQL_ROWS = 10_000
 MAX_PAYLOAD_BYTES = 8 * 1024 * 1024

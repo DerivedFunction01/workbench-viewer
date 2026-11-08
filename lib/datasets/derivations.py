@@ -59,7 +59,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
 
-from .files import is_secret, resolve_in_repo
+from ..files import is_secret, resolve_in_repo
 
 # ----------------------------------------------------------------
 # Classification and errors
