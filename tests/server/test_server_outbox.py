@@ -148,16 +148,32 @@ class OutboxServerCase(unittest.TestCase):
         payload = None
         while time.time() < deadline:
             if self.notify_file.is_file():
-                payload = json.loads(
-                    self.notify_file.read_text())
-                break
+                try:
+                    payload = json.loads(
+                        self.notify_file.read_text())
+                    break
+                except (OSError, json.JSONDecodeError):
+                    # The notify command's shell redirect creates
+                    # the file before its content lands; a read in
+                    # that window sees an empty or partial file.
+                    pass
             time.sleep(0.25)
         self.assertIsNotNone(
             payload, "notify command never fired")
         self.assertEqual(payload["message_id"], mid)
         self.assertEqual(payload["event"], "sent")
-        status, out = self.req(
-            "GET", "/api/settings/effective")
+        # The loop advances its checkpoint after the command
+        # completes; the payload can be visible first, so poll
+        # the settings read until the checkpoint lands.
+        deadline = time.time() + 20
+        out = {}
+        while time.time() < deadline:
+            status, out = self.req(
+                "GET", "/api/settings/effective")
+            if out.get("messages", {}).get(
+                    "notify_checkpoint") == event["id"]:
+                break
+            time.sleep(0.25)
         self.assertEqual(
             out["messages"]["notify_checkpoint"], event["id"])
         self.assertEqual(out["messages"]["outbox_rows"], 1)
