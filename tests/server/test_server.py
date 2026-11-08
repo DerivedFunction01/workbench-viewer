@@ -360,13 +360,33 @@ class TestArtifactsFeed(ServerCase):
         self.assertEqual(feed["triage"], [])
 
 
-class TestContainment(ServerCase):
-    def test_locked_db_degrades_only_that_project(self):
-        beta_db = self.beta / "workbench" / "registry.db"
-        conn = sqlite3.connect(beta_db)
+def lock_exclusively(db_path: Path) -> sqlite3.Connection:
+    # The fixture server sweeps every second and its registry
+    # connections keep the DB in WAL; switching the journal mode
+    # back to DELETE is refused outright (not queued behind the
+    # busy timeout) while any server connection is open, so under
+    # load the first attempt can lose that race. The lock setup
+    # retries until a sweep drains; once the exclusive lock is
+    # held, the server cannot interfere with the scenario.
+    deadline = time.time() + 30
+    while True:
+        conn = sqlite3.connect(db_path, timeout=30)
         try:
             conn.execute("PRAGMA journal_mode=DELETE")
             conn.execute("BEGIN EXCLUSIVE")
+            return conn
+        except sqlite3.OperationalError:
+            conn.close()
+            if time.time() >= deadline:
+                raise
+            time.sleep(0.25)
+
+
+class TestContainment(ServerCase):
+    def test_locked_db_degrades_only_that_project(self):
+        beta_db = self.beta / "workbench" / "registry.db"
+        conn = lock_exclusively(beta_db)
+        try:
             conn.execute(
                 "UPDATE todos SET title = title WHERE 0")
             status, feed = self.req(
