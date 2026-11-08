@@ -5,8 +5,8 @@
 # been ruled in since, under the procedure this file has
 # always named — it lands here, with its justification:
 #
-# duckdb — the dataset derivations in lib/datasets.py and
-# lib/dataset_console.py (peek-highlight-and-datasets plan,
+# duckdb — the dataset derivations in lib/datasets/derivations.py
+# and lib/datasets/console.py (peek-highlight-and-datasets plan,
 # owner's ruling 2026-10-28): schema, paged rows, stats,
 # and the guarded read-only SQL console over parquet, csv,
 # jsonl, sqlite, and native DuckDB files in browsed repos.

@@ -114,7 +114,7 @@ DEFAULTS = {
     "feed_pool_workers": 8,
     "edit_audit_log": "edit-log.jsonl",
     # Datasets (datasets plan, step 3): the caps are
-    # enforced in lib/datasets + lib/dataset_console;
+    # enforced in lib/datasets (derivations + console);
     # the timeout is passed through, the rest are listed
     # so /api/config reports the whole surface (the peek
     # caps precedent).

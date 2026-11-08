@@ -3,7 +3,7 @@
 scheduler-registry entry in the same writer call,
 disarming deletes it, `wb progress-check` renders the
 stall verdict as an exit code, and the doctor flags
-entry drift both ways. lib/progress_schedule.py is the
+entry drift both ways. lib/progress/schedule.py is the
 mechanism; the todo file stays the record of truth.
 """
 

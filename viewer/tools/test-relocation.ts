@@ -3,7 +3,7 @@
 // (client/src/sections/plans/relocation.ts) against the
 // SHARED fixtures the lib is pinned by
 // (tests/fixtures/relocation.json): same cases, same
-// assertions as tests/test_annotations.py's
+// assertions as tests/lib/test_annotations.py's
 // TestRelocateFixtures — status equality, and for located
 // cases the span's normalized text equals the normalized
 // quote. One algorithm, two implementations (spec §12).

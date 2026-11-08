@@ -600,7 +600,7 @@ export const Actions = {
   // 5-6): the Table view over dataset-kind repo files —
   // described schema, one bounded rows page, on-demand
   // column stats, and the guarded SQL console. Shapes are
-  // the lib/datasets.py + lib/dataset_console.py
+  // the lib/datasets/derivations.py + console.py
   // contracts, typed on the client in lib/api-types-repos.ts.
   getRepoDataset: defineAction({
     description: "Describe a dataset file's schema for the Table view.",

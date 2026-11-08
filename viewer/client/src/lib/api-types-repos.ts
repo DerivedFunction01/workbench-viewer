@@ -223,7 +223,7 @@ export interface ReposRegistryPayload {
 
 // ---------------------------------------------------------------------------
 // Dataset payloads (datasets plan, steps 5-6): the shapes
-// of lib/datasets.py + lib/dataset_console.py behind
+// of lib/datasets/derivations.py + console.py behind
 // /api/repos/<id>/dataset*. Cell values ride the modules'
 // JSON-safe mapping: blobs arrive as null, dates and
 // datetimes as ISO strings, decimals as exact strings,

@@ -2,7 +2,7 @@
 // test-grouping.ts — the Plans-list grouping derivation
 // (client/src/sections/plans/grouping.ts, repo-home
 // spec §21) against the fixture family the feed tests
-// pin (tests/test_plan_grouping.py), plus the cycle and
+// pin (tests/lib/test_plan_grouping.py), plus the cycle and
 // self-declaration families. Every case asserts the
 // entry shape the list renders: top-level membership,
 // nested children in declaration order, missing rows,

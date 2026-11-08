@@ -1,6 +1,6 @@
 // The dataset SQL console (datasets plan, step 6): one
 // guarded read against the opened file, run through
-// lib/dataset_console — a single read-only statement,
+// lib/datasets/console — a single read-only statement,
 // scoped to the file's one relation, which the query
 // names `data` (for the database kinds, the table the
 // Table view has chosen). Refusals and engine answers

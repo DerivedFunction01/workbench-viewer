@@ -1,4 +1,4 @@
-"""lib/dataset_console: the guarded read-only SQL
+"""lib/datasets/console: the guarded read-only SQL
 console (peek-highlight-and-datasets plan, step 4).
 
 The happy path and every refusal are proven against

@@ -71,7 +71,7 @@ hour. The harness records the intent and the derivations
 — and, since the owner's 2026-10-31 auto-create
 commission, it also creates the schedule: arming a todo
 writes its scheduler-registry entry in the same call
-(`lib/progress_schedule.py`; one scripted entry per todo,
+(`lib/progress/schedule.py`; one scripted entry per todo,
 running `wb progress-check <id>` at the todo's cadence,
 a stall exiting non-zero so the scheduler's failure
 report pings), and disarming deletes it. No hand-made

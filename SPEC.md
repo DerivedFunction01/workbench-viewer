@@ -515,7 +515,7 @@ stall verdicts as JSON — the single read a driver
 consumes. Since the owner's 2026-10-31 auto-create
 commission the harness also creates the schedule
 itself: arming writes a scheduler-registry entry
-(`lib/progress_schedule.py`; the scheduler server's
+(`lib/progress/schedule.py`; the scheduler server's
 registry is files, rescanned every tick) whose command
 is `wb progress-check <id>` at the todo's cadence, and
 disarming deletes it — `wb progress --sync-entries`
