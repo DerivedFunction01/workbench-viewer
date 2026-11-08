@@ -106,7 +106,8 @@ class TestRender(unittest.TestCase):
                        "owner: none", "timeout_secs: 120",
                        "  when: on_failure",
                        "lifetime: until_complete",
-                       "migrated: false",
+                       "migrated: true",
+                       "migrated_at: 2026-11-01",
                        "- ${WS}/workbench-viewer/wb",
                        "- --root",
                        "- ${WS}/fixture-proj",
@@ -171,12 +172,21 @@ class TestSync(SeamCase):
 
     def test_cadence_change_rewrites(self):
         ps.sync_todo(self.plans, armed_todo())
+        before = self.entry_path().read_text(
+            encoding="utf-8")
+        admitted_line = next(
+            line for line in before.splitlines()
+            if line.startswith("migrated_at:"))
         out = ps.sync_todo(
             self.plans, armed_todo(progress_check="2h"))
         self.assertEqual(out["action"], "written")
-        self.assertIn(
-            "every: 2h",
-            self.entry_path().read_text(encoding="utf-8"))
+        after = self.entry_path().read_text(
+            encoding="utf-8")
+        self.assertIn("every: 2h", after)
+        # The rewrite follows the todo's new state but
+        # carries the admission record: the migrated_at
+        # of the first render survives it.
+        self.assertIn(admitted_line, after)
 
     def test_no_jobs_dir_skips(self):
         with mock.patch.dict(
@@ -315,22 +325,23 @@ class TestSyncAll(SeamCase):
                          .exists())
 
     def test_admitted_entry_survives_reconcile(self):
-        # The migrated flip is the scheduler repo's
-        # admission record, not harness-derived state: a
-        # reconcile must never reset it to the fresh
-        # render's migrated: false (that would silently
-        # un-admit a live schedule).
+        # The migrated_at on disk is the admission
+        # record, not harness-derived state: a reconcile
+        # must never rewrite an admitted entry to the
+        # fresh render (that would falsify the date the
+        # schedule went live).
         todo = self.make_armed()
         eid = ps.entry_id("fixture-proj", todo["id"])
         path = self.entry_path(eid)
-        path.write_text(path.read_text(
-            encoding="utf-8").replace(
-            "migrated: false",
-            "migrated: true\nmigrated_at: 2026-11-01"),
-            encoding="utf-8")
+        lines = path.read_text(
+            encoding="utf-8").splitlines()
+        path.write_text("\n".join(
+            "migrated_at: 2026-11-02"
+            if line.startswith("migrated_at:") else line
+            for line in lines) + "\n", encoding="utf-8")
         out = ps.sync_all([self.project()])
         self.assertNotIn(eid, out["written"])
-        self.assertIn("migrated: true",
+        self.assertIn("migrated_at: 2026-11-02",
                       path.read_text(encoding="utf-8"))
 
 
@@ -383,16 +394,10 @@ class TestDoctor(SeamCase):
         self.assertEqual(self.findings(), [])
 
     def admit(self, eid=ENTRY_ID, schedule=True):
-        """Model the admitted state: the admission flow
-        flips the rendered entry in place, and the
-        server's next-due table (state/ beside jobs/)
-        carries the id."""
-        path = self.entry_path(eid)
-        text = path.read_text(encoding="utf-8")
-        path.write_text(text.replace(
-            "migrated: false",
-            "migrated: true\nmigrated_at: 2026-11-01"),
-            encoding="utf-8")
+        """Model the scheduled state: the entry is born
+        admitted (the owner's 2026-11-08 ruling), and
+        the server's next-due table (state/ beside
+        jobs/) carries the id."""
         if schedule:
             state = self.jobs.parent / "state"
             state.mkdir(exist_ok=True)
@@ -406,11 +411,22 @@ class TestDoctor(SeamCase):
         self.assertEqual(self.findings(), [])
 
     def test_unadmitted_entry_is_flagged_unscheduled(self):
-        # The fresh render is migrated: false and the
+        # A pre-ruling render (migrated: false, no
+        # migrated_at) that was never re-rendered: the
         # engine fires only migrated entries — existence
         # alone never meant watched (the 2026-11-08
         # diagnosis: 11 live entries, none ever fired).
-        self.make_armed()
+        todo = self.make_armed()
+        path = self.entry_path(ps.entry_id(
+            "fixture-proj", todo["id"]))
+        lines = path.read_text(
+            encoding="utf-8").splitlines()
+        path.write_text("\n".join(
+            "migrated: false"
+            if line.startswith("migrated:") else line
+            for line in lines
+            if not line.startswith("migrated_at:")) + "\n",
+            encoding="utf-8")
         found = self.findings()
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0]["check"],

@@ -81,14 +81,18 @@ armed set, and the doctor flags drift three ways
 (`todo-progress-entry-missing`,
 `todo-progress-entry-unscheduled`,
 `todo-progress-entry-orphan`). Entry existence is not
-scheduling: the scheduler engine fires only entries
-admitted through its own admission flow (`migrated:
-true`, flipped after validate + a server-context
-proof run), the harness render is born unadmitted,
-and a re-sync never resets an admitted entry's flip.
-The doctor's unscheduled check reads the entry's
-migrated flag and the server's next-due table, so an
-armed-but-unadmitted entry is loud, not silent. The per-bundle driver
+scheduling: the scheduler engine fires only
+`migrated: true` entries, and the harness render is
+born admitted (the owner's 2026-11-08 ruling:
+`migrated: true` with `migrated_at` set to the arming
+date — the scheduler repo's admission flow of
+validate + a server-context proof run governs
+hand-written entries, not this machine-rendered
+family), and a re-sync never resets an admitted
+entry's record. The doctor's unscheduled check reads
+the entry's migrated flag and the server's next-due
+table, so an armed-but-unscheduled entry is loud,
+not silent. The per-bundle driver
 template below remains the pattern for agent-driven
 follow-up where a thread runs one.
 

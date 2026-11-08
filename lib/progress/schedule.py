@@ -43,11 +43,24 @@ paths. A sync failure NEVER fails the todo write it
 rides: the outcome rides the writer's result dict as
 `progress_entry`, and the doctor surfaces persistent
 divergence.
+
+Admission posture (the owner's 2026-11-08 ruling):
+harness-rendered entries are born admitted — the
+render carries migrated: true with migrated_at set to
+the todo's arming date. The scheduler repo's admission
+flow (validate + proof run, then the flip) governs
+hand-written entries; this machine-rendered family is
+exempt by ruling, its one fixed template being what a
+proof run would vet. The doctor's unscheduled check
+still convicts a pre-ruling render (migrated: false)
+until a sync re-renders it, and still requires the
+server's next-due table to carry the entry.
 """
 
 import json
 import os
 import re
+from datetime import date
 from pathlib import Path
 
 from . import report as progress_mod
@@ -127,11 +140,12 @@ _MIGRATED_RE = re.compile(r"^migrated:\s*(\S+)\s*$",
 
 
 def _admitted(entry_text: str) -> bool:
-    """An entry the scheduler repo's admission flow has
-    flipped live. The engine schedules only migrated:true
-    entries; the harness renders migrated:false (a fresh
-    entry is unadmitted until the admission flow's
-    validate + proof run has run)."""
+    """An entry carrying the admission mark (migrated:
+    true) — born that way under the owner's 2026-11-08
+    ruling for harness renders, or flipped by the
+    scheduler repo's admission flow for entries that
+    predate it. The engine schedules only migrated:true
+    entries."""
     match = _MIGRATED_RE.search(entry_text)
     return bool(match) and match.group(1) == "true"
 
@@ -202,6 +216,17 @@ def _title_text(todo) -> str:
     return re.sub(r"\s+", " ", raw).strip()[:80]
 
 
+def _armed_date(todo) -> str:
+    """The todo's arming date — a born-admitted entry's
+    admission date: the date part of the progress_armed
+    timestamp, or today when the todo carries none."""
+    armed = todo.get("progress_armed") or ""
+    if len(armed) >= 10 and armed[4] == "-" \
+            and armed[7] == "-":
+        return armed[:10]
+    return date.today().isoformat()
+
+
 def render_entry(project_slug: str, project_rel: str,
                  repo_rel: str, todo) -> str:
     """One registry entry in the scheduler's strict YAML
@@ -211,7 +236,9 @@ def render_entry(project_slug: str, project_rel: str,
     in argv and state_paths only, so an anchored cwd
     reaches the spawn literally and fails (diagnosed
     2026-11-08, when the first admission proofs ran the
-    executor by hand)."""
+    executor by hand). The entry is born admitted (the
+    owner's 2026-11-08 ruling): migrated: true with
+    migrated_at set to the arming date."""
     eid = entry_id(project_slug, todo["id"])
     title = (f"Progress check - {project_slug}: "
              f"{_title_text(todo)} ({todo['id']})")
@@ -241,9 +268,26 @@ def render_entry(project_slug: str, project_rel: str,
         f"classification: {_quoted(_CLASSIFICATION)}",
         "lifetime: until_complete",
         f"self_removal: {_quoted(_SELF_REMOVAL)}",
-        "migrated: false",
+        "migrated: true",
+        f"migrated_at: {_armed_date(todo)}",
     ]
     return "\n".join(lines) + "\n"
+
+
+_MIGRATED_AT_RE = re.compile(r"^migrated_at:[ \t]*(\S+)[ \t]*$",
+                             re.MULTILINE)
+
+
+def _carry_migrated_at(existing: str, render: str) -> str:
+    """The fresh render with the existing entry's
+    migrated_at carried over: the date on disk is the
+    admission record, while every other line follows
+    the todo's current state."""
+    match = _MIGRATED_AT_RE.search(existing)
+    if not match:
+        return render
+    return _MIGRATED_AT_RE.sub(
+        f"migrated_at: {match.group(1)}", render, count=1)
 
 
 def _write_atomic(path: Path, text: str) -> None:
@@ -278,14 +322,17 @@ def _sync_todo(plans_dir, todo) -> dict:
                 return {"action": "unchanged",
                         "entry": eid}
             if _admitted(existing):
-                # Admitted through the scheduler repo's
-                # admission flow (migrated: true): the
-                # flip is the scheduler's record, not
-                # harness-derived state — never clobber
-                # it with the fresh render.
-                return {"action": "unchanged",
-                        "entry": eid,
-                        "admitted": True}
+                # An admitted entry (born admitted, or
+                # flipped by the scheduler repo's
+                # admission flow): carry its migrated_at
+                # — the admission record — over the fresh
+                # render, while the rest of the entry
+                # follows the todo's current state.
+                text = _carry_migrated_at(existing, text)
+                if text == existing:
+                    return {"action": "unchanged",
+                            "entry": eid,
+                            "admitted": True}
         _write_atomic(path, text)
         return {"action": "written", "entry": eid}
     if path.is_file():

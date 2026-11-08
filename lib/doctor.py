@@ -481,9 +481,10 @@ def progress_entry_findings(projects) -> list:
         reasons = []
         if migrated is False:
             reasons.append(
-                "the entry was never admitted (migrated: "
-                "false — the engine schedules only "
-                "migrated: true entries)")
+                "the entry is a pre-ruling render that "
+                "was never admitted (migrated: false — "
+                "the engine schedules only migrated: "
+                "true entries)")
         if scheduled is not None and eid not in scheduled:
             reasons.append(
                 "the server's next-due table does not "
@@ -498,10 +499,10 @@ def progress_entry_findings(projects) -> list:
                 + "; ".join(reasons)
                 + " — the progress check never runs, so "
                 "the work is unwatched despite the entry; "
-                "admit the entry through the scheduler "
-                "repo's admission flow (validate + a "
-                "proof run in the server's context, then "
-                "migrated: true)"))
+                "run wb progress --sync-entries to "
+                "reconcile (harness entries are born "
+                "admitted since the owner's 2026-11-08 "
+                "ruling)"))
     swept = {project.slug for project in projects}
     for path in sorted(directory.glob(
             f"{progress_schedule_mod.ENTRY_PREFIX}"
