@@ -56,6 +56,16 @@ Check families:
                        the same call, so a missing one is
                        drift (an arm that predates the
                        mechanism, or a deleted file)
+  todo-progress-entry-unscheduled
+                       an armed todo whose scheduler
+                       entry exists but the scheduler
+                       server will not fire: the entry
+                       was never admitted (migrated is
+                       not true — the engine schedules
+                       only admitted entries), or the
+                       server's next-due table does not
+                       carry it. Entry existence alone
+                       never meant watched.
   todo-progress-entry-orphan
                        a wb-progress scheduler entry
                        whose todo is gone, terminal,
@@ -428,13 +438,16 @@ def registry_findings(project) -> list:
 # ----------------------------------------------------------------
 
 def progress_entry_findings(projects) -> list:
-    """Scheduler-entry drift, both ways: an armed todo
-    whose entry is missing, and a wb-progress entry whose
-    todo no longer wants one. Entries are derived state
-    (lib/progress_schedule.py) — the todo files rule, and
-    `wb progress --sync-entries` is the remedy either
-    way. Silent when this machine has no scheduler
-    registry: no registry, no drift."""
+    """Scheduler-entry drift, three ways: an armed todo
+    whose entry is missing, an entry that exists but the
+    server will not fire (unscheduled), and a wb-progress
+    entry whose todo no longer wants one. Entries are
+    derived state (lib/progress_schedule.py) — the todo
+    files rule, and `wb progress --sync-entries` is the
+    remedy for the missing/orphan pair; an unscheduled
+    entry is remedied by the scheduler repo's admission
+    flow, not by a re-sync. Silent when this machine has
+    no scheduler registry: no registry, no drift."""
     directory = progress_schedule_mod.jobs_dir()
     if directory is None:
         return []
@@ -449,8 +462,11 @@ def progress_entry_findings(projects) -> list:
                     project.slug, todo["id"])
                 wanted[eid] = (project.slug, todo)
     out = []
+    scheduled = progress_schedule_mod.scheduled_ids(
+        directory)
     for eid, (slug, todo) in sorted(wanted.items()):
-        if not (directory / f"{eid}.yaml").is_file():
+        entry_path = directory / f"{eid}.yaml"
+        if not entry_path.is_file():
             out.append(_finding(
                 slug, "todo-progress-entry-missing",
                 todo["path"],
@@ -459,6 +475,33 @@ def progress_entry_findings(projects) -> list:
                 f"— arming writes the entry in the same "
                 f"call, so this is drift; run wb progress "
                 f"--sync-entries to reconcile"))
+            continue
+        migrated = progress_schedule_mod.entry_migrated(
+            entry_path)
+        reasons = []
+        if migrated is False:
+            reasons.append(
+                "the entry was never admitted (migrated: "
+                "false — the engine schedules only "
+                "migrated: true entries)")
+        if scheduled is not None and eid not in scheduled:
+            reasons.append(
+                "the server's next-due table does not "
+                "carry it")
+        if reasons:
+            out.append(_finding(
+                slug, "todo-progress-entry-unscheduled",
+                todo["path"],
+                f"todo is armed ({todo['progress_check']}) "
+                f"and scheduler entry {eid}.yaml exists, "
+                f"but the scheduler will not fire it: "
+                + "; ".join(reasons)
+                + " — the progress check never runs, so "
+                "the work is unwatched despite the entry; "
+                "admit the entry through the scheduler "
+                "repo's admission flow (validate + a "
+                "proof run in the server's context, then "
+                "migrated: true)"))
     swept = {project.slug for project in projects}
     for path in sorted(directory.glob(
             f"{progress_schedule_mod.ENTRY_PREFIX}"

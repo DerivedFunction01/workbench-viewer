@@ -45,6 +45,7 @@ rides: the outcome rides the writer's result dict as
 divergence.
 """
 
+import json
 import os
 import re
 from pathlib import Path
@@ -121,6 +122,55 @@ def is_armed(todo) -> bool:
         and not todo.get("archived")
 
 
+_MIGRATED_RE = re.compile(r"^migrated:\s*(\S+)\s*$",
+                          re.MULTILINE)
+
+
+def _admitted(entry_text: str) -> bool:
+    """An entry the scheduler repo's admission flow has
+    flipped live. The engine schedules only migrated:true
+    entries; the harness renders migrated:false (a fresh
+    entry is unadmitted until the admission flow's
+    validate + proof run has run)."""
+    match = _MIGRATED_RE.search(entry_text)
+    return bool(match) and match.group(1) == "true"
+
+
+def entry_migrated(path: Path):
+    """The entry file's migrated flag: True / False, or
+    None when the file cannot be read or carries no such
+    line (the scheduler's own validation owns malformed
+    entries)."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = _MIGRATED_RE.search(text)
+    if not match:
+        return None
+    return match.group(1) == "true"
+
+
+def scheduled_ids(directory=None):
+    """The ids in the scheduler server's next-due table
+    (state/next_due.json beside the registry's jobs/
+    dir) — the server's own record of what it will
+    actually fire. None when the table is absent or
+    unreadable: no server state, no verdict."""
+    directory = directory or jobs_dir()
+    if directory is None:
+        return None
+    state = directory.parent / "state" / "next_due.json"
+    try:
+        data = json.loads(state.read_text(
+            encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return set(data)
+
+
 def _project_root(plans_dir):
     """Walk up from a project's plans dir to the dir
     carrying its workbench.yaml (the project root)."""
@@ -155,7 +205,13 @@ def _title_text(todo) -> str:
 def render_entry(project_slug: str, project_rel: str,
                  repo_rel: str, todo) -> str:
     """One registry entry in the scheduler's strict YAML
-    subset (schema: the scheduler repo's jobs/README.md)."""
+    subset (schema: the scheduler repo's jobs/README.md).
+    The project is selected by a --root argv item, never
+    a cwd field: the scheduler's loader expands anchors
+    in argv and state_paths only, so an anchored cwd
+    reaches the spawn literally and fails (diagnosed
+    2026-11-08, when the first admission proofs ran the
+    executor by hand)."""
     eid = entry_id(project_slug, todo["id"])
     title = (f"Progress check - {project_slug}: "
              f"{_title_text(todo)} ({todo['id']})")
@@ -173,9 +229,10 @@ def render_entry(project_slug: str, project_rel: str,
         "  argv:",
         f"    - ${{WS}}/{repo_rel}/.venv/bin/python",
         f"    - ${{WS}}/{repo_rel}/wb",
+        "    - --root",
+        f"    - ${{WS}}/{project_rel}",
         "    - progress-check",
         f"    - {todo['id']}",
-        f"  cwd: ${{WS}}/{project_rel}",
         f"timeout_secs: {CHECK_TIMEOUT_SECS}",
         "report:",
         "  when: on_failure",
@@ -215,9 +272,20 @@ def _sync_todo(plans_dir, todo) -> dict:
     if is_armed(todo):
         text = render_entry(slug, project_rel, repo_rel,
                             todo)
-        if path.is_file() \
-                and path.read_text(encoding="utf-8") == text:
-            return {"action": "unchanged", "entry": eid}
+        if path.is_file():
+            existing = path.read_text(encoding="utf-8")
+            if existing == text:
+                return {"action": "unchanged",
+                        "entry": eid}
+            if _admitted(existing):
+                # Admitted through the scheduler repo's
+                # admission flow (migrated: true): the
+                # flip is the scheduler's record, not
+                # harness-derived state — never clobber
+                # it with the fresh render.
+                return {"action": "unchanged",
+                        "entry": eid,
+                        "admitted": True}
         _write_atomic(path, text)
         return {"action": "written", "entry": eid}
     if path.is_file():
@@ -296,8 +364,8 @@ def parse_entry_todo_id(path: Path):
                 items.append(stripped[2:].strip())
             elif stripped:
                 break
-    if len(items) >= 4 and items[2] == "progress-check":
-        return items[3]
+    if len(items) >= 4 and items[-2] == "progress-check":
+        return items[-1]
     return None
 
 

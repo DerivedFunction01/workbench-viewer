@@ -77,9 +77,18 @@ a stall exiting non-zero so the scheduler's failure
 report pings), and disarming deletes it. No hand-made
 schedule is needed or wanted; `wb progress
 --sync-entries` reconciles the registry against the
-armed set, and the doctor flags drift both ways
+armed set, and the doctor flags drift three ways
 (`todo-progress-entry-missing`,
-`todo-progress-entry-orphan`). The per-bundle driver
+`todo-progress-entry-unscheduled`,
+`todo-progress-entry-orphan`). Entry existence is not
+scheduling: the scheduler engine fires only entries
+admitted through its own admission flow (`migrated:
+true`, flipped after validate + a server-context
+proof run), the harness render is born unadmitted,
+and a re-sync never resets an admitted entry's flip.
+The doctor's unscheduled check reads the entry's
+migrated flag and the server's next-due table, so an
+armed-but-unadmitted entry is loud, not silent. The per-bundle driver
 template below remains the pattern for agent-driven
 follow-up where a thread runs one.
 
