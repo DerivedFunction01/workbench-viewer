@@ -1244,3 +1244,20 @@ over:
 - Project-zero dogfooding and any single project's
   adoption order create no precedents that bind other
   repos beyond this section.
+
+## 15. The choice kit (2026-11-08)
+
+Choice-bearing studies are not hand-rolled pages. The kit at
+`templates/choice-kit/` is one self-contained static page
+driven by a JSON spec: sections, plus choices declared once
+(`toggle`, `single`, `multi`, `slider`, `input-text`,
+`input-number`). A section's `controls[]` renders a choice
+inline beside its content; the summary renders the same
+choice over the same state — one declaration, many views.
+One Copy button emits one JSON payload
+(`{artifact, answers, feedback}`); feedback mode annotates
+targets with events disabled. `wb artifact new <slug>`
+scaffolds an entry (kind `artifact`) from the kit and derives
+its registry `state_schema` from the spec; `wb artifact
+build <slug>` re-embeds an edited `spec.json`. The contract
+of record is `templates/choice-kit/README.md`.
