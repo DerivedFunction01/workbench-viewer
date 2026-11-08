@@ -108,7 +108,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import messages as msg_mod
-from . import progress_schedule as \
+from .progress import schedule as \
     progress_schedule_mod
 from . import registry as reg
 from . import staleness as stale_mod
@@ -442,7 +442,7 @@ def progress_entry_findings(projects) -> list:
     whose entry is missing, an entry that exists but the
     server will not fire (unscheduled), and a wb-progress
     entry whose todo no longer wants one. Entries are
-    derived state (lib/progress_schedule.py) — the todo
+    derived state (lib/progress/schedule.py) — the todo
     files rule, and `wb progress --sync-entries` is the
     remedy for the missing/orphan pair; an unscheduled
     entry is remedied by the scheduler repo's admission

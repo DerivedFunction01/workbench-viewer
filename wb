@@ -29,7 +29,7 @@ from lib import active as active_mod  # noqa: E402
 from lib import bundles as bundle_mod  # noqa: E402
 from lib import doctor as doctor_mod  # noqa: E402
 from lib import progress as progress_mod  # noqa: E402
-from lib import progress_schedule as \
+from lib.progress import schedule as \
     progress_schedule_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
@@ -572,7 +572,7 @@ def cmd_progress(args):
     driver's business. The schedules themselves are the
     harness's own mechanism now: arming a todo writes
     its scheduler-registry entry in the same call
-    (lib/progress_schedule.py), and `--sync-entries`
+    (lib/progress/schedule.py), and `--sync-entries`
     reconciles the whole registry against the swept
     armed set. Sweep roots resolve through the server
     config seam, like the doctor's."""

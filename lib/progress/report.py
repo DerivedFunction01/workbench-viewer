@@ -23,7 +23,7 @@ on a verdict (checkpointing, nudging, surfacing a
 blocker) is the driver's business. The schedule that
 runs the checks is the harness's own mechanism since
 the owner's 2026-10-31 auto-create commission:
-lib/progress_schedule.py writes a scheduler-registry
+lib/progress/schedule.py writes a scheduler-registry
 entry when a todo arms and deletes it when the todo
 disarms, and each entry runs `wb progress-check` at
 the todo's cadence (the older scheduling-is-a-platform-
@@ -34,8 +34,8 @@ check's `print-schedule`).
 import re
 from datetime import datetime, timezone
 
-from .plans import bundles as bundle_parser
-from .util import parse_iso
+from ..plans import bundles as bundle_parser
+from ..util import parse_iso
 
 CHECKPOINT_PREFIX = "progress-checkpoint:"
 _CHECKPOINT_RE = re.compile(r"^progress-checkpoint:\s*(\S+)")

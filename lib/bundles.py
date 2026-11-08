@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import progress_schedule as progress_schedule_mod
+from .progress import schedule as progress_schedule_mod
 from . import registry as reg
 from .plans import bundles as bundle_parser
 from .plans.parser import parse_plan
@@ -347,7 +347,7 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
     result["bundle"] = bundle_dir.name
     result["file"] = str(todo_path)
     # The armed todo's scheduler entry is derived state,
-    # synced in the same call (lib/progress_schedule.py);
+    # synced in the same call (lib/progress/schedule.py);
     # its outcome never fails this write.
     result["progress_entry"] = \
         progress_schedule_mod.sync_todo(plans_dir, result)
@@ -504,7 +504,7 @@ def set_todo_status(plans_dir, todo_id, status, *,
     result["archived"] = archived
     result["file"] = str(todo_path)
     # The armed todo's scheduler entry is derived state,
-    # synced in the same call (lib/progress_schedule.py);
+    # synced in the same call (lib/progress/schedule.py);
     # its outcome never fails this write.
     result["progress_entry"] = \
         progress_schedule_mod.sync_todo(plans_dir, result)

@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO))
 
 from lib import bundles as bundle_mod  # noqa: E402
 from lib import doctor  # noqa: E402
-from lib import progress_schedule as ps  # noqa: E402
+from lib.progress import schedule as ps  # noqa: E402
 from lib.manifest import Manifest  # noqa: E402
 from lib.sweep import Project  # noqa: E402
 

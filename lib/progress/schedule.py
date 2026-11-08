@@ -50,11 +50,11 @@ import os
 import re
 from pathlib import Path
 
-from . import progress as progress_mod
-from .plans import bundles as bundle_parser
-from .util import write_text
+from . import report as progress_mod
+from ..plans import bundles as bundle_parser
+from ..util import write_text
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 ENTRY_PREFIX = "wb-progress-"
 STOP_STATUSES = ("done", "blocked")

@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lib import dataset_console as console_mod
+from lib.datasets import console as console_mod
 from lib.datasets import DatasetError
 
 

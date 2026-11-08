@@ -47,7 +47,7 @@ from lib import messages as msg_mod  # noqa: E402
 from lib import registry as reg  # noqa: E402
 from lib import repo_state as repo_state_mod  # noqa: E402
 from lib import repos as repos_mod  # noqa: E402
-from lib import dataset_console as dataset_console_mod  # noqa: E402
+from lib.datasets import console as dataset_console_mod  # noqa: E402
 from lib import datasets as datasets_mod  # noqa: E402
 from lib.plans import parser as plan_parser  # noqa: E402
 from lib.util import now_iso  # noqa: E402
