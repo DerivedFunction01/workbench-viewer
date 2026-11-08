@@ -47,7 +47,7 @@ leg_python() {
     echo "check.sh: repo venv missing at .venv/ — build it: python3 init_venv.py" >&2
     return 1
   fi
-  (cd "$ROOT" && .venv/bin/python -m unittest discover -s tests -v)
+  (cd "$ROOT" && .venv/bin/python -m unittest discover -s tests -t . -v)
 }
 
 leg_biome() {
