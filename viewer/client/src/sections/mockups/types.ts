@@ -130,6 +130,20 @@ export interface PeekResult {
   captured_at?: string;
 }
 
+/** The rendered-preview read (getEntryFile with
+ * preview: the entry's own file, whole — the peek caps
+ * do not apply; guards still do). */
+export interface PreviewResult {
+  path: string;
+  size_bytes: number;
+  is_binary: boolean;
+  withheld: string | null;
+  content: string | null;
+  sha256: string | null;
+  too_large?: boolean;
+  captured_at?: string;
+}
+
 /** The bridge envelope every action returns (lib/api-types.ts). */
 export interface Envelope {
   status: number;

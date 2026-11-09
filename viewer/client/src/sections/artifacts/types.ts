@@ -14,4 +14,5 @@ export type {
   Envelope,
   FullEntry,
   PeekResult,
+  PreviewResult,
 } from "../mockups/types";

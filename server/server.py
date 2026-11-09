@@ -318,10 +318,18 @@ class Handler(BaseHTTPRequestHandler):
                 if not rel:
                     raise ApiError(400, "file needs ?path=")
                 try:
-                    peek = files_mod.peek_file(
-                        entry, rel,
-                        editing_enabled=CFG[
-                            "file_editing_enabled"])
+                    if query.get("preview"):
+                        # The rendered-preview read: the
+                        # entry's own file, whole — the
+                        # peek caps guard the source
+                        # surface, not a rendered study.
+                        peek = files_mod.entry_preview(
+                            entry, rel)
+                    else:
+                        peek = files_mod.peek_file(
+                            entry, rel,
+                            editing_enabled=CFG[
+                                "file_editing_enabled"])
                 except files_mod.FileError_ as e:
                     raise ApiError(e.status, str(e))
                 return self._send(200, peek)

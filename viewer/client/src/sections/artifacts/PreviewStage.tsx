@@ -3,13 +3,15 @@ import { Frame } from "../../components/Frame";
 import type { StateValues } from "../../components/StateControls";
 import { api } from "../../lib/api";
 import { PreviewSummary } from "../mockups/helpers";
-import type { Envelope, FullEntry, PeekResult } from "./types";
+import type { Envelope, FullEntry, PreviewResult } from "./types";
 
 /** The stage: the item's main file rendered in a sandboxed
- * iframe over the guarded peek. Content the peek refuses
- * (truncated, binary, withheld) never renders — the stage
- * falls back to the recorded-state summary with the reason
- * shown, exactly as the Files panel reports it. */
+ * iframe over the dedicated preview read — the entry's own
+ * file served whole. A rendered study is not a guarded
+ * source file, so the peek caps do not apply here; the
+ * read's own guards (withheld, binary, payload bound) do,
+ * and content under them never renders — the stage falls
+ * back to the recorded-state summary with the reason. */
 export function PreviewStage({
   slug,
   entry,
@@ -21,13 +23,14 @@ export function PreviewStage({
 }) {
   const mainFile = entry.source_kind === "entry-dir" ? entry.main_file : null;
   const peekQuery = useQuery({
-    queryKey: ["entry-file", slug, entry.id, mainFile],
-    queryFn: () => api.getEntryFile({ slug, entryId: entry.id, path: mainFile ?? "" }),
+    queryKey: ["entry-preview", slug, entry.id, mainFile],
+    queryFn: () =>
+      api.getEntryFile({ slug, entryId: entry.id, path: mainFile ?? "", preview: true }),
     enabled: mainFile != null,
   });
   const peekEnvelope = peekQuery.data as Envelope | undefined;
   const peek =
-    peekEnvelope && peekEnvelope.status === 200 ? (peekEnvelope.payload as PeekResult) : null;
+    peekEnvelope && peekEnvelope.status === 200 ? (peekEnvelope.payload as PreviewResult) : null;
 
   let fallbackReason: string | null = null;
   if (mainFile == null) {
@@ -36,13 +39,13 @@ export function PreviewStage({
   } else if (peekQuery.isPending) {
     fallbackReason = null;
   } else if (!peek) {
-    fallbackReason = peekEnvelope?.error ?? "The main file could not be peeked.";
+    fallbackReason = peekEnvelope?.error ?? "The main file could not be read for preview.";
   } else if (peek.withheld) {
     fallbackReason = "Preview withheld — this path is secret-shaped and is never shown here.";
   } else if (peek.is_binary) {
     fallbackReason = "Binary file — no rendered preview.";
-  } else if (peek.truncated) {
-    fallbackReason = "The file exceeds the peek caps, so no rendered preview is shown.";
+  } else if (peek.too_large) {
+    fallbackReason = "The file exceeds the preview size bound, so no rendered preview is shown.";
   } else if (peek.content == null) {
     fallbackReason = "The main file returned no content to preview.";
   }
