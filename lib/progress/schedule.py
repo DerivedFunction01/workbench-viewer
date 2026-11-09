@@ -61,6 +61,19 @@ proof run would vet. The doctor's unscheduled check
 still convicts a pre-ruling render (migrated: false)
 until a sync re-renders it, and still requires the
 server's next-due table to carry the entry.
+
+Classification (the classified-catalog plan, Step 4):
+every render carries its class — a catalog block
+(origin: machine; generality: deployment-specific, the
+writer owning the lifecycle; use_case: work-tracking)
+and a machine-form source stamp (writer, project,
+todo, source_class). The source class derives from
+the same temp-root determination as the live-registry
+refusal above: a scratch project's entry is
+fixture-classed, and the scheduler's loader holds a
+fixture-classed machine entry out of the live registry
+entirely — the classification-layer backstop to this
+module's own refusal, which fires first.
 """
 
 import json
@@ -321,8 +334,23 @@ def _armed_date(todo) -> str:
     return date.today().isoformat()
 
 
+def _source_class(root) -> str:
+    """The rendered entry's source class (the scheduler
+    registry's SOURCE_CLASSES): `fixture` for a scratch
+    project — its root under a temp root, the same
+    determination the live-registry refusal keys on — and
+    `project` for a real one. The class is declared on
+    the entry so the scheduler's loader can hold a
+    fixture-classed entry out of the live registry as a
+    backstop; the harness's own refusal fires first, so
+    in practice only project-classed entries are ever
+    rendered into it."""
+    return "fixture" if _under_temp(root) else "project"
+
+
 def render_entry(project_slug: str, project_arg: str,
-                 repo_rel: str, todo) -> str:
+                 repo_rel: str, todo, source_class: str
+                 = "project") -> str:
     """One registry entry in the scheduler's strict YAML
     subset (schema: the scheduler repo's jobs/README.md).
     The project is selected by a --root argv item, never
@@ -364,6 +392,15 @@ def render_entry(project_slug: str, project_arg: str,
         f"self_removal: {_quoted(_SELF_REMOVAL)}",
         "migrated: true",
         f"migrated_at: {_armed_date(todo)}",
+        "catalog:",
+        "  origin: machine",
+        "  generality: deployment-specific",
+        "  use_case: work-tracking",
+        "source:",
+        "  writer: workbench-harness",
+        f"  project: {project_slug}",
+        f"  todo: {todo['id']}",
+        f"  source_class: {source_class}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -428,7 +465,8 @@ def _sync_todo(plans_dir, todo) -> dict:
         text = render_entry(
             slug,
             _project_arg(root),
-            repo_rel, todo)
+            repo_rel, todo,
+            source_class=_source_class(root))
         if path.is_file():
             existing = path.read_text(encoding="utf-8")
             if existing == text:
