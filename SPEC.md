@@ -174,6 +174,7 @@ not escape it.
 | `plans`    | no  | Plan-files directory — Plans + Board |
 | `mockups`  | no  | Entries dir; default: `entries` beside the registry |
 | `archive`  | no  | Archive dir; default: `archive` beside the registry |
+| `catalog_origin` / `catalog_generality` / `catalog_use_case` | no (all-or-nothing) | The manifest's catalog classification (§17) |
 
 Sections degrade independently: absent `registry` → no
 Mockups/Todos for that project; absent `plans` → no Plans;
@@ -1305,3 +1306,40 @@ because plans do not record their thread. A plan_ref that
 resolves to nothing is doctor class `entry-plan-missing`:
 a broken anchor is surfaced, never treated as a
 disposition.
+
+## 17. Classified catalog — manifests and generated entries
+
+The manifest is this system's adoption unit, classified
+under the same axes as the scheduler's schedule catalog
+(the classified-schedule-catalog plan): adopting a
+project is copying the manifest template
+(`templates/manifest/`) and filling its fields — the
+manifest's own fields are the adoption's declared
+parameters.
+
+A manifest may carry its classification in three flat
+keys — `catalog_origin`, `catalog_generality`,
+`catalog_use_case` — all-or-nothing, values from the
+shared vocabulary (the scheduler registry's axes: origin
+hand | machine | per-session; generality generalized |
+parameterized | deployment-specific; use_case a
+lowercase hyphenated label). The format is flat by
+design (§2), so the axes ride in flat keys; what is
+shared is the vocabulary, not the nesting. The
+classification of record for an adopted manifest is
+hand / parameterized / work-tracking. Classification is
+descriptive, not activating: an unclassified manifest
+discovers and behaves exactly as before.
+
+Entries the harness generates (the wb-progress family)
+carry the classification layer on the entry itself: a
+`catalog` block (origin machine, generality
+deployment-specific — the writer owns their lifecycle
+and no copy is offered, use_case work-tracking) and a
+machine-form `source` stamp naming the writer, the
+project, the todo, and the entry's source class
+(project | fixture). A fixture-classed machine entry
+must never reach the live registry: the harness refuses
+it at render, and the scheduler's loader refuses it
+again at validation — the classification-layer close of
+the fixture-entry leak.

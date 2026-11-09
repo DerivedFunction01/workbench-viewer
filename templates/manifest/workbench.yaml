@@ -1,0 +1,30 @@
+# Manifest template — the workbench catalog specimen
+# (classified-schedule-catalog plan, Step 3). Adopting a
+# project is copying this file to the project root as
+# workbench.yaml and filling its fields: the manifest's
+# own fields are the declared parameters of the adoption,
+# which is what its classification below says. Angle-
+# bracketed values are unfilled parameters; the file
+# carries no deployment values, which is why it can be
+# tracked.
+#
+# Required parameters: name, registry, plans.
+# Optional parameters: slug (defaults to the directory
+# name), mockups and archive (default to siblings of the
+# registry file), registration (a posture: as-is records
+# that the project registered its plan corpus as found).
+name: <project name>
+slug: <project-slug>
+registry: workbench/registry.db
+plans: .plans
+mockups: workbench/entries
+archive: workbench/archive
+# The classification of record for an adopted manifest,
+# under the shared catalog axes (the scheduler registry's
+# vocabulary): written by hand at adoption, parameterized
+# because the fields above are its declared parameters,
+# and a work-tracking unit — it exists so the project's
+# plans and todos are tracked.
+catalog_origin: hand
+catalog_generality: parameterized
+catalog_use_case: work-tracking

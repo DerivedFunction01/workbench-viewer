@@ -8,6 +8,12 @@ more. Strictness is the feature: unknown keys and malformed
 lines are hard errors, so a typo surfaces instead of silently
 doing nothing.
 
+The catalog classification rides in flat keys
+(catalog_origin / catalog_generality / catalog_use_case)
+for the same reason: the shared vocabulary is nested in
+the scheduler's entries, but this format cannot nest —
+the axes and their value words are what is shared.
+
 All declared paths are relative to the repo root and must not
 escape it.
 """
@@ -16,8 +22,31 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 KNOWN_KEYS = ("name", "slug", "registry", "plans", "mockups",
-              "archive", "registration")
+              "archive", "registration",
+              "catalog_origin", "catalog_generality",
+              "catalog_use_case")
 PATH_KEYS = ("registry", "plans", "mockups", "archive")
+
+# The catalog classification (classified-schedule-catalog
+# plan, Step 3): the manifest is this system's adoption
+# unit, classified under the same axes as the scheduler's
+# catalog — in flat keys, because this format is flat by
+# design. The vocabulary mirrors the scheduler registry's
+# (origin / generality words are its ORIGINS /
+# GENERALITIES; use_case is its lowercase-hyphenated
+# label). An adopting project's manifest is a copy of the
+# template specimen with its own fields filled, so the
+# classification of record is origin hand, generality
+# parameterized (the manifest's own fields are the
+# declared parameters), use_case work-tracking. The keys
+# are optional as a set (a pre-classification manifest
+# loads unchanged) but all-or-nothing: a partial
+# classification is a typo-class error, never a default.
+CATALOG_KEYS = ("catalog_origin", "catalog_generality",
+                "catalog_use_case")
+CATALOG_ORIGINS = ("hand", "machine", "per-session")
+CATALOG_GENERALITIES = ("generalized", "parameterized",
+                        "deployment-specific")
 
 # The registration postures a manifest may declare. Absent
 # (the default) is a full adoption: the project's plan
@@ -53,6 +82,21 @@ class Manifest:
         the project's own manifest, never a name in code."""
         return self.declared.get("registration") \
             == REGISTRATION_AS_IS
+
+    @property
+    def catalog(self) -> dict | None:
+        """The manifest's catalog classification as one
+        block ({origin, generality, use_case}), or None
+        when the manifest predates classification.
+        Validation at load guarantees the block is
+        complete and in-vocabulary when present."""
+        if "catalog_origin" not in self.declared:
+            return None
+        return {
+            "origin": self.declared["catalog_origin"],
+            "generality": self.declared["catalog_generality"],
+            "use_case": self.declared["catalog_use_case"],
+        }
 
     @property
     def db_path(self) -> Path | None:
@@ -109,6 +153,38 @@ def _resolve(root: Path, rel: str, source: Path, key: str) -> Path:
     return resolved
 
 
+def _check_catalog(data: dict, source: Path) -> None:
+    """The catalog keys are all-or-nothing, and their
+    values come from the shared vocabulary (the scheduler
+    registry's axes). A partial or out-of-vocabulary
+    classification is a hard error, like any other typo
+    in this format."""
+    present = [k for k in CATALOG_KEYS if k in data]
+    if not present:
+        return
+    if len(present) != len(CATALOG_KEYS):
+        missing = [k for k in CATALOG_KEYS if k not in data]
+        raise ManifestError(
+            f"{source}: catalog classification is "
+            f"all-or-nothing; missing: {', '.join(missing)}")
+    if data["catalog_origin"] not in CATALOG_ORIGINS:
+        raise ManifestError(
+            f"{source}: catalog_origin must be one of "
+            f"{', '.join(CATALOG_ORIGINS)}, got "
+            f"{data['catalog_origin']!r}")
+    if data["catalog_generality"] not in CATALOG_GENERALITIES:
+        raise ManifestError(
+            f"{source}: catalog_generality must be one of "
+            f"{', '.join(CATALOG_GENERALITIES)}, got "
+            f"{data['catalog_generality']!r}")
+    use_case = data["catalog_use_case"]
+    if use_case != use_case.lower() or " " in use_case \
+            or "_" in use_case:
+        raise ManifestError(
+            f"{source}: catalog_use_case is a lowercase "
+            f"hyphenated label, got {use_case!r}")
+
+
 def load_manifest(manifest_path: Path) -> Manifest:
     """Parse and resolve one manifest file. Raises
     ManifestError on any format or path problem."""
@@ -118,6 +194,7 @@ def load_manifest(manifest_path: Path) -> Manifest:
                         manifest_path)
     if "name" not in data:
         raise ManifestError(f"{manifest_path}: 'name' is required")
+    _check_catalog(data, manifest_path)
     slug = data.get("slug") or root.name
     resolved = {}
     for key in PATH_KEYS:
