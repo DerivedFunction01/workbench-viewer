@@ -278,25 +278,51 @@ export function WorktreeChildren({
   worktrees: WorktreeItem[];
   showChanges?: boolean;
 }) {
+  // Closed by default: the group renders one summary row
+  // (child count + how many read likely done — the served
+  // derivation counted, never re-derived) and expands on
+  // tap. A repo with a hundred linked worktrees used to
+  // make the Home list a scroll through every child row.
+  const [open, setOpen] = useState(false);
   const children = worktrees.filter((w) => !w.is_main);
   if (children.length === 0) return null;
+  const likelyDone = children.filter((w) => w.likely_done).length;
   return (
-    <ul
-      style={{
-        listStyle: "none",
-        margin: "0 0 0 var(--wb-space-16)",
-        padding: "0 0 0 var(--wb-space-16)",
-        borderLeft: "1px solid var(--wb-border-default)",
-      }}
-    >
-      {children.map((worktree) => (
-        <WorktreeChild
-          key={worktree.path}
-          slug={slug}
-          worktree={worktree}
-          showChanges={showChanges}
-        />
-      ))}
-    </ul>
+    <div style={{ margin: "var(--wb-space-4) 0 0 var(--wb-space-16)" }}>
+      <Button
+        variant="ghost"
+        ariaLabel={open ? "Collapse worktrees" : "Expand worktrees"}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span aria-hidden="true">{open ? "▾" : "▸"}</span>{" "}
+        <span className="num">{children.length}</span>{" "}
+        {children.length === 1 ? "worktree" : "worktrees"}
+        {likelyDone > 0 ? (
+          <>
+            {" · "}
+            <span className="num">{likelyDone}</span> likely done
+          </>
+        ) : null}
+      </Button>
+      {open ? (
+        <ul
+          style={{
+            listStyle: "none",
+            margin: 0,
+            padding: "0 0 0 var(--wb-space-16)",
+            borderLeft: "1px solid var(--wb-border-default)",
+          }}
+        >
+          {children.map((worktree) => (
+            <WorktreeChild
+              key={worktree.path}
+              slug={slug}
+              worktree={worktree}
+              showChanges={showChanges}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
