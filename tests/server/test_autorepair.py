@@ -216,6 +216,23 @@ class RepairCase(unittest.TestCase):
         self.assertTrue(any("systemctl_restart" in a
                             for a in actions))
 
+    def test_repair_round_rerenders_a_stale_unit(self):
+        # Rung 4 (render-when-invalid): present but not
+        # byte-equal to the current render -> the round
+        # re-renders via the installer instead of merely
+        # restarting against the stale unit.
+        rec = Recorder()
+        stale = result("down", main_pid=None,
+                       server_pid=None)
+        stale["systemd"]["unit_stale"] = True
+        actions = autorepair.repair_round(
+            stale, runner=rec.runner, stopper=rec.stopper,
+            our_server=lambda pid: False)
+        self.assertTrue(any("install_unit" in a
+                            for a in actions))
+        self.assertTrue(any("systemctl_restart" in a
+                            for a in actions))
+
     def test_unloaded_unit_is_started_not_restarted(self):
         # The post-replacement shape: the unit file was
         # just restored (or wiped), systemd has not loaded

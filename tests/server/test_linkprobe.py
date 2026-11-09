@@ -80,6 +80,57 @@ class ClassifyCase(unittest.TestCase):
         self.assertEqual(klass, linkprobe.UP_UNSUPERVISED)
         self.assertIn("lock_pid_missing", reasons)
 
+    def test_stale_unit_is_unsupervised(self):
+        # Rung 4 (render-when-invalid): the unit file is
+        # present but not byte-equal to the current
+        # render — unsupervised, with its own reason, so
+        # the ladder re-renders instead of starting
+        # against a stale unit.
+        klass, reasons = linkprobe.classify(
+            True, 78358, sd(unit_stale=True))
+        self.assertEqual(klass, linkprobe.UP_UNSUPERVISED)
+        self.assertIn("unit_stale", reasons)
+
+
+class UnitStaleCase(unittest.TestCase):
+    """The byte-equality check itself, against a scratch
+    unit dir: the module's UNIT_DIR is pointed at a temp
+    dir; the render expectation comes from the real
+    tracked template."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.unit_dir = Path(self.tmp.name)
+        self._saved = linkprobe.UNIT_DIR
+        linkprobe.UNIT_DIR = self.unit_dir
+        self.addCleanup(
+            setattr, linkprobe, "UNIT_DIR", self._saved)
+
+    def test_current_render_is_not_stale(self):
+        expected = linkprobe.render_unit()
+        self.assertIsNotNone(expected)
+        (self.unit_dir
+         / "workbench-viewer-server.service").write_text(
+            expected, encoding="utf-8")
+        self.assertFalse(linkprobe.unit_stale(
+            "workbench-viewer-server"))
+
+    def test_different_bytes_are_stale(self):
+        (self.unit_dir
+         / "workbench-viewer-server.service").write_text(
+            "[Unit]\nDescription=old render\n",
+            encoding="utf-8")
+        self.assertTrue(linkprobe.unit_stale(
+            "workbench-viewer-server"))
+
+    def test_missing_file_is_not_stale(self):
+        # Absence is the ladder's install case, not the
+        # re-render case.
+        self.assertFalse(linkprobe.unit_stale(
+            "workbench-viewer-server"))
+
 
 class ParseShowCase(unittest.TestCase):
     def test_parses_production_shape(self):

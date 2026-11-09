@@ -5,16 +5,20 @@ Invoked by ops/watchdog.sh when the link probe does not
 report up_supervised. The repair ladder, per round:
 
     1. unit file missing from /etc (a VM replacement
-       wipes it) -> bash ops/install-unit.sh, which
-       renders the tracked template back into place —
-       the "copy over missing files" restore.
+       wipes it), or present but stale — not byte-equal
+       to the current template render (render-when-
+       invalid, survival-contract rung 4) -> bash
+       ops/install-unit.sh, which renders the tracked
+       template back into place — the "copy over
+       missing files" restore.
     2. an unsupervised copy of this repo's run.py holds
        the port (the lock PID is alive, is our server,
        and is not the unit's MainPID — the fallback-start
        shape) -> stop it, so systemd can bind the port.
        A process that is not this repo's run.py is never
        signalled; that case surfaces instead.
-    3. systemctl restart the unit.
+    3. systemctl restart the unit (start when systemd
+       has not loaded it, rung 6).
     4. poll the probe for up_supervised.
 
 A single not-green probe is not yet an incident — under
@@ -25,10 +29,12 @@ run, with backoff between them; the end state must be
 up_supervised. Recovery is
 not "a port answers" — a fallback process dies with
 whatever session started it (the 2026-10-31 lesson), so
-when the cap is exhausted with the server still down,
-one direct start restores availability but the run
-still exits non-zero: unsupervised service is surfaced
-through the scheduler escalation, never silent success.
+the ladder's last rung (rung 8) is the pre-systemd
+fallback start: when the cap is exhausted with the
+server still down, one direct start restores
+availability but the run still exits non-zero —
+unsupervised service is surfaced through the scheduler
+escalation, never silent success.
 
     python3 autorepair.py   # exit 0 repaired (or already
                             # supervised), 1 cap exhausted
@@ -161,7 +167,10 @@ def repair_round(result: dict, runner=run_cmd,
     unit is spent motion), a loaded unit gets `restart`."""
     actions = []
     sd = result["systemd"]
-    if not sd.get("unit_file"):
+    if not sd.get("unit_file") or sd.get("unit_stale"):
+        # Missing -> install; present-but-stale ->
+        # re-render (rung 4: a stale unit is never merely
+        # started against).
         rc, _ = runner(["bash",
                         str(REPO_ROOT / "ops" /
                             "install-unit.sh")])
@@ -197,9 +206,11 @@ def wait_for(probe_fn, want: set[str], timeout_s: int,
 
 
 def direct_start() -> list[str]:
-    """Last-resort availability: start run.py detached,
-    the pre-existing watchdog fallback. The run still
-    surfaces — this state is unsupervised by definition."""
+    """The ladder's last rung (rung 8, the pre-systemd
+    fallback start): start run.py detached when the
+    capped ladder could not restore supervision. The
+    run still surfaces — this state is unsupervised by
+    definition."""
     py = REPO_ROOT / ".venv" / "bin" / "python"
     exe = str(py) if py.is_file() else sys.executable
     try:

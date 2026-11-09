@@ -112,6 +112,10 @@ workbench-viewer/
     workbench-viewer-server.service.template
     install-unit.sh
     watchdog.sh
+  Supervision conforms to the fleet restart-survival
+  contract: survival-contract: v1 (canonical text in
+  the starter SPEC; the watchdog driver runs on the
+  contract's fast tier, a 2m scheduler entry).
   viewer/                    the artifact source (canonical
                              here; synced by viewer.sh)
     SYNC.md                  the viewer.sh sync contract

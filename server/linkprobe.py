@@ -181,13 +181,49 @@ def parse_systemd_show(text: str) -> dict:
             "main_pid": main_pid}
 
 
+def render_unit() -> str | None:
+    """The unit file's current render: the tracked
+    template with @ROOT@/@PYTHON@ substituted exactly
+    as ops/install-unit.sh does. None when the template
+    cannot be read — no expectation, no verdict."""
+    template = (cfgmod.REPO_ROOT / "ops"
+                / "workbench-viewer-server.service.template")
+    try:
+        text = template.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    py = cfgmod.REPO_ROOT / ".venv" / "bin" / "python"
+    python = str(py) if py.is_file() else "/usr/bin/python3"
+    return text.replace("@ROOT@", str(cfgmod.REPO_ROOT)) \
+        .replace("@PYTHON@", python)
+
+
+def unit_stale(unit: str) -> bool:
+    """Render-when-invalid (contract rung 4): the unit
+    file in /etc differs from the current render — a
+    template change the installed unit never picked up.
+    A missing file is not stale (absence is the ladder's
+    install case), and an unreadable render or file
+    reads as not stale: no expectation, no verdict."""
+    expected = render_unit()
+    if expected is None:
+        return False
+    try:
+        actual = (UNIT_DIR / f"{unit}.service").read_text(
+            encoding="utf-8")
+    except OSError:
+        return False
+    return actual != expected
+
+
 def systemd_state(unit: str) -> dict:
     """The unit's on-disk + runtime state. Never raises: a
     missing systemctl or an unknown unit reads as absent,
     which the classification treats as unsupervised."""
     state = {"unit_file": (UNIT_DIR / f"{unit}.service").is_file(),
              "active_state": None, "load_state": None,
-             "main_pid": None, "error": None}
+             "main_pid": None, "error": None,
+             "unit_stale": unit_stale(unit)}
     try:
         out = subprocess.run(
             ["systemctl", "show", f"{unit}.service",
@@ -208,6 +244,8 @@ def classify(health_ok: bool, lock_pid: int | None,
     reasons = []
     if not sd.get("unit_file"):
         reasons.append("unit_file_missing")
+    elif sd.get("unit_stale"):
+        reasons.append("unit_stale")
     if sd.get("load_state") != "loaded":
         reasons.append("unit_not_loaded")
     if sd.get("active_state") != "active":
@@ -240,6 +278,7 @@ def probe(fetch=fetch_bounded, lock_pid_of=read_lock_pid,
         "commit": health.get("commit") if health else None,
         "systemd": {"unit": CFG["systemd_unit"],
                     "unit_file": sd.get("unit_file"),
+                    "unit_stale": sd.get("unit_stale"),
                     "active_state": sd.get("active_state"),
                     "load_state": sd.get("load_state"),
                     "main_pid": sd.get("main_pid"),
