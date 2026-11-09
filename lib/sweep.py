@@ -32,6 +32,17 @@ registers nothing — never a duplicate, never a phantom.
 Non-git manifest dirs and manifests in a repo subdirectory
 (not a checkout root) keep the historical behavior: the
 directory itself is the project.
+
+Two registration hygiene rules ride on top (2026-11-09):
+scratch never registers — a candidate under a temp root,
+or under a scratch-marked component (dot-directory, tmp /
+scratch name) below its sweep root, is pruned from the
+walk, so test fixtures living in scratch trees inside the
+workspace never appear as live projects; and slugs are
+unique — standalone clones declaring the same slug fold
+into one project (the most recently active root wins,
+the folded roots ride as `also_at`), because slug-keyed
+navigation cannot address two peers.
 """
 
 import os
@@ -39,7 +50,33 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import util as util_mod
 from .manifest import Manifest, ManifestError, load_manifest
+
+
+def _is_scratch(here: Path, root: Path) -> bool:
+    """True when a walked directory is scratch relative
+    to its sweep root: carrying a scratch mark
+    (dot-directory, tmp / scratch name) in any component
+    BELOW the root, or sitting under a temp root BELOW
+    the root. Containment is judged root-relative on
+    purpose: a temp root that CONTAINS the sweep root
+    (a test suite sweeping its own fixture workspace
+    inside the system temp) convicts nothing — the
+    fixtures are that sweep's whole world — while a
+    temp root nested inside a live root (this box's
+    disk-backed gate scratch under the workspace) is
+    scratch inside it."""
+    try:
+        rel = here.relative_to(root)
+    except ValueError:
+        rel = here
+    if util_mod.scratch_marked(rel):
+        return True
+    return any(
+        t != root and (t == here or t in here.parents)
+        and root in t.parents
+        for t in util_mod.temp_roots())
 
 _GIT_ENV = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
 
@@ -50,6 +87,11 @@ DEFAULT_PRUNE = (".git", ".venv", ".venv311", "node_modules",
 @dataclass
 class Project:
     manifest: Manifest
+    # Roots folded into this project by the slug fold
+    # (standalone copies declaring the same slug): served
+    # on the home row so the fold is visible, never a
+    # second peer registration.
+    also_at: list = field(default_factory=list)
 
     @property
     def slug(self) -> str:
@@ -94,7 +136,8 @@ class SweepResult:
         return {
             "projects": [
                 {"slug": p.slug, "name": p.name,
-                 "root": str(p.root), "sections": p.sections()}
+                 "root": str(p.root), "sections": p.sections(),
+                 "also_at": [str(r) for r in p.also_at]}
                 for p in self.projects
             ],
             "errors": self.errors,
@@ -200,6 +243,52 @@ def _canonicalize(candidates, manifest_name: str,
                     {"manifest": str(mpath), "error": str(e)})
         else:
             result.projects.append(Project(manifest))
+    _fold_duplicate_slugs(result)
+
+
+def _root_activity(root: Path) -> float:
+    """A root's last-activity stamp for the slug fold:
+    the newest of the manifest's mtime and the root's
+    .git mtime (clone and commit activity both land
+    there). 0.0 when nothing stats."""
+    newest = 0.0
+    for path in (root / "workbench.yaml", root / ".git"):
+        try:
+            newest = max(newest, path.stat().st_mtime)
+        except OSError:
+            pass
+    return newest
+
+
+def _fold_duplicate_slugs(result: SweepResult) -> None:
+    """One project per slug. Canonicalization keys on
+    repo identity, so standalone clones of one project
+    (each its own repo, each carrying a copy of the
+    tracked manifest) still register once per clone
+    under the same slug — and slug-keyed navigation
+    lands on whichever the enumeration met first. Fold
+    them: the most recently active root's project
+    survives, and the folded roots ride on it as
+    `also_at` — visible, never silent, never a second
+    peer. The fold never deletes anything; a copy's
+    removal is its owning work's act."""
+    by_slug: dict = {}
+    for project in result.projects:
+        by_slug.setdefault(project.slug, []).append(project)
+    survivors = []
+    for slug, group in by_slug.items():
+        if len(group) == 1:
+            survivors.append(group[0])
+            continue
+        group.sort(key=lambda p: _root_activity(p.root),
+                   reverse=True)
+        winner = group[0]
+        winner.also_at = sorted(
+            [p.root for p in group[1:]]
+            + [r for p in group[1:] for r in p.also_at],
+            key=str)
+        survivors.append(winner)
+    result.projects[:] = survivors
 
 
 def sweep(roots, manifest_name: str = "workbench.yaml",
@@ -217,6 +306,14 @@ def sweep(roots, manifest_name: str = "workbench.yaml",
         for dirpath, dirnames, filenames in os.walk(root):
             here = Path(dirpath)
             depth = len(here.parts) - base
+            if here != root and _is_scratch(here, root):
+                # Scratch trees inside a swept root
+                # (fixture checkouts under temp roots,
+                # hidden or tmp/scratch-named trees)
+                # never register: the walk prunes the
+                # whole subtree without descending.
+                dirnames[:] = []
+                continue
             if manifest_name in filenames:
                 mpath = here / manifest_name
                 try:

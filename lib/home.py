@@ -163,7 +163,9 @@ def project_row(project, *, stale_days=14, now=None) -> dict:
     now = now or datetime.now(timezone.utc)
     row = {"slug": project.slug, "name": project.name,
            "root": str(project.root), "degraded": False,
-           "reasons": []}
+           "reasons": [],
+           "also_at": [str(r) for r in
+                       getattr(project, "also_at", [])]}
     activities = []
 
     def contain(fn, key, fallback):

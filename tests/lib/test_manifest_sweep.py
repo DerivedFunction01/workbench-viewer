@@ -286,5 +286,51 @@ class TestSweepWorktreeDedupe(unittest.TestCase):
             self.assertEqual(result.errors, [])
 
 
+class TestSweepHygiene(unittest.TestCase):
+    """Registration hygiene (2026-11-09): scratch trees
+    inside a swept root never register, and standalone
+    clones declaring one slug fold into one project."""
+
+    def test_scratch_trees_never_register(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            write_project(ws / "real", "Real")
+            # hidden tree (dot-directory component)
+            write_project(ws / ".hidden-clone", "Hidden")
+            # tmp-named tree
+            write_project(ws / "tmp-fixtures" / "fix",
+                          "Fixture")
+            # scratch-named tree
+            write_project(ws / "my-scratch" / "fix2",
+                          "Fixture Two")
+            result = sweep([ws])
+            self.assertEqual([p.slug for p in result.projects],
+                             ["real"])
+            self.assertEqual(result.errors, [])
+
+    def test_same_slug_clones_fold_to_most_recent(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            older = make_repo(ws / "copy-old", name="Proj",
+                              slug="proj")
+            newer = make_repo(ws / "copy-new", name="Proj",
+                              slug="proj")
+            old_t = 1_700_000_000
+            new_t = old_t + 10_000
+            for base, t in ((older, old_t), (newer, new_t)):
+                os.utime(base / "workbench.yaml", (t, t))
+                os.utime(base / ".git", (t, t))
+            result = sweep([ws])
+            self.assertEqual(result.errors, [])
+            self.assertEqual(len(result.projects), 1)
+            project = result.projects[0]
+            self.assertEqual(project.slug, "proj")
+            self.assertEqual(project.root, newer.resolve())
+            self.assertEqual(project.also_at,
+                             [older.resolve()])
+            by = result.by_slug("proj")
+            self.assertIs(by, project)
+
+
 if __name__ == "__main__":
     unittest.main()

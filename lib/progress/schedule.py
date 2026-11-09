@@ -79,11 +79,11 @@ module's own refusal, which fires first.
 import json
 import os
 import re
-import tempfile
 from datetime import date
 from pathlib import Path
 
 from . import report as progress_mod
+from .. import util as util_mod
 from ..plans import bundles as bundle_parser
 from ..util import write_text
 
@@ -227,45 +227,16 @@ def _ws_relative(path):
 
 
 def _platform_temp_roots():
-    """The platform's temp roots, resolved: the system
-    temp (tempfile's answer), $TMPDIR when it names
-    another, and the conventional defaults. Python
-    caches its tempdir after the first call, so the
-    answer is never trusted alone: the candidates
-    derive from the CURRENT environment on every call.
-    WB_TMP_ROOT is deliberately NOT consulted here —
-    a per-run scratch dir leaked into it must not mint
-    a fake root (the answer would then change with
-    whatever last wrote the variable)."""
-    roots = set()
-    for candidate in (os.environ.get("TMPDIR"),
-                      tempfile.gettempdir(),
-                      "/tmp", "/var/tmp", "/usr/tmp"):
-        if candidate:
-            roots.add(Path(candidate).resolve())
-    return roots
+    """The platform temp roots (lib.util owns the
+    determination; kept under this module's historical
+    name for its callers and tests)."""
+    return util_mod.platform_temp_roots()
 
 
 def _temp_roots():
-    """The platform temp roots plus every root the
-    WB_TMP_ROOT seam lists (this box's discipline
-    points TMPDIR at disk-backed scratch under the
-    workspace itself, which no anchor or system-temp
-    check can recognize — the seam names it). A seam
-    entry that itself sits under a platform temp root
-    is skipped: it is a run's own scratch dir, not a
-    root."""
-    roots = _platform_temp_roots()
-    for item in os.environ.get(
-            "WB_TMP_ROOT", "").split(os.pathsep):
-        if not item:
-            continue
-        path = Path(item).resolve()
-        if any(path == root or root in path.parents
-               for root in roots):
-            continue
-        roots.add(path)
-    return roots
+    """The temp roots incl. the WB_TMP_ROOT seam
+    (lib.util owns the determination)."""
+    return util_mod.temp_roots()
 
 
 def _under_temp(path) -> bool:
@@ -273,10 +244,7 @@ def _under_temp(path) -> bool:
     root — scratch state (test fixtures, gate scratch),
     whose projects are not the live workspace's and
     must never reach the live registry."""
-    resolved = Path(path).resolve()
-    return any(resolved == root
-               or root in resolved.parents
-               for root in _temp_roots())
+    return util_mod.under_temp_root(path)
 
 
 def _live_jobs_dir():
