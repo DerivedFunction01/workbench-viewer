@@ -23,7 +23,7 @@ import { sectionLabel } from "./lib/labels";
 import type { Appearance } from "./lib/preferences";
 import { applyAppearance, loadAppearance, saveAppearance } from "./lib/preferences";
 import { useIsPhone } from "./lib/responsive";
-import { homeHref, parseRoute, type Route, sectionHref } from "./lib/routing";
+import { parseRoute, pickerHref, type Route, sectionHref } from "./lib/routing";
 import { resetContentScroll } from "./lib/scroll";
 import { PhoneSectionNav, type PhoneTab, PhoneTabBar } from "./sections/shell/PhoneChrome";
 import { ShellRail } from "./sections/shell/ShellRail";
@@ -106,6 +106,7 @@ export function App() {
   const breadcrumb = (() => {
     if (route.view === "settings") return "Settings";
     if (route.view === "inbox") return "Inbox";
+    if (route.view === "picker") return "Projects";
     if (route.view === "repos") return route.repoId ? `Repos / ${route.repoId}` : "Repos";
     if (route.view === "board-all") return "Board · all projects";
     if (route.view === "section") {
@@ -143,16 +144,15 @@ export function App() {
           ? "settings"
           : route.view === "repos"
             ? "repos"
-            : route.view === "home"
+            : route.view === "home" || route.view === "picker"
               ? "home"
               : "project";
-    const firstProject = status.projectGroups[0]?.project ?? null;
+    // The Project tab never auto-selects: with a project
+    // in scope it opens that project; with none it opens
+    // the chooser. Picking a project out of an ordering
+    // is how the tab used to land on a fixture project.
     const projectHref =
-      status.routeSlugValue != null
-        ? sectionHref(status.routeSlugValue, "overview")
-        : firstProject
-          ? sectionHref(firstProject.slug, "overview")
-          : homeHref();
+      status.routeSlugValue != null ? sectionHref(status.routeSlugValue, "overview") : pickerHref();
     return (
       <div
         ref={phoneShellRef}

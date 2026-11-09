@@ -4,6 +4,9 @@
 //   #/                          workspace home (repo-home §4)
 //   #/settings                  Settings (app-level)
 //   #/inbox                     cross-project message inbox
+//   #/projects                  the project chooser (the
+//                               Project tab's target when no
+//                               project is in scope)
 //   #/p/<slug>/overview         per-project Overview (repo-home
 //                               §4) — the FIRST per-project tab,
 //                               ahead of the viewer's sections
@@ -38,6 +41,7 @@ export type Route =
   | { view: "home" }
   | { view: "settings" }
   | { view: "inbox" }
+  | { view: "picker" }
   | { view: "section"; slug: string; section: SectionId; item: string | null }
   | { view: "board-all" }
   | { view: "repos"; repoId: string | null };
@@ -48,6 +52,7 @@ export function parseRoute(hash: string): Route {
   if (parts.length === 0) return { view: "home" };
   if (parts[0] === "settings" && parts.length === 1) return { view: "settings" };
   if (parts[0] === "inbox" && parts.length === 1) return { view: "inbox" };
+  if (parts[0] === "projects" && parts.length === 1) return { view: "picker" };
   if (parts[0] === "board" && parts.length === 1) return { view: "board-all" };
   if (parts[0] === "repos") {
     const repoId = parts.length > 1 ? parts.slice(1).map(decodeURIComponent).join("/") : null;
@@ -78,6 +83,14 @@ export function boardAllHref(): string {
 
 export function inboxHref(): string {
   return "#/inbox";
+}
+
+/** The project chooser (the Project tab's destination
+ * when no project is in scope): a list, never a jump
+ * into whichever project an ordering happens to put
+ * first. */
+export function pickerHref(): string {
+  return "#/projects";
 }
 
 export function sectionHref(slug: string, section: SectionId, item?: string | null): string {

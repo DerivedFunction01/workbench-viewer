@@ -179,6 +179,10 @@ export function PhoneTopBar({ route, status }: { route: Route; status: ShellStat
     title = "Inbox";
   } else if (route.view === "settings") {
     title = "Settings";
+  } else if (route.view === "picker") {
+    title = "Projects";
+    sub = "pick a project";
+    backHref = homeHref();
   } else if (route.view === "repos") {
     title = "Repos";
     sub = route.repoId;

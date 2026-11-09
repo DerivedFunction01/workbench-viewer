@@ -9,7 +9,7 @@ import type { Appearance } from "../../lib/preferences";
 import { homeHref, type Route } from "../../lib/routing";
 import { ArtifactsSection } from "../artifacts/Artifacts";
 import { BoardSection } from "../board/Board";
-import { HomeSection } from "../homepage/Home";
+import { HomeSection, ProjectPickerSection } from "../homepage/Home";
 import { InboxSection } from "../inbox/Inbox";
 import { MockupsSection } from "../mockups/Mockups";
 import { OverviewSection } from "../overview/Overview";
@@ -36,6 +36,9 @@ export function ShellRoutes({
   }
   if (route.view === "inbox") {
     return <InboxSection />;
+  }
+  if (route.view === "picker") {
+    return <ProjectPickerSection />;
   }
   if (route.view === "board-all") {
     return <BoardSection slug={null} projectName={null} />;
