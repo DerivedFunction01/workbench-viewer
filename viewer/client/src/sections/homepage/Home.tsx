@@ -46,6 +46,21 @@ function countsLine(
     .join(" · ");
 }
 
+/** The slug fold's surface: stale standalone copies of
+ * this project folded into its row by the sweep. One
+ * muted line; the paths ride the title for the curious,
+ * never a second peer card. */
+function AlsoAtLine({ row }: { row: HomeRow }) {
+  const also = row.also_at ?? [];
+  if (also.length === 0) return null;
+  return (
+    <div style={{ ...metaStyle, marginTop: "var(--wb-space-4)" }} title={also.join("\n")}>
+      <span className="num">{also.length}</span> {also.length === 1 ? "stale copy" : "stale copies"}{" "}
+      folded into this project
+    </div>
+  );
+}
+
 function ProjectRow({ row }: { row: HomeRow }) {
   const isPhone = useIsPhone();
   const planCounts = countsLine(row.plans.counts, ["doing", "todo", "done"], planBucketLabel);
@@ -155,6 +170,7 @@ function ProjectRow({ row }: { row: HomeRow }) {
             degraded — {row.reasons[0] ?? "see Overview"}
           </div>
         ) : null}
+        <AlsoAtLine row={row} />
         <div style={{ marginTop: "var(--wb-space-8)" }}>
           {row.showcase && row.showcase.source !== "none" ? (
             <ActivePlanLine slug={row.slug} active={row.showcase} />
@@ -228,6 +244,7 @@ function ProjectRow({ row }: { row: HomeRow }) {
           </span>
         ) : null}
       </div>
+      <AlsoAtLine row={row} />
       <div
         style={{
           display: "flex",
@@ -288,7 +305,16 @@ function ProjectRow({ row }: { row: HomeRow }) {
   );
 }
 
-export function HomeSection() {
+/** The Projects chooser (route #/projects): the Project
+ * tab's destination when no project is in scope — the
+ * same Home rows as a picker list. It never auto-selects
+ * a project: the reader picks, and each row links to that
+ * project's Overview. */
+export function ProjectPickerSection() {
+  return <HomeSection picker />;
+}
+
+export function HomeSection({ picker = false }: { picker?: boolean } = {}) {
   const isPhone = useIsPhone();
   const query = useQuery({
     queryKey: homeKey,
@@ -307,7 +333,13 @@ export function HomeSection() {
   const feed = query.data.payload as unknown as HomePayload;
   const sweepErrors = (feed.sweep_errors ?? []) as { path?: string; reason?: string }[];
   return (
-    <section data-anchor="home/project-list">
+    <section data-anchor={picker ? "home/project-picker" : "home/project-list"}>
+      {picker && !isPhone ? (
+        <div style={{ display: "flex", alignItems: "baseline", gap: "var(--wb-space-12)" }}>
+          <h1 style={sectionTitleStyle}>Projects</h1>
+          <span style={metaStyle}>pick a project to open it</span>
+        </div>
+      ) : null}
       {isPhone ? (
         // The mockup's Home body opens with the section
         // label + project count (the top bar already

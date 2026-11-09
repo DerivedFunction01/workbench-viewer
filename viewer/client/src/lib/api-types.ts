@@ -519,6 +519,9 @@ export interface HomeRow {
   slug: string;
   name: string;
   root: string;
+  /** Roots folded into this project by the sweep's slug
+   * fold (stale standalone copies of the same project). */
+  also_at?: string[];
   degraded: boolean;
   reasons: string[];
   git: { branch: string | null; head: string | null; head_short: string | null } | null;
