@@ -28,6 +28,7 @@ from lib import validators as val_mod  # noqa: E402
 from lib import worktrees as wt_mod  # noqa: E402
 from lib.plans import bundles as bundle_parser  # noqa: E402
 from lib.plans import parser as plan_parser  # noqa: E402
+from lib.progress import report as progress_report  # noqa: E402
 from lib.util import now_iso  # noqa: E402
 
 import feedcache  # noqa: E402
@@ -164,6 +165,49 @@ def _attach_work_staleness(bundles,
             todo["derived"] = staleness.todo_staleness(
                 todo, threshold_days=threshold_days)
     return bundles
+
+
+def classification_feed(project) -> dict:
+    """GET /api/projects/<slug>/classification (harness
+    connector plan, Step 4): the todo/classification inputs
+    a venue-side consumer judges escalations against, as
+    ready state — backend-derived, never raw files for the
+    venue to parse. Per project: every todo across ACTIVE
+    bundles with its status and raw progress fields, the
+    opt-out derived explicitly, and the progress derivation
+    (lib/progress/report.py) for the armed set. The
+    registry-existence half of "armed" (a scheduler entry
+    on disk) is the registry's own state and stays with
+    the consumer, exactly as the home read joins the two.
+    A project with no plans dir serves available False."""
+    base = {"slug": project.slug, "name": project.name,
+            "captured_at": now_iso()}
+    m = project.manifest
+    if m.plans is None or not m.plans.is_dir():
+        return {**base, "available": False, "todos": [],
+                "progress": {"armed": [],
+                             "summary": {"armed": 0,
+                                         "stalled": 0}}}
+    bundles = [b for b in bundle_parser.list_bundles(m.plans)
+               if not b["archived"]]
+    todos = []
+    for bundle in bundles:
+        for t in bundle["todos"]:
+            todos.append({
+                "id": t["id"], "title": t["title"],
+                "status": t["status"],
+                "bundle": t["bundle"],
+                "progress_check": t["progress_check"],
+                "opted_out": t["progress_check"]
+                == bundle_parser.PROGRESS_OPT_OUT,
+                "progress_armed": t["progress_armed"],
+                "updated": t["updated"],
+                "valid": t["valid"],
+                "errors": t["errors"]})
+    progress = progress_report.project_progress(m.plans)
+    return {**base, "available": True, "todos": todos,
+            "progress": {"armed": progress["armed"],
+                         "summary": progress["summary"]}}
 
 
 def todos_feed(project, *, bundles=None) -> dict:

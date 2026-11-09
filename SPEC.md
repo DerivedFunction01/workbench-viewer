@@ -1343,3 +1343,22 @@ must never reach the live registry: the harness refuses
 it at render, and the scheduler's loader refuses it
 again at validation — the classification-layer close of
 the fixture-entry leak.
+
+## 18. Classification read for venue consumers (2026-11-09)
+
+`GET /api/projects/<slug>/classification` serves the
+todo/classification inputs a venue-side consumer (the
+harness connector's workbench tool) judges escalations
+against, as ready state: per project, every todo across
+the active bundles with its status, its raw
+`progress_check` field, the opt-out derived explicitly,
+its arming stamp and last update, plus the progress
+derivation (cadence, last activity, missed checks, the
+stall verdict) for the armed set. The derivation is the
+harness's own (the progress report module), computed in
+the backend; a consumer never parses a todo file. The
+registry-existence half of "armed" — a scheduler entry
+on disk — is the scheduler registry's own state and is
+joined by the consumer, exactly as the home read joins
+the two; the endpoint serves the todo-side inputs only.
+A project with no plans dir serves `available: false`.

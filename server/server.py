@@ -57,7 +57,7 @@ from common import (CFG, COMMIT, MAX_BODY,  # noqa: E402
                     find_project, get_sweep)
 from feeds import (_home_invalidate_cache,  # noqa: E402
                    artifacts_feed, board_project_feed,
-                   diff_feed,
+                   classification_feed, diff_feed,
                    entry_detail, home_feed, mockups_feed,
                    plans_feed, todos_feed, worktrees_feed)
 from messages_api import (effective_settings,  # noqa: E402
@@ -294,6 +294,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, doc)
             if len(parts) == 4 and parts[3] == "todos":
                 return self._send(200, todos_feed(project))
+            if len(parts) == 4 and parts[3] == "classification":
+                return self._send(
+                    200, classification_feed(project))
             if len(parts) == 4 and parts[3] == "board":
                 return self._send(
                     200, board_project_feed(project, query))
