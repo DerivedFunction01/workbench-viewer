@@ -22,8 +22,21 @@ if [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"; else PY="p
 
 # The plain healthcheck keeps state/health.json fresh (the
 # escalation body and the scheduler entry's state record
-# read it); its verdict is subsumed by the probe's.
-"$PY" "$ROOT/server/healthcheck.py" >/dev/null
+# read it); its verdict is subsumed by the probe's. The leg
+# runs under a hard bound (survival-contract rung 5, the
+# scheduler keeper probe's discipline): the healthcheck's
+# own read deadlines hold only while the box schedules the
+# checker, and an unbounded leg that overruns the scheduler
+# job's timeout gets the job killed mid-leg — the probe
+# and the repair ladder then never run, exactly when the
+# box is loaded enough to wedge the server (the 2026-11-09
+# 19:19Z episode: the previous instance sat hard-wedged
+# through eight watchdog cycles that all exited 0 without
+# one repair attempt). The bound kills the leg alone; the
+# probe that follows classifies from its own bounded fetch.
+timeout -s KILL "${WB_HEALTHCHECK_TIMEOUT_S:-30}" \
+  "$PY" "$ROOT/server/healthcheck.py" >/dev/null 2>&1 \
+  || echo "watchdog: healthcheck leg exceeded its bound or failed; continuing to the link probe" >&2
 
 if "$PY" "$ROOT/server/linkprobe.py" >/dev/null; then
   exit 0
