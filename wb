@@ -666,7 +666,16 @@ def cmd_progress_check(args):
     entry the harness wrote when the todo armed: exit 0
     on track / disarmed / gone, exit 3 with a STALLED
     line when the derivation says it stalled — the
-    entry's failure report carries the line as a ping."""
+    entry's failure report carries the line as a ping.
+    A root that no longer exists is the gone case, not
+    a crash: the project (or a fixture's tempdir) went
+    away, so the check exits 0 and the doctor flags the
+    orphaned entry."""
+    root_arg = getattr(args, "root", None)
+    if root_arg and not Path(root_arg).is_dir():
+        print(f"{args.id}: project root gone — "
+              f"entry orphaned (the doctor reconciles)")
+        return 0
     ctx = PlansCtx(args)
     code, line = progress_schedule_mod.check_todo(
         ctx.plans_dir, args.id)

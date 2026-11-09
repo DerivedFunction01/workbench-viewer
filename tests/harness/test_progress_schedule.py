@@ -96,7 +96,7 @@ class SeamCase(unittest.TestCase):
 class TestRender(unittest.TestCase):
     def test_entry_shape(self):
         text = ps.render_entry("fixture-proj",
-                               "fixture-proj",
+                               "${WS}/fixture-proj",
                                "workbench-viewer",
                                armed_todo())
         lines = text.splitlines()
@@ -121,7 +121,7 @@ class TestRender(unittest.TestCase):
 
     def test_title_is_sanitized_and_quoted(self):
         text = ps.render_entry(
-            "fixture-proj", "fixture-proj",
+            "fixture-proj", "${WS}/fixture-proj",
             "workbench-viewer",
             armed_todo(title="A: b #c 'quoted' @x"))
         title_line = next(
@@ -136,7 +136,7 @@ class TestRender(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / f"{ENTRY_ID}.yaml"
             path.write_text(ps.render_entry(
-                "fixture-proj", "fixture-proj",
+                "fixture-proj", "${WS}/fixture-proj",
                 "workbench-viewer", armed_todo()),
                 encoding="utf-8")
             self.assertEqual(
@@ -197,12 +197,21 @@ class TestSync(SeamCase):
         self.assertEqual(out["action"], "skipped")
 
     def test_project_outside_workspace_skips(self):
+        # Outside the (seam) workspace AND the entry
+        # would land in the real registry: refused.
         outside = Path(self.tmp.name) / "elsewhere"
         (outside / ".plans").mkdir(parents=True)
         (outside / "workbench.yaml").write_text(
             "name: X\n", encoding="utf-8")
-        out = ps.sync_todo(outside / ".plans", armed_todo())
+        live = ps._live_jobs_dir()
+        before = set(live.glob("*.yaml"))
+        with mock.patch.dict(
+                os.environ,
+                {"WB_SCHEDULER_JOBS_DIR": str(live)}):
+            out = ps.sync_todo(outside / ".plans",
+                               armed_todo())
         self.assertEqual(out["action"], "skipped")
+        self.assertEqual(set(live.glob("*.yaml")), before)
 
 
 class TestWriters(SeamCase):
@@ -312,7 +321,7 @@ class TestSyncAll(SeamCase):
             "fixture-proj", "t-01GHOST000000000000000000")
         self.entry_path(ghost_id).write_text(
             ps.render_entry(
-                "fixture-proj", "fixture-proj",
+                "fixture-proj", "${WS}/fixture-proj",
                 "workbench-viewer",
                 armed_todo(
                     id="t-01GHOST000000000000000000")),
@@ -364,7 +373,7 @@ class TestDoctor(SeamCase):
             "fixture-proj", "t-01GHOST000000000000000000")
         self.entry_path(ghost_id).write_text(
             ps.render_entry(
-                "fixture-proj", "fixture-proj",
+                "fixture-proj", "${WS}/fixture-proj",
                 "workbench-viewer",
                 armed_todo(
                     id="t-01GHOST000000000000000000")),
@@ -472,6 +481,80 @@ class TestDoctor(SeamCase):
             self.assertEqual(self.findings(), [])
 
 
+class TestTempGuard(unittest.TestCase):
+    """The leak guard: a scratch (temp-root) project's
+    sync never writes into the LIVE jobs dir, and a
+    scratch render carries the absolute --root (the
+    ${WS} anchor cannot express a temp path). The 2026-
+    11-08 incident: a suite arming fixture todos with
+    no jobs seam rendered ${WS}/tmp-gate/... entries
+    into the live registry; the fixture dirs died with
+    their runs and the entries crashed every cycle."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.proj = base / "fixture-proj"
+        self.plans = self.proj / ".plans"
+        self.plans.mkdir(parents=True)
+        (self.proj / "workbench.yaml").write_text(
+            "name: Fixture Proj\nplans: .plans\n",
+            encoding="utf-8")
+        self.live_jobs = base / "live-jobs"
+        self.live_jobs.mkdir()
+        self.scratch_jobs = base / "scratch-jobs"
+        self.scratch_jobs.mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _todo(self):
+        return {"id": TODO_ID, "title": "Long task",
+                "status": "doing", "progress_check": "30m",
+                "progress_armed": "2026-11-01T11:30:00+00:00",
+                "archived": False}
+
+    def test_sync_into_live_jobs_dir_is_refused(self):
+        # The incident's exact shape: the jobs dir IS
+        # this machine's real registry (resolved from
+        # the module's own location), the project is a
+        # temp fixture.
+        live = ps._live_jobs_dir()
+        before = set(live.glob("*.yaml"))
+        env = {"WB_SCHEDULER_JOBS_DIR": str(live)}
+        with mock.patch.dict(os.environ, env):
+            out = ps.sync_todo(self.plans, self._todo())
+        self.assertEqual(out["action"], "skipped")
+        self.assertEqual(set(live.glob("*.yaml")), before)
+
+    def test_sync_into_scratch_jobs_dir_writes(self):
+        env = {"WB_SCHEDULER_JOBS_DIR":
+               str(self.scratch_jobs)}
+        with mock.patch.dict(os.environ, env):
+            out = ps.sync_todo(self.plans, self._todo())
+        self.assertEqual(out["action"], "written")
+        path = (self.scratch_jobs
+                / f"{ENTRY_ID}.yaml")
+        self.assertTrue(path.is_file())
+        text = path.read_text(encoding="utf-8")
+        self.assertIn(
+            f"- {Path(self.tmp.name)}"
+            "/fixture-proj", text)
+        self.assertNotIn("${WS}/tmp", text)
+
+    def test_project_arg_anchors_only_live_projects(self):
+        with mock.patch.dict(
+                os.environ,
+                {"WB_WORKSPACE_ROOT": "/example-ws"}):
+            self.assertEqual(
+                ps._project_arg(
+                    Path("/example-ws/proj")),
+                "${WS}/proj")
+            self.assertEqual(
+                ps._project_arg(self.proj),
+                str(self.proj))
+
+
 @unittest.skipUnless(
     (REPO.parent / "scheduler" / "server").is_dir(),
     "sibling scheduler repo not present")
@@ -488,7 +571,7 @@ class TestSchedulerSchema(SeamCase):
             home, str(self.ws))
         path = self.entry_path()
         path.write_text(ps.render_entry(
-            "fixture-proj", "fixture-proj",
+            "fixture-proj", "${WS}/fixture-proj",
             "workbench-viewer", armed_todo()),
             encoding="utf-8")
         entries, errors = registry.load_dir(

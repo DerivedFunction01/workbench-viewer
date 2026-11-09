@@ -33,7 +33,13 @@ Location seam: the jobs dir is the sibling scheduler
 repo's `jobs/` under the workspace root, overridable by
 the WB_SCHEDULER_JOBS_DIR env var. No jobs dir → every
 sync is a silent no-op (a machine without the scheduler
-still gets the full harness). The workspace root itself
+still gets the full harness). A second seam keeps test
+suites out of the live registry: WB_TMP_ROOT names the
+machine's temp roots (this box's 512 MB tmpfs, the
+disk-backed gate scratch, the system temp), and a project
+root under one of them is scratch — its syncs no-op and
+its renders carry no ${WS} anchor (the anchor cannot
+express a temp path). The workspace root itself
 (this repo's parent, matching the scheduler's ${WS}
 definition) is overridable by WB_WORKSPACE_ROOT, and
 this repo's root as that anchor sees it by
@@ -60,6 +66,7 @@ server's next-due table to carry the entry.
 import json
 import os
 import re
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -206,6 +213,93 @@ def _ws_relative(path):
         return None
 
 
+def _platform_temp_roots():
+    """The platform's temp roots, resolved: the system
+    temp (tempfile's answer), $TMPDIR when it names
+    another, and the conventional defaults. Python
+    caches its tempdir after the first call, so the
+    answer is never trusted alone: the candidates
+    derive from the CURRENT environment on every call.
+    WB_TMP_ROOT is deliberately NOT consulted here —
+    a per-run scratch dir leaked into it must not mint
+    a fake root (the answer would then change with
+    whatever last wrote the variable)."""
+    roots = set()
+    for candidate in (os.environ.get("TMPDIR"),
+                      tempfile.gettempdir(),
+                      "/tmp", "/var/tmp", "/usr/tmp"):
+        if candidate:
+            roots.add(Path(candidate).resolve())
+    return roots
+
+
+def _temp_roots():
+    """The platform temp roots plus every root the
+    WB_TMP_ROOT seam lists (this box's discipline
+    points TMPDIR at disk-backed scratch under the
+    workspace itself, which no anchor or system-temp
+    check can recognize — the seam names it). A seam
+    entry that itself sits under a platform temp root
+    is skipped: it is a run's own scratch dir, not a
+    root."""
+    roots = _platform_temp_roots()
+    for item in os.environ.get(
+            "WB_TMP_ROOT", "").split(os.pathsep):
+        if not item:
+            continue
+        path = Path(item).resolve()
+        if any(path == root or root in path.parents
+               for root in roots):
+            continue
+        roots.add(path)
+    return roots
+
+
+def _under_temp(path) -> bool:
+    """True when the resolved path sits under a temp
+    root — scratch state (test fixtures, gate scratch),
+    whose projects are not the live workspace's and
+    must never reach the live registry."""
+    resolved = Path(path).resolve()
+    return any(resolved == root
+               or root in resolved.parents
+               for root in _temp_roots())
+
+
+def _live_jobs_dir():
+    """The live registry dir on THIS machine, from the
+    module's own location — never from the (redirect-
+    able) workspace-root seam: the repo's parent is the
+    machine's workspace, and its scheduler/jobs is the
+    registry the real server scans. A seam-redirected
+    workspace has a different parent, so its jobs dir
+    never compares equal."""
+    return (REPO_ROOT.parent / "scheduler"
+            / "jobs").resolve()
+
+
+def _entry_live(directory) -> bool:
+    """An entry written into `directory` is LIVE — it
+    will fire against real work — exactly when the
+    directory is this machine's real registry."""
+    return Path(directory).resolve() == _live_jobs_dir()
+
+
+def _project_arg(root):
+    """The project root as the entry's --root argv item:
+    ${WS}-anchored for a live project, or the absolute
+    path when the root escapes the anchor — a workspace
+    root itself redirected under a temp root (a test
+    seam) or a project outside the workspace. The entry
+    then lives wherever the sync's jobs dir points and
+    is only ever read back by its own fixture."""
+    rel = _ws_relative(root)
+    if rel is not None and not _under_temp(root) \
+            and not _under_temp(_workspace_root()):
+        return f"${{WS}}/{rel}"
+    return Path(root).resolve().as_posix()
+
+
 def _quoted(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
@@ -227,7 +321,7 @@ def _armed_date(todo) -> str:
     return date.today().isoformat()
 
 
-def render_entry(project_slug: str, project_rel: str,
+def render_entry(project_slug: str, project_arg: str,
                  repo_rel: str, todo) -> str:
     """One registry entry in the scheduler's strict YAML
     subset (schema: the scheduler repo's jobs/README.md).
@@ -257,7 +351,7 @@ def render_entry(project_slug: str, project_rel: str,
         f"    - ${{WS}}/{repo_rel}/.venv/bin/python",
         f"    - ${{WS}}/{repo_rel}/wb",
         "    - --root",
-        f"    - ${{WS}}/{project_rel}",
+        f"    - {project_arg}",
         "    - progress-check",
         f"    - {todo['id']}",
         f"timeout_secs: {CHECK_TIMEOUT_SECS}",
@@ -305,17 +399,36 @@ def _sync_todo(plans_dir, todo) -> dict:
     if root is None:
         return {"action": "skipped",
                 "reason": "project root not found"}
-    project_rel = _ws_relative(root)
+    if _under_temp(root) and _entry_live(directory):
+        # The leak this guards: a test run arms a fixture
+        # todo while the jobs dir resolves to the LIVE
+        # registry (no seam set); the fixture's tempdir
+        # dies with the run and the entry crashes every
+        # cycle on a manifest that no longer exists.
+        return {"action": "skipped",
+                "reason": "scratch project, live jobs dir"}
     repo_rel = _ws_relative(_harness_root())
-    if project_rel is None or repo_rel is None:
+    if _ws_relative(root) is None \
+            and _entry_live(directory):
+        # Outside the workspace the ${WS} anchor cannot
+        # express the root — and an entry landing in the
+        # live registry would fire against a project
+        # that is not there. (Into a non-live jobs dir
+        # the absolute form serves: a fixture's own
+        # registry, read back by its own tests.)
+        return {"action": "skipped",
+                "reason": "project outside the workspace root"}
+    if repo_rel is None:
         return {"action": "skipped",
                 "reason": "project outside the workspace root"}
     slug = root.name
     eid = entry_id(slug, todo["id"])
     path = directory / f"{eid}.yaml"
     if is_armed(todo):
-        text = render_entry(slug, project_rel, repo_rel,
-                            todo)
+        text = render_entry(
+            slug,
+            _project_arg(root),
+            repo_rel, todo)
         if path.is_file():
             existing = path.read_text(encoding="utf-8")
             if existing == text:
