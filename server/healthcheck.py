@@ -30,7 +30,45 @@ STATE = cfgmod.state_dir(CFG)
 def fetch_health(path: str) -> dict:
     url = f"http://{CFG['host']}:{CFG['port']}{path}"
     with urllib.request.urlopen(url, timeout=10) as r:
-        return json.loads(r.read())
+        # Chunked read under a cumulative byte deadline —
+        # the same discipline as the link probe's fetch:
+        # urllib's timeout bounds each blocking call, not
+        # the read as a whole, so a peer that trickles the
+        # body restarts the clock on every byte. (This was
+        # the read that hung the 2026-11-08 watchdog: the
+        # wedged server answered /api/health headers while
+        # its body stalled.) The health body is a few
+        # hundred bytes; the cap sits far above it.
+        import time as _time
+        chunks = []
+        total = 0
+        deadline = _time.monotonic() + 10
+        while True:
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("health read deadline")
+            # Once the body is fully read the response
+            # detaches its socket (fp becomes None); a
+            # missing socket is fatal only before the
+            # first chunk.
+            sock = None
+            try:
+                sock = r.fp.raw._sock
+            except Exception:
+                sock = None
+            if sock is not None:
+                sock.settimeout(remaining)
+            elif not chunks:
+                raise ValueError("health socket detached")
+            chunk = r.read1(65536) if hasattr(r, "read1") \
+                else r.read(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > 1_048_576:
+                raise ValueError("health body too large")
+        return json.loads(b"".join(chunks))
 
 
 def main() -> int:

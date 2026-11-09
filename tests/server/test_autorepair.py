@@ -216,6 +216,43 @@ class RepairCase(unittest.TestCase):
         self.assertTrue(any("systemctl_restart" in a
                             for a in actions))
 
+    def test_unloaded_unit_is_started_not_restarted(self):
+        # The post-replacement shape: the unit file was
+        # just restored (or wiped), systemd has not loaded
+        # it — the round must start it, not restart it.
+        rec = Recorder()
+        wiped = result("down", unit_file=True, main_pid=None,
+                       server_pid=None)
+        wiped["systemd"]["load_state"] = "not-found"
+        autorepair.repair_round(
+            wiped, runner=rec.runner, stopper=rec.stopper,
+            our_server=lambda pid: False)
+        verbs = [c[1] for c in rec.commands
+                 if c[0] == "systemctl"]
+        self.assertEqual(verbs, ["start"])
+
+    def test_fresh_restore_confirms_over_the_long_window(self):
+        # Down + unit file absent: one install, one start,
+        # and the confirmation window is RESTORE_WINDOW_S —
+        # the probe stays bad for more calls than the
+        # short window's budget before it settles, and the
+        # round must still close as repaired in round 1.
+        rec = Recorder()
+        wiped = result("down", unit_file=False, main_pid=None,
+                       server_pid=None)
+        wiped["systemd"]["load_state"] = "not-found"
+        probe = CountedProbe(wiped, result("up_supervised"),
+                             bad_calls=45)
+        rc = run_repair(rec, probe)
+        self.assertEqual(rc, 0)
+        self.assertEqual(rec.records, ["repaired"])
+        verbs = [c[1] if c[0] == "bash" else c[1]
+                 for c in rec.commands]
+        self.assertIn("start", verbs)
+        self.assertTrue(any("install-unit.sh" in part
+                            for c in rec.commands
+                            for part in c))
+
 
 class OurServerCase(unittest.TestCase):
     def test_own_pid_cmdline_matches_run_py(self):

@@ -65,6 +65,15 @@ BACKOFF_S = (5, 20)
 SETTLE_S = 10
 WAIT_S = 30
 KILL_WAIT_S = 5
+# The down-and-unit-absent shape gets its own confirmation
+# window: a freshly installed unit's first start runs the
+# startup sweep synchronously before the port binds, and
+# under load that has taken minutes (the 2026-11-08
+# post-replacement cycle burned all three restart rounds
+# polling a starting instance that then stood healthy).
+# One install + one start + this window is the first-
+# attempt restore the ladder owes that shape.
+RESTORE_WINDOW_S = 180
 
 
 def run_cmd(argv: list[str]) -> tuple[int, str]:
@@ -145,7 +154,11 @@ def repair_round(result: dict, runner=run_cmd,
                  stopper=stop_pid,
                  our_server=is_our_server) -> list[str]:
     """One pass down the ladder; returns the actions
-    taken (for the record), never raises."""
+    taken (for the record), never raises.
+
+    The verb follows the unit's state: a unit systemd has
+    not loaded needs `start` (a restart of an unloaded
+    unit is spent motion), a loaded unit gets `restart`."""
     actions = []
     sd = result["systemd"]
     if not sd.get("unit_file"):
@@ -160,8 +173,10 @@ def repair_round(result: dict, runner=run_cmd,
         stopped = stopper(lock_pid)
         actions.append(f"stop_stray pid={lock_pid} "
                        f"ok={stopped}")
-    rc, _ = runner(["systemctl", "restart", UNIT])
-    actions.append(f"systemctl_restart rc={rc}")
+    verb = "restart" if sd.get("load_state") == "loaded" \
+        else "start"
+    rc, _ = runner(["systemctl", verb, UNIT])
+    actions.append(f"systemctl_{verb} rc={rc}")
     return actions
 
 
@@ -233,11 +248,20 @@ def repair(probe_fn=linkprobe.probe, runner=run_cmd,
         return 0
     actions: list[str] = []
     for round_no in range(1, MAX_ROUNDS + 1):
+        fresh_restore = (
+            result["class"] == linkprobe.DOWN
+            and not result["systemd"].get("unit_file"))
         actions += repair_round(result, runner, stopper,
                                 our_server)
+        # The fresh-restore shape confirms over the long
+        # window (see RESTORE_WINDOW_S); every other round
+        # keeps the short one, so a genuinely stuck ladder
+        # still exhausts in minutes, not tens of minutes.
+        window = RESTORE_WINDOW_S if fresh_restore \
+            else WAIT_S
         result = wait_for(probe_fn,
                           {linkprobe.UP_SUPERVISED},
-                          WAIT_S, sleep, clock)
+                          window, sleep, clock)
         if result["class"] == linkprobe.UP_SUPERVISED:
             record_fn("repaired", result, round_no, actions)
             print(f"autorepair: repaired in round "

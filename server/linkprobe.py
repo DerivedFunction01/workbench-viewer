@@ -44,6 +44,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,7 +63,7 @@ DOWN = "down"
 EXIT_CODES = {UP_SUPERVISED: 0, DOWN: 1, UP_UNSUPERVISED: 2}
 
 
-def fetch_health() -> dict | None:
+def fetch_health(timeout_s: float = 10.0) -> dict | None:
     # A 10s budget, not healthcheck.py's 3s: under load a
     # healthy server can take ~4s to answer /api/health
     # (measured 2026-11-03), and a probe timeout reads as
@@ -69,10 +71,85 @@ def fetch_health() -> dict | None:
     # answer slower than 10s is operationally down.
     url = f"http://{CFG['host']}:{CFG['port']}/api/health"
     try:
-        with urllib.request.urlopen(url, timeout=10) as r:
-            return json.loads(r.read())
+        with urllib.request.urlopen(url, timeout=timeout_s) as r:
+            # urllib's timeout bounds each blocking call,
+            # not the whole read: a wedged server that
+            # answers headers and then trickles the body a
+            # byte at a time restarts the clock on every
+            # byte and holds the read for as long as the
+            # peer keeps trickling (the 2026-11-08 outage:
+            # /api/health headers arrived while the body
+            # stalled on a worker thread blocked in
+            # uninterruptible I/O, and every watchdog cycle
+            # hung inside this read past its 600s job
+            # timeout, so the repair ladder never ran while
+            # the restarts an agent issued masked it). Read
+            # in chunks under a cumulative byte deadline.
+            chunks = []
+            total = 0
+            deadline = time.monotonic() + timeout_s
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                # The socket carries the per-read deadline.
+                # Once the body is fully read the response
+                # detaches it (fp becomes None), so a
+                # missing socket is only fatal before the
+                # first chunk: after that, an empty read
+                # ends the loop below.
+                sock = None
+                try:
+                    sock = r.fp.raw._sock
+                except Exception:
+                    sock = None
+                if sock is not None:
+                    sock.settimeout(remaining)
+                elif chunks:
+                    pass
+                else:
+                    return None
+                chunk = r.read1(65536) if hasattr(r, "read1") \
+                    else r.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+                if total > 1_048_576:
+                    return None
+            return json.loads(b"".join(chunks))
     except Exception:
         return None
+
+
+def fetch_bounded(fetch=fetch_health,
+                  budget_s: float = 20.0) -> dict | None:
+    """Run a health fetch with a hard wall-clock bound.
+
+    The fetch runs on a daemon thread and the caller stops
+    waiting at the budget: a wedged server must not hold
+    the watchdog past the point where repair should have
+    started. (The 2026-11-08 wedge survived two agent
+    restarts because every supervised watchdog cycle hung
+    inside the health read until the scheduler's 600s job
+    timeout killed it — the repair ladder never ran.) The
+    abandoned thread is daemon and stateless; at most one
+    stale fetch rides along per watchdog cycle."""
+    box: dict = {}
+    done = threading.Event()
+
+    def _run() -> None:
+        try:
+            box["health"] = fetch()
+        except Exception:
+            box["health"] = None
+        finally:
+            done.set()
+
+    threading.Thread(target=_run, daemon=True).start()
+    if done.wait(budget_s):
+        return box.get("health")
+    return None
 
 
 def read_lock_pid() -> int | None:
@@ -146,7 +223,7 @@ def classify(health_ok: bool, lock_pid: int | None,
     return UP_SUPERVISED, []
 
 
-def probe(fetch=fetch_health, lock_pid_of=read_lock_pid,
+def probe(fetch=fetch_bounded, lock_pid_of=read_lock_pid,
           systemd_of=systemd_state) -> dict:
     health = fetch()
     health_ok = bool(health and health.get("ok"))

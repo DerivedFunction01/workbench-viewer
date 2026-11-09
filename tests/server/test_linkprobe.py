@@ -7,6 +7,8 @@ its key=value form. No live server or systemd is touched.
 """
 
 import importlib.util
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -98,6 +100,40 @@ class ParseShowCase(unittest.TestCase):
             "LoadState=not-found\n")
         self.assertEqual(parsed["load_state"], "not-found")
         self.assertIsNone(parsed["main_pid"])
+
+
+class FetchBoundedCase(unittest.TestCase):
+    def test_fast_fetch_returns_its_value(self):
+        got = linkprobe.fetch_bounded(
+            fetch=lambda: HEALTH_OK, budget_s=2.0)
+        self.assertEqual(got, HEALTH_OK)
+
+    def test_hanging_fetch_is_abandoned_at_the_budget(self):
+        # The 2026-11-08 wedge shape: the fetch never
+        # returns because the read inside it never ends.
+        # The caller must stop waiting at the budget and
+        # read the missing answer as down, so the watchdog
+        # reaches the repair ladder.
+        never = threading.Event()
+
+        def hang():
+            never.wait(30)
+            return HEALTH_OK
+
+        start = time.monotonic()
+        got = linkprobe.fetch_bounded(fetch=hang,
+                                      budget_s=0.3)
+        elapsed = time.monotonic() - start
+        self.assertIsNone(got)
+        self.assertLess(elapsed, 5)
+
+    def test_raising_fetch_reads_as_none(self):
+        def boom():
+            raise RuntimeError("wedged")
+
+        got = linkprobe.fetch_bounded(fetch=boom,
+                                      budget_s=2.0)
+        self.assertIsNone(got)
 
 
 class ProbeCase(unittest.TestCase):
