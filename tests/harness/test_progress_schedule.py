@@ -119,6 +119,34 @@ class TestRender(unittest.TestCase):
         # literally and fail (2026-11-08 diagnosis).
         self.assertNotIn("cwd:", text)
 
+    def test_stamp_classifies_the_entry(self):
+        # The classification layer (catalog plan Step 4):
+        # every render carries its catalog block and its
+        # machine-form source stamp — writer, project,
+        # todo, and the source class (project-classed by
+        # default: a bare render names no root to derive
+        # the class from).
+        text = ps.render_entry("fixture-proj",
+                               "${WS}/fixture-proj",
+                               "workbench-viewer",
+                               armed_todo())
+        for needle in ("catalog:",
+                       "  origin: machine",
+                       "  generality: deployment-specific",
+                       "  use_case: work-tracking",
+                       "source:",
+                       "  writer: workbench-harness",
+                       "  project: fixture-proj",
+                       f"  todo: {TODO_ID}",
+                       "  source_class: project"):
+            self.assertIn(needle, text)
+        text = ps.render_entry("fixture-proj",
+                               "${WS}/fixture-proj",
+                               "workbench-viewer",
+                               armed_todo(),
+                               source_class="fixture")
+        self.assertIn("  source_class: fixture", text)
+
     def test_title_is_sanitized_and_quoted(self):
         text = ps.render_entry(
             "fixture-proj", "${WS}/fixture-proj",
@@ -541,6 +569,12 @@ class TestTempGuard(unittest.TestCase):
             f"- {Path(self.tmp.name)}"
             "/fixture-proj", text)
         self.assertNotIn("${WS}/tmp", text)
+        # A temp-root project declares its class: the
+        # entry is fixture-classed on its stamp, so the
+        # scheduler's loader holds it out wherever it
+        # lands — the classification-layer backstop.
+        self.assertIn("  source_class: fixture", text)
+        self.assertIn("  origin: machine", text)
 
     def test_project_arg_anchors_only_live_projects(self):
         with mock.patch.dict(
@@ -585,6 +619,43 @@ class TestSchedulerSchema(SeamCase):
         self.assertEqual(argv[5], TODO_ID)
         self.assertTrue(argv[0].endswith(
             "workbench-viewer/.venv/bin/python"))
+        # The stamp validates as the machine form: the
+        # catalog block and the source record reach the
+        # entry's parsed data intact.
+        data = entries[ENTRY_ID].data
+        self.assertEqual(data["catalog"]["origin"],
+                         "machine")
+        self.assertEqual(data["source"]["writer"],
+                         "workbench-harness")
+        self.assertEqual(data["source"]["source_class"],
+                         "project")
+
+    def test_fixture_stamp_is_refused_by_the_validator(self):
+        # The classification-layer backstop: a machine
+        # entry declaring the fixture source class is
+        # held OUT of the registry by the scheduler's
+        # own validation (load_dir quarantines it),
+        # wherever the harness's render refusal missed.
+        spec = importlib.util.spec_from_file_location(
+            "scheduler_registry",
+            REPO.parent / "scheduler" / "server"
+            / "registry.py")
+        registry = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(registry)
+        home = str(REPO.parent / "scheduler")
+        anchors = registry.derive_anchors(
+            home, str(self.ws))
+        path = self.entry_path()
+        path.write_text(ps.render_entry(
+            "fixture-proj", "${WS}/fixture-proj",
+            "workbench-viewer", armed_todo(),
+            source_class="fixture"),
+            encoding="utf-8")
+        entries, errors = registry.load_dir(
+            str(self.jobs), home, anchors=anchors)
+        self.assertNotIn(ENTRY_ID, entries)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("fixture", errors[0].lower())
 
 
 if __name__ == "__main__":

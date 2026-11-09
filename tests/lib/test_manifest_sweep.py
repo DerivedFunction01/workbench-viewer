@@ -91,6 +91,46 @@ class TestManifest(unittest.TestCase):
         m = self.load("name: X\n")
         self.assertFalse(m.registered_as_is)
 
+    def test_catalog_classification(self):
+        m = self.load(
+            "name: X\ncatalog_origin: hand\n"
+            "catalog_generality: parameterized\n"
+            "catalog_use_case: work-tracking\n")
+        self.assertEqual(m.catalog, {
+            "origin": "hand",
+            "generality": "parameterized",
+            "use_case": "work-tracking",
+        })
+
+    def test_catalog_absent_is_unclassified(self):
+        m = self.load("name: X\n")
+        self.assertIsNone(m.catalog)
+
+    def test_catalog_partial_is_an_error(self):
+        with self.assertRaises(ManifestError):
+            self.load("name: X\ncatalog_origin: hand\n")
+
+    def test_catalog_bad_origin_is_an_error(self):
+        with self.assertRaises(ManifestError):
+            self.load(
+                "name: X\ncatalog_origin: robot\n"
+                "catalog_generality: parameterized\n"
+                "catalog_use_case: work-tracking\n")
+
+    def test_catalog_bad_generality_is_an_error(self):
+        with self.assertRaises(ManifestError):
+            self.load(
+                "name: X\ncatalog_origin: hand\n"
+                "catalog_generality: copyable\n"
+                "catalog_use_case: work-tracking\n")
+
+    def test_catalog_bad_use_case_is_an_error(self):
+        with self.assertRaises(ManifestError):
+            self.load(
+                "name: X\ncatalog_origin: hand\n"
+                "catalog_generality: parameterized\n"
+                "catalog_use_case: Work Tracking\n")
+
     def test_unknown_key_is_an_error(self):
         with self.assertRaises(ManifestError):
             self.load("name: X\nregsitry: typo.db\n")
