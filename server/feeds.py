@@ -116,6 +116,16 @@ def _entries_feed(project, *, archived: bool, kinds) -> dict:
                         bundle_parser.resolve_plan_link(
                             m.plans, e["plan_ref"],
                             bundles=bundles)
+        # Display hygiene: an absolute filesystem path
+        # stored as a plan_ref never reaches the client
+        # raw — the served display form is the path's
+        # basename (relative refs pass through unchanged).
+        # The stored value is untouched; resolution above
+        # already consumed the raw ref.
+        for e in entries:
+            ref = e.get("plan_ref")
+            if ref and Path(ref).is_absolute():
+                e["plan_ref"] = Path(ref).name
         triage = []
         for e in data["entries"]:
             if e["archived"] or e["kind"] not in kinds:
