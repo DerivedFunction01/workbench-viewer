@@ -102,6 +102,28 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _send_bytes(self, status, raw, content_type):
+        # The byte route's answer: the file's bytes verbatim
+        # under their own content type — the server's only
+        # non-JSON response (SPEC §7, byte-route plan).
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _send_text(self, status, message):
+        # Plain-text error body for the byte route: its
+        # consumers are frames and curl, not the JSON API.
+        raw = (message + "\n").encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type",
+                         "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def _body(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
         if length > MAX_BODY:
@@ -122,6 +144,29 @@ class Handler(BaseHTTPRequestHandler):
         if project is None:
             raise ApiError(404, f"no such project: {slug}")
         return project
+
+    def _route_raw(self, parts):
+        # GET /raw/<slug>/entries/<id>/<path...> — an entry's
+        # file bytes served as a document (SPEC §7): the one
+        # route outside /api, answered in bytes, with plain-
+        # text errors under the §7 status conventions.
+        try:
+            project = find_project(parts[1])
+            if project is None:
+                raise ApiError(404,
+                               f"no such project: {parts[1]}")
+            db = _require_registry(project)
+            try:
+                entry = reg.get_entry(db, parts[3])
+            except reg.RegistryError as e:
+                raise ApiError(404, str(e))
+            raw, content_type = files_mod.entry_bytes(
+                entry, "/".join(parts[4:]))
+        except ApiError as e:
+            return self._send_text(e.status, e.payload["error"])
+        except files_mod.FileError_ as e:
+            return self._send_text(e.status, str(e))
+        return self._send_bytes(200, raw, content_type)
 
     # -- routing -------------------------------------------------
     def do_GET(self):
@@ -152,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route_get(self):
         parts, query = self._parts()
+        if len(parts) >= 5 and parts[0] == "raw" \
+                and parts[2] == "entries":
+            return self._route_raw(parts)
         if parts == ["api", "health"]:
             result = get_sweep()
             uptime = (datetime.now(timezone.utc)

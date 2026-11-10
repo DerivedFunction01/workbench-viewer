@@ -16,6 +16,7 @@ project tree.
 import fnmatch
 import hashlib
 import json
+import mimetypes
 import os
 import shutil
 import stat
@@ -43,6 +44,10 @@ PEEK_MAX_LINES = 2000
 # an order above the peek caps, a bound on the payload,
 # not a content cut.
 PREVIEW_MAX_BYTES = 4 * 1024 * 1024
+# The raw byte-route bound (entry_bytes): a guard on the
+# served size, not a transport limit — the route streams
+# from disk, so the bound only refuses absurd payloads.
+RAW_MAX_BYTES = 16 * 1024 * 1024
 
 
 class FileError_(Exception):
@@ -143,6 +148,36 @@ def entry_preview(entry: dict, rel_raw: str) -> dict:
                                   errors="replace"),
             "sha256": sha,
             "captured_at": now_iso()}
+
+
+def entry_bytes(entry: dict, rel_raw: str):
+    """The raw byte-route read of an entry's own file: the
+    file's bytes verbatim, for serving as a real document
+    (byte-route plan, 2026-11-10). The bridge carries JSON
+    only, so a rendered artifact page cannot ride it — the
+    companion server serves the bytes directly and the
+    viewer's frame loads them as a document, scripts and
+    relative assets intact. Guards mirror the other entry
+    reads: containment via resolve_in_entry, secret-shaped
+    paths refused (403) before existence is revealed, and
+    RAW_MAX_BYTES as a payload bound (413). No decoding,
+    no caps on lines, no content cut. Returns
+    (raw_bytes, content_type) with the type guessed from
+    the file extension."""
+    target, rel = resolve_in_entry(entry, rel_raw)
+    if is_secret(rel):
+        raise FileError_(403, "secret-shaped path is never "
+                              "served")
+    if not target.is_file():
+        raise FileError_(404, "no such file in the entry")
+    size = target.stat().st_size
+    if size > RAW_MAX_BYTES:
+        raise FileError_(413, "file exceeds the byte-route "
+                              "size bound")
+    raw = target.read_bytes()
+    content_type = (mimetypes.guess_type(target.name)[0]
+                    or "application/octet-stream")
+    return raw, content_type
 
 
 def peek_file(entry: dict, rel_raw: str, *,

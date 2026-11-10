@@ -581,11 +581,24 @@ API (the feeds the artifact consumes):
   portion; the board screen assembles portions
   client-side)
 
-The whole HTTP surface lives under `/api`. The 15 legacy
-unprefixed patterns were served as exact aliases for one
-published checkpoint cycle after the unification and were
-removed in the following cycle (the unification plan's
-Step 8); they now return 404.
+The whole HTTP surface lives under `/api`, with ONE
+exception (byte-route plan, 2026-11-10):
+
+- `GET /raw/<slug>/entries/<id>/<path...>` — an entry's file
+  bytes served verbatim as a document, under the file's own
+  content type. The bridge the artifact consumes carries
+  JSON only, so a rendered artifact page cannot ride it;
+  the viewer's frame loads this route directly and the page
+  runs as a real document (scripts and relative assets
+  intact). Guards are the entry reads' guards: containment
+  to the entry dir, secret-shaped paths refused (403), a
+  16 MiB payload bound (413). Errors are plain text under
+  the same status conventions; successes are never JSON.
+
+The 15 legacy unprefixed patterns were served as exact
+aliases for one published checkpoint cycle after the
+unification and were removed in the following cycle (the
+unification plan's Step 8); they now return 404.
 
 Conventions: request input is validated and parsed before
 any logic runs. Success payloads carry `captured_at`;
