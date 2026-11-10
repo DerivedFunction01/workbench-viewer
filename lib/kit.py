@@ -21,6 +21,7 @@ Stdlib only, like the rest of lib/.
 """
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -31,6 +32,15 @@ from .util import sha256_file, write_text
 
 SPEC_TYPES = ("toggle", "single", "multi", "slider",
               "input-text", "input-number")
+
+# The back control's default target (byte-route plan,
+# 2026-11-10): a kit page opened from the workbench viewer
+# returns to the viewer's own space. An environment
+# override exists so a deployment elsewhere can point its
+# kit pages home without editing tracked defaults.
+DEFAULT_BACK_HREF = "https://muse.ai/spaces/workbench-viewer-2"
+DEFAULT_BACK_LABEL = "← Workbench"
+BACK_HREF_ENV = "WB_KIT_BACK_HREF"
 
 _CK_SPEC_RE = re.compile(
     r'(<script type="application/json" id="ck-spec">)'
@@ -87,6 +97,17 @@ def validate_spec(spec) -> list:
     if not isinstance(spec.get("title"), str) \
             or not spec.get("title"):
         errors.append("spec title is required")
+    back = spec.get("back")
+    if back is not None:
+        if not isinstance(back, dict) \
+                or not isinstance(back.get("href"), str) \
+                or not back.get("href"):
+            errors.append(
+                "spec back must be an object with a "
+                "non-empty href")
+        elif "label" in back \
+                and not isinstance(back["label"], str):
+            errors.append("spec back label must be a string")
     choices = spec.get("choices", [])
     if not isinstance(choices, list):
         errors.append("spec choices must be a list")
@@ -361,6 +382,20 @@ def _read_template(template_dir) -> str:
             from e
 
 
+def with_default_back(spec) -> dict:
+    """The spec with the back control's default filled in
+    when the spec declares none (byte-route plan): the
+    control's target is data recorded in the spec at stamp
+    time, overridable per spec and by the environment.
+    An explicit spec value — including a deliberate custom
+    target — is preserved verbatim."""
+    if spec.get("back"):
+        return spec
+    href = os.environ.get(BACK_HREF_ENV) or DEFAULT_BACK_HREF
+    return {**spec, "back": {"label": DEFAULT_BACK_LABEL,
+                             "href": href}}
+
+
 def create_kit(db_path, layout, slug, *, title=None,
                spec=None, template_dir, owner_thread=None,
                owner_label=None, plan_ref=None,
@@ -380,6 +415,7 @@ def create_kit(db_path, layout, slug, *, title=None,
         demo_file = Path(template_dir) / "spec.demo.json"
         spec = load_spec(demo_file) \
             if demo_file.is_file() else demo_spec()
+    spec = with_default_back(spec)
     errors = validate_spec(spec)
     if errors:
         raise KitError("invalid spec: "

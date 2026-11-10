@@ -35,6 +35,12 @@
     border-bottom: 1px solid var(--ck-line);
   }
   .ck-bar-title { font-weight: 700; font-size: 17px; margin-right: auto; }
+  .ck-bar a.ck-back {
+    font-size: 14px; text-decoration: none;
+    padding: 7px 14px; border-radius: 999px;
+    border: 1px solid var(--ck-line); background: var(--ck-card);
+    color: var(--ck-ink);
+  }
   .ck-bar button {
     font: inherit; font-size: 14px;
     padding: 7px 14px; border-radius: 999px;
@@ -695,6 +701,12 @@
   /* ---------------- page skeleton ---------------- */
 
   var bar = el("header", "ck-bar ck-chrome");
+  if (spec.back && spec.back.href) {
+    var backLink = el("a", "ck-back", spec.back.label || "← Back");
+    backLink.href = spec.back.href;
+    backLink.target = "_top";
+    bar.appendChild(backLink);
+  }
   bar.appendChild(el("span", "ck-bar-title", spec.title || spec.id));
   var answeredCountEl = el("span", "ck-fb-count",
     answeredCount() + " of " + spec.choices.length + " answered");

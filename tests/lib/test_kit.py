@@ -5,9 +5,11 @@ The template fixture is a stub carrying the one ck-spec
 element the real kit.html contract guarantees."""
 
 import json
+import os
 import re
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from lib import kit
@@ -235,12 +237,74 @@ class TestCreateKit(KitFixture):
         self.assertEqual(embedded_spec(page)["id"],
                          "reading-app-settings-study")
         with open(spec_file, encoding="utf-8") as f:
-            self.assertEqual(json.load(f),
-                             kit.demo_spec())
+            saved = json.load(f)
+        self.assertEqual(
+            saved,
+            {**kit.demo_spec(),
+             "back": {"label": kit.DEFAULT_BACK_LABEL,
+                      "href": kit.DEFAULT_BACK_HREF}})
         self.assertEqual(e["content_sha256"],
                          reg.sha256_file(index))
         self.assertIsNotNone(e["state_schema"])
         self.assertNotIn("extras", e["state_schema"])
+
+    def test_back_default_stamped(self):
+        # The back control's target is data recorded at
+        # stamp time (byte-route plan): a spec without one
+        # gains the default in both spec.json and the page.
+        e = self.create()
+        entry_dir = Path(e["entry_dir"])
+        with open(entry_dir / "spec.json",
+                  encoding="utf-8") as f:
+            saved = json.load(f)
+        self.assertEqual(saved["back"]["href"],
+                         kit.DEFAULT_BACK_HREF)
+        with open(entry_dir / "index.html",
+                  encoding="utf-8") as f:
+            page_spec = embedded_spec(f.read())
+        self.assertEqual(page_spec["back"], saved["back"])
+
+    def test_back_spec_value_preserved(self):
+        spec = minimal_spec(
+            back={"label": "← Home",
+                  "href": "https://example.invalid/home"})
+        e = self.create("custom-back", spec=spec)
+        with open(Path(e["entry_dir"]) / "spec.json",
+                  encoding="utf-8") as f:
+            saved = json.load(f)
+        self.assertEqual(saved["back"], spec["back"])
+
+    def test_back_env_override(self):
+        with unittest.mock.patch.dict(
+                os.environ,
+                {kit.BACK_HREF_ENV:
+                 "https://example.invalid/viewer"}):
+            e = self.create("env-back")
+        with open(Path(e["entry_dir"]) / "spec.json",
+                  encoding="utf-8") as f:
+            saved = json.load(f)
+        self.assertEqual(saved["back"]["href"],
+                         "https://example.invalid/viewer")
+
+    def test_back_malformed_refused(self):
+        with self.assertRaises(kit.KitError):
+            self.create("bad-back",
+                        spec=minimal_spec(back={"label": "x"}))
+        with self.assertRaises(kit.KitError):
+            self.create("bad-back-2",
+                        spec=minimal_spec(back="https://x"))
+
+    def test_real_template_carries_the_control(self):
+        # The shipped kit.html renders the back link from
+        # the spec (byte-route plan): the control exists in
+        # the runtime, ahead of the title, top-targeted.
+        template = (Path(__file__).resolve().parent.parent
+                    .parent / "templates" / "choice-kit"
+                    / "kit.html")
+        html = template.read_text(encoding="utf-8")
+        self.assertIn("spec.back", html)
+        self.assertIn('"a", "ck-back"', html)
+        self.assertIn('"_top"', html)
 
     def test_supplied_spec_and_title(self):
         spec = minimal_spec(
