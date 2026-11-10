@@ -4,8 +4,10 @@ subset) + the discovery sweep mechanics."""
 import os
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from lib.manifest import ManifestError, load_manifest
 from lib.sweep import sweep
@@ -330,6 +332,53 @@ class TestSweepHygiene(unittest.TestCase):
                              [older.resolve()])
             by = result.by_slug("proj")
             self.assertIs(by, project)
+
+
+class TestSweepGitBudget(unittest.TestCase):
+    """The sweep's aggregate git budget (wedge fix,
+    2026-11-10): under a storage stall every git child
+    burns its per-call timeout in sequence, so the bound
+    that matters is the sweep's total. A parked git must
+    degrade identity resolution (directory identity), not
+    queue the sweep — and a healthy tree is untouched."""
+
+    def test_parked_git_bounds_the_sweep(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            write_project(ws / "alpha")
+            write_project(ws / "beta")
+
+            def parked_run(*a, **kw):
+                # Every git call parks past its (budget-
+                # clamped) timeout and is killed there —
+                # the storage-stall shape.
+                time.sleep(kw["timeout"] + 0.05)
+                raise subprocess.TimeoutExpired(
+                    cmd=a[0], timeout=kw["timeout"])
+
+            t0 = time.monotonic()
+            with mock.patch("lib.sweep.subprocess.run",
+                            side_effect=parked_run):
+                result = sweep([ws], git_budget_s=0.6)
+            elapsed = time.monotonic() - t0
+            # The whole sweep's git work stayed at the
+            # budget, not at per-call-timeout × calls.
+            self.assertLess(elapsed, 2.0)
+            # Both projects still register (identity
+            # degraded to the directory path), no errors.
+            self.assertEqual(
+                sorted(p.slug for p in result.projects),
+                ["alpha", "beta"])
+            self.assertEqual(result.errors, [])
+
+    def test_healthy_repo_identity_unchanged(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            make_repo(ws / "repo")
+            result = sweep([ws], git_budget_s=20.0)
+            self.assertEqual(result.errors, [])
+            self.assertEqual([p.slug for p in result.projects],
+                             ["repo"])
 
 
 if __name__ == "__main__":

@@ -47,6 +47,7 @@ navigation cannot address two peers.
 
 import os
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -144,15 +145,40 @@ class SweepResult:
         }
 
 
-def _git(root, *args) -> str | None:
+# Aggregate wall-clock budget for ONE sweep's git calls
+# (wedge fix, 2026-11-10): the per-call timeout bounds a
+# single child, but under a storage stall every call burns
+# its full timeout in sequence — three identity calls per
+# candidate times every candidate — and the sweep that
+# should take seconds runs for minutes while every caller
+# queues behind it (the 2026-11-10 capture: the sweep's
+# git child parked in select, the whole server behind the
+# compute lock). The healthy full sweep is ~1–3 s; the
+# budget sits an order above it. When it is exhausted,
+# remaining identity resolution degrades to directory
+# identity (the _git None path) instead of queueing.
+GIT_BUDGET_S = 20.0
+
+
+def _git(root, *args, deadline=None) -> str | None:
     """One read-only git call (same posture as lib/worktrees:
     GIT_OPTIONAL_LOCKS=0, nothing writes). None on any
     failure — a non-git directory is a normal sweep input,
-    never an error."""
+    never an error. With a deadline (the sweep's aggregate
+    git budget), an exhausted budget returns None without
+    spawning, and the per-call timeout shrinks to whatever
+    budget remains, so one sweep's git work is bounded in
+    aggregate, not just per call."""
+    timeout = 5.0
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        timeout = min(timeout, remaining)
     try:
         out = subprocess.run(
             ["git", "-C", str(root), *args],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=timeout,
             env=_GIT_ENV)
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -161,7 +187,7 @@ def _git(root, *args) -> str | None:
     return out.stdout
 
 
-def _repo_identity(root: Path):
+def _repo_identity(root: Path, deadline=None):
     """(common_dir, is_main) if `root` is the top level of a
     git checkout, else None. The common dir is the repo's
     identity: a linked worktree's resolves back to the main
@@ -169,10 +195,15 @@ def _repo_identity(root: Path):
     .git/worktrees/<name> — so git_dir == common_dir exactly
     for the main checkout. A manifest dir that is merely
     INSIDE a repo (show-toplevel != root) returns None and
-    keeps directory identity."""
-    top = _git(root, "rev-parse", "--show-toplevel")
-    gitdir = _git(root, "rev-parse", "--absolute-git-dir")
-    common = _git(root, "rev-parse", "--git-common-dir")
+    keeps directory identity. An exhausted sweep budget
+    (deadline) lands on the same None: identity degrades to
+    the directory for this sweep only."""
+    top = _git(root, "rev-parse", "--show-toplevel",
+               deadline=deadline)
+    gitdir = _git(root, "rev-parse", "--absolute-git-dir",
+                  deadline=deadline)
+    common = _git(root, "rev-parse", "--git-common-dir",
+                  deadline=deadline)
     if top is None or gitdir is None or common is None:
         return None
     if Path(top.strip()).resolve() != root:
@@ -185,10 +216,11 @@ def _repo_identity(root: Path):
     return common_path, is_main
 
 
-def _main_checkout_root(root: Path) -> Path | None:
+def _main_checkout_root(root: Path, deadline=None) -> Path | None:
     """The main worktree's path for the repo at `root`
     (`worktree list` always lists it first), or None."""
-    raw = _git(root, "worktree", "list", "--porcelain")
+    raw = _git(root, "worktree", "list", "--porcelain",
+               deadline=deadline)
     if raw:
         for line in raw.splitlines():
             if line.startswith("worktree "):
@@ -197,7 +229,7 @@ def _main_checkout_root(root: Path) -> Path | None:
 
 
 def _canonicalize(candidates, manifest_name: str,
-                  result: SweepResult) -> None:
+                  result: SweepResult, deadline=None) -> None:
     """Collapse discovered manifests to one project per repo
     identity (see module docstring). The main checkout's
     manifest wins wherever it was discovered; worktree-only
@@ -210,7 +242,7 @@ def _canonicalize(candidates, manifest_name: str,
         if manifest.root in seen_roots:
             continue  # same dir via overlapping sweep roots
         seen_roots.add(manifest.root)
-        ident = _repo_identity(manifest.root)
+        ident = _repo_identity(manifest.root, deadline=deadline)
         if ident is None:
             key, is_main = ("path", manifest.root), True
         else:
@@ -228,7 +260,8 @@ def _canonicalize(candidates, manifest_name: str,
             continue
         # Only linked worktrees discovered: the project is
         # their main checkout, if it carries a manifest.
-        main_root = _main_checkout_root(members[0][0].root)
+        main_root = _main_checkout_root(members[0][0].root,
+                                        deadline=deadline)
         if main_root is None:
             continue
         mpath = main_root / manifest_name
@@ -292,7 +325,11 @@ def _fold_duplicate_slugs(result: SweepResult) -> None:
 
 
 def sweep(roots, manifest_name: str = "workbench.yaml",
-          max_depth: int = 3, prune=DEFAULT_PRUNE) -> SweepResult:
+          max_depth: int = 3, prune=DEFAULT_PRUNE,
+          git_budget_s: float = GIT_BUDGET_S) -> SweepResult:
+    # One aggregate deadline for every git call this sweep
+    # makes (canonicalization); see GIT_BUDGET_S.
+    deadline = time.monotonic() + git_budget_s
     result = SweepResult()
     prune_set = set(prune)
     candidates = []
@@ -329,6 +366,7 @@ def sweep(roots, manifest_name: str = "workbench.yaml",
                 dirnames[:] = [d for d in dirnames
                                if d not in prune_set
                                and not d.startswith(".venv")]
-    _canonicalize(candidates, manifest_name, result)
+    _canonicalize(candidates, manifest_name, result,
+                  deadline=deadline)
     result.projects.sort(key=lambda p: p.slug)
     return result
