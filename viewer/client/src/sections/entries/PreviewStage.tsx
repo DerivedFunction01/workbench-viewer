@@ -48,10 +48,7 @@ export function PreviewStage({ slug, entry }: { slug: string; entry: FullEntry }
   const envelope = pageQuery.data;
   const payload =
     envelope && envelope.status === 200 ? (envelope.payload as PagePayload | null) : null;
-  const pageText = useMemo(
-    () => (payload ? decodePage(payload.bodyBase64) : null),
-    [payload],
-  );
+  const pageText = useMemo(() => (payload ? decodePage(payload.bodyBase64) : null), [payload]);
   const pageError = pageQuery.isError
     ? "The page could not be fetched — the action did not reach the server. Nothing was rendered."
     : envelope && envelope.status !== 200

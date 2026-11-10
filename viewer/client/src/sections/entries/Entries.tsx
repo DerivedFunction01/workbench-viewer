@@ -28,6 +28,7 @@ import { kindLabel, ruledStatusLabel } from "../../lib/labels";
 import { sectionHref } from "../../lib/routing";
 import { AnchoredComment } from "../inbox/AnchoredComment";
 import { DegradedBanner, ErrorWell, SkeletonWell, sectionTitleStyle } from "../shared";
+import { EntryDetail } from "./EntryDetail";
 import {
   DEFAULT_FILTERS,
   EntryBadges,
@@ -38,7 +39,6 @@ import {
   isRuledStatus,
   PreviewSummary,
 } from "./helpers";
-import { EntryDetail } from "./EntryDetail";
 import type { EntriesFeedFull, Envelope, FullEntry } from "./types";
 import { ENTRY_KINDS, RULED_STATUSES } from "./types";
 

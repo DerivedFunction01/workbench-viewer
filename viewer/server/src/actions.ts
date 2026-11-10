@@ -181,8 +181,7 @@ export const Actions = {
   }),
 
   getEntryFile: defineAction({
-    description:
-      "Read one file of an entry, optionally revealing a withheld secret-shaped file.",
+    description: "Read one file of an entry, optionally revealing a withheld secret-shaped file.",
     request: z.object({
       slug: z.string().min(1),
       entryId: z.string().min(1),
@@ -237,8 +236,7 @@ export const Actions = {
   getEntryPage,
 
   entryAction: defineAction({
-    description:
-      "Run a lifecycle action such as review, approve, or archive on an entry.",
+    description: "Run a lifecycle action such as review, approve, or archive on an entry.",
     request: z.object({
       slug: z.string().min(1),
       entryId: z.string().min(1),

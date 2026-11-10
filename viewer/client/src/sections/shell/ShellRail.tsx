@@ -174,28 +174,26 @@ export function ShellRail({ route, status }: { route: Route; status: ShellStatus
         </div>
         {selected ? (
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {(["overview", "entries", "plans", "todos", "board"] as SectionId[]).map(
-              (section) => {
-                const active = route.view === "section" && route.section === section;
-                const badge = navBadge(section);
-                return (
-                  <li key={section}>
-                    <a
-                      href={sectionHref(selected.slug, section)}
-                      style={railLinkStyle(active)}
-                      aria-current={active ? "page" : undefined}
-                    >
-                      <span>{sectionLabel(section)}</span>
-                      {badge != null && badge > 0 ? (
-                        <span style={badgeStyle} className="num">
-                          {badge}
-                        </span>
-                      ) : null}
-                    </a>
-                  </li>
-                );
-              },
-            )}
+            {(["overview", "entries", "plans", "todos", "board"] as SectionId[]).map((section) => {
+              const active = route.view === "section" && route.section === section;
+              const badge = navBadge(section);
+              return (
+                <li key={section}>
+                  <a
+                    href={sectionHref(selected.slug, section)}
+                    style={railLinkStyle(active)}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <span>{sectionLabel(section)}</span>
+                    {badge != null && badge > 0 ? (
+                      <span style={badgeStyle} className="num">
+                        {badge}
+                      </span>
+                    ) : null}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <a href={boardAllHref()} style={railLinkStyle(route.view === "board-all")}>

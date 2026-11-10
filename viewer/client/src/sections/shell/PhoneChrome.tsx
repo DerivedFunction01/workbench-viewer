@@ -190,41 +190,39 @@ export function PhoneSectionNav({ slug, current }: { slug: string; current: Sect
         marginBottom: "var(--wb-space-16)",
       }}
     >
-      {(["overview", "entries", "plans", "todos", "board"] as SectionId[]).map(
-        (section) => {
-          const isCurrent = section === current;
-          return (
-            <a
-              key={section}
-              href={sectionHref(slug, section)}
-              aria-current={isCurrent ? "page" : undefined}
-              style={{
-                flex: "1 1 0",
-                minWidth: 0,
-                minHeight: "38px",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "var(--wb-space-8) 2px",
-                borderRadius: "var(--wb-radius-md)",
-                border: isCurrent ? "1px solid var(--wb-border-default)" : "1px solid transparent",
-                background: isCurrent ? "var(--wb-surface-1)" : "transparent",
-                boxShadow: isCurrent ? "var(--wb-shadow-overlay)" : "none",
-                color: isCurrent ? "var(--wb-content-primary)" : "var(--wb-content-secondary)",
-                fontSize: "var(--wb-font-size-xs)",
-                lineHeight: "var(--wb-line-height-xs)",
-                fontWeight: isCurrent ? 700 : 500,
-                textDecoration: "none",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {sectionLabel(section)}
-            </a>
-          );
-        },
-      )}
+      {(["overview", "entries", "plans", "todos", "board"] as SectionId[]).map((section) => {
+        const isCurrent = section === current;
+        return (
+          <a
+            key={section}
+            href={sectionHref(slug, section)}
+            aria-current={isCurrent ? "page" : undefined}
+            style={{
+              flex: "1 1 0",
+              minWidth: 0,
+              minHeight: "38px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "var(--wb-space-8) 2px",
+              borderRadius: "var(--wb-radius-md)",
+              border: isCurrent ? "1px solid var(--wb-border-default)" : "1px solid transparent",
+              background: isCurrent ? "var(--wb-surface-1)" : "transparent",
+              boxShadow: isCurrent ? "var(--wb-shadow-overlay)" : "none",
+              color: isCurrent ? "var(--wb-content-primary)" : "var(--wb-content-secondary)",
+              fontSize: "var(--wb-font-size-xs)",
+              lineHeight: "var(--wb-line-height-xs)",
+              fontWeight: isCurrent ? 700 : 500,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {sectionLabel(section)}
+          </a>
+        );
+      })}
     </nav>
   );
 }
