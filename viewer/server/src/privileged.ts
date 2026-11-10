@@ -96,11 +96,11 @@ interface RawResult {
   bodyBase64: string;
 }
 
-// The raw-bytes sibling of fetchJson (hosted byte route,
+// The raw-bytes sibling of fetchJson (byte route,
 // 2026-11-10): the same socket discipline, but the body is
 // carried as base64 instead of being JSON-parsed, so an
 // entry page's exact bytes can ride the bridge to the
-// mirror action. A failed socket reports status 0 with an
+// render action. A failed socket reports status 0 with an
 // empty body; the caller reads that as unreachable, never
 // as an empty file.
 function fetchRaw(args: {

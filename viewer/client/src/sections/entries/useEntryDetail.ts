@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { ruledStatusLabel } from "../../lib/labels";
-import type { EntryDetail, Envelope, FullEntry, MockupsFeedFull } from "./types";
+import type { EntriesFeedFull, EntryDetail, Envelope, FullEntry } from "./types";
 
 export function useEntryDetail(slug: string, entryId: string, feedEntry: FullEntry | null) {
   const detailQuery = useQuery({
@@ -20,13 +20,13 @@ export function useEntryDetail(slug: string, entryId: string, feedEntry: FullEnt
   // It feeds the supersede picker (the entry's siblings,
   // chosen by title) and the "Superseded by" title lookup.
   const feedQuery = useQuery({
-    queryKey: ["mockups", slug, false],
-    queryFn: () => api.getMockups({ slug }),
+    queryKey: ["entries", slug, false],
+    queryFn: () => api.getEntries({ slug }),
   });
   const feedEnvelope = feedQuery.data as Envelope | undefined;
-  const feed: MockupsFeedFull | null =
+  const feed: EntriesFeedFull | null =
     feedEnvelope && feedEnvelope.status === 200 && feedEnvelope.payload
-      ? (feedEnvelope.payload as MockupsFeedFull)
+      ? (feedEnvelope.payload as EntriesFeedFull)
       : null;
   const detailEnvelope = detailQuery.data as Envelope | undefined;
   const detail =

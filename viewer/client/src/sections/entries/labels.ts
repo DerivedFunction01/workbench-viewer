@@ -1,5 +1,5 @@
 // Component labels and the selection vocabulary of the
-// mockup drill-in (§12): the pieces MockupDetail and its
+// entry drill-in (§12): the pieces EntryDetail and its
 // card leaves share.
 
 import type { TextSelection } from "../../lib/api-types";

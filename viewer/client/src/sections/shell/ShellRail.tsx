@@ -43,7 +43,6 @@ export function ShellRail({ route, status }: { route: Route; status: ShellStatus
     routeSlugValue,
     selected,
     triageCount,
-    artifactsTriageCount,
     doingCount,
     inboxCount,
     serverOk,
@@ -52,8 +51,7 @@ export function ShellRail({ route, status }: { route: Route; status: ShellStatus
   } = status;
 
   const navBadge = (section: SectionId): number | null => {
-    if (section === "mockups") return triageCount;
-    if (section === "artifacts") return artifactsTriageCount;
+    if (section === "entries") return triageCount;
     if (section === "board") return doingCount;
     return null;
   };
@@ -176,7 +174,7 @@ export function ShellRail({ route, status }: { route: Route; status: ShellStatus
         </div>
         {selected ? (
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {(["overview", "mockups", "artifacts", "plans", "todos", "board"] as SectionId[]).map(
+            {(["overview", "entries", "plans", "todos", "board"] as SectionId[]).map(
               (section) => {
                 const active = route.view === "section" && route.section === section;
                 const badge = navBadge(section);

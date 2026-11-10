@@ -44,7 +44,7 @@ export function useDisposition({
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["entry", slug, entryId] });
-    queryClient.invalidateQueries({ queryKey: ["mockups", slug] });
+    queryClient.invalidateQueries({ queryKey: ["entries", slug] });
     onMutated();
   };
 

@@ -7,9 +7,9 @@
 // The literal values are the contract: invalidation
 // matches by key prefix, so a key's shape must not
 // change when a call site migrates to this module —
-// e.g. the shell's triage keys are ["mockups", slug]
-// (two elements) while the Mockups section's own feed
-// keys are ["mockups", slug, archived] (three); both
+// e.g. the shell's triage keys are ["entries", slug]
+// (two elements) while the Entries section's own feed
+// keys are ["entries", slug, archived] (three); both
 // shapes are live, and the section's stay literal there.
 
 export const projectsKey = ["projects"] as const;
@@ -21,10 +21,9 @@ export const boardKey = (slug: string) => ["board", slug] as const;
 export const plansKey = (slug: string) => ["plans", slug] as const;
 export const todosKey = (slug: string) => ["todos", slug] as const;
 
-// The shell's per-project triage keys (see the header
+// The shell's per-project triage key (see the header
 // note on shapes).
-export const mockupsKey = (slug: string | undefined) => ["mockups", slug] as const;
-export const artifactsKey = (slug: string | undefined) => ["artifacts", slug] as const;
+export const entriesKey = (slug: string | undefined) => ["entries", slug] as const;
 
 // Message keys carry their filters as trailing parts:
 // ["messages"], ["messages", project],

@@ -81,9 +81,9 @@ async function callServerOnce<T>(
   return { timedOut: false, reply: { status: res.status, payload: json as T, error: null } };
 }
 
-// The raw-bytes read (hosted byte route, 2026-11-10): one
+// The raw-bytes read (byte route, 2026-11-10): one
 // wbRaw attempt against the companion's /raw route. No
-// retry and no JSON anywhere — the caller (the mirror
+// retry and no JSON anywhere — the caller (the render
 // action) decides what a status means; status 0 is the
 // socket failure shape and is never an empty file.
 export interface RawReply {

@@ -301,7 +301,7 @@ export function OverviewSection({ slug, projectName }: { slug: string; projectNa
                 </span>
               </a>
               <a
-                href={sectionHref(slug, "mockups")}
+                href={sectionHref(slug, "entries")}
                 style={{ color: "var(--wb-accent)", textDecoration: "none" }}
               >
                 In triage · <span className="num">{row.review.triage_count}</span>

@@ -44,8 +44,7 @@ const KIND_LABELS: Record<string, string> = {
 
 const SECTION_LABELS: Record<string, string> = {
   overview: "Overview",
-  mockups: "Mockups",
-  artifacts: "Artifacts",
+  entries: "Entries",
   plans: "Plans",
   todos: "Todos",
   board: "Board",

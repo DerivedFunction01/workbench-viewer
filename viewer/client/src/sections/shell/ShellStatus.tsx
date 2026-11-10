@@ -13,19 +13,18 @@ import { useMemo } from "react";
 import { api } from "../../lib/api";
 import type {
   BoardProjectPayload,
+  EntriesFeed,
   HomePayload,
-  MockupsFeed,
   ProjectSummary,
 } from "../../lib/api-types";
 import { groupProjects } from "../../lib/grouping";
 import {
-  artifactsKey,
   boardKey,
   configKey,
+  entriesKey,
   healthKey,
   homeKey,
   messagesKey,
-  mockupsKey,
   projectsKey,
 } from "../../lib/keys";
 import { homeHref, type Route, reposHref, sectionHref } from "../../lib/routing";
@@ -34,11 +33,7 @@ import { badgeStyle } from "../shared";
 import { BackIcon } from "./PhoneChrome";
 
 export function projectStatus(project: ProjectSummary): { word: string; degraded: boolean } {
-  const anySection =
-    project.sections.mockups ||
-    project.sections.artifacts ||
-    project.sections.todos ||
-    project.sections.plans;
+  const anySection = project.sections.entries || project.sections.todos || project.sections.plans;
   if (anySection) return { word: "ok", degraded: false };
   if (project.sections.registry_declared || project.sections.plans_declared) {
     return { word: "manifest only", degraded: false };
@@ -113,21 +108,13 @@ export function useShellStatus(route: Route) {
     : null;
 
   const triageQuery = useQuery({
-    queryKey: mockupsKey(selected?.slug),
-    queryFn: () => api.getMockups({ slug: selected?.slug ?? "" }),
-    // biome-ignore lint/complexity/useOptionalChain: the boolean form is load-bearing — `selected?.sections.mockups` evaluates to undefined with no project selected, and React Query treats enabled: undefined as enabled (the query would fire with an empty slug and 422)
-    enabled: selected != null && selected.sections.mockups,
+    queryKey: entriesKey(selected?.slug),
+    queryFn: () => api.getEntries({ slug: selected?.slug ?? "" }),
+    // biome-ignore lint/complexity/useOptionalChain: the boolean form is load-bearing — `selected?.sections.entries` evaluates to undefined with no project selected, and React Query treats enabled: undefined as enabled (the query would fire with an empty slug and 422)
+    enabled: selected != null && selected.sections.entries,
   });
   const triageCount =
-    (triageQuery.data?.payload as unknown as MockupsFeed | null)?.triage.length ?? null;
-  const artifactsTriageQuery = useQuery({
-    queryKey: artifactsKey(selected?.slug),
-    queryFn: () => api.getArtifacts({ slug: selected?.slug ?? "" }),
-    // biome-ignore lint/complexity/useOptionalChain: same as the mockups query above — undefined would read as enabled to React Query
-    enabled: selected != null && selected.sections.artifacts,
-  });
-  const artifactsTriageCount =
-    (artifactsTriageQuery.data?.payload as unknown as MockupsFeed | null)?.triage.length ?? null;
+    (triageQuery.data?.payload as unknown as EntriesFeed | null)?.triage.length ?? null;
   const doingCount = portionsPending
     ? null
     : portions.reduce(
@@ -152,7 +139,6 @@ export function useShellStatus(route: Route) {
     portionsPending,
     doingCount,
     triageCount,
-    artifactsTriageCount,
     routeSlugValue,
     selected,
   };

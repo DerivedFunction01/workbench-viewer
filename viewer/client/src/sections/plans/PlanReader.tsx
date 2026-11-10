@@ -31,7 +31,7 @@ import {
   highlightSelectionInElement,
   SelectionTintStyle,
   useAnnotationThreads,
-} from "../mockups/Annotations";
+} from "../entries/Annotations";
 import { ErrorWell, listRowStyle, metaStyle, SkeletonWell } from "../shared";
 import { anchor } from "./anchors";
 import { ChangesPanel } from "./ChangesPanel";

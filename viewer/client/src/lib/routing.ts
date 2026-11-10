@@ -10,8 +10,10 @@
 //   #/p/<slug>/overview         per-project Overview (repo-home
 //                               §4) — the FIRST per-project tab,
 //                               ahead of the viewer's sections
-//   #/p/<slug>/mockups          per-project sections…
-//   #/p/<slug>/mockups/<id>     …with an optional item segment
+//   #/p/<slug>/entries          per-project sections…
+//   #/p/<slug>/entries/<id>     …with an optional item segment
+//                               (the retired mockups/artifacts
+//                               segments map here at parse time)
 //   #/p/<slug>/plans[/<path>]   (the plans item is a file path
 //   #/p/<slug>/todos             and may itself contain slashes)
 //   #/p/<slug>/board
@@ -26,16 +28,17 @@
 // Unknown routes land on the default view, never a blank
 // (ui-context). Parsing is pure so App stays declarative.
 
-export type SectionId = "overview" | "mockups" | "artifacts" | "plans" | "todos" | "board";
+export type SectionId = "overview" | "entries" | "plans" | "todos" | "board";
 
-export const SECTION_IDS: SectionId[] = [
-  "overview",
-  "mockups",
-  "artifacts",
-  "plans",
-  "todos",
-  "board",
-];
+export const SECTION_IDS: SectionId[] = ["overview", "entries", "plans", "todos", "board"];
+
+// The retired collection segments (the 2026-11-10
+// unification): old hashes in messages and bookmarks
+// land on the unified section, item segment preserved.
+const RETIRED_SECTION_SEGMENTS: Record<string, SectionId> = {
+  mockups: "entries",
+  artifacts: "entries",
+};
 
 export type Route =
   | { view: "home" }
@@ -60,7 +63,7 @@ export function parseRoute(hash: string): Route {
   }
   if (parts[0] === "p" && parts.length >= 3) {
     const slug = decodeURIComponent(parts[1] ?? "");
-    const section = parts[2] as SectionId;
+    const section = (RETIRED_SECTION_SEGMENTS[parts[2] ?? ""] ?? parts[2]) as SectionId;
     if (slug && SECTION_IDS.includes(section)) {
       const item = parts.length > 3 ? parts.slice(3).map(decodeURIComponent).join("/") : null;
       return { view: "section", slug, section, item };

@@ -1,11 +1,16 @@
-// Mockups — the registry browser + review surface
-// (Subplan 06, founding Step 5). Triage lane first (the
-// section's entry view), then the storyboard: frames at a
+// Entries — the registry browser + review surface
+// (Subplan 06, founding Step 5; the one collection since
+// the 2026-11-10 unification retired the Mockups /
+// Artifacts split). Triage lane first (the section's
+// entry view), then the storyboard: frames at a
 // 300px tile minimum, or contact-sheet mode where an entry
 // expands into its featured states as mini-frames. Archive
-// sits behind a toggle. Drill-in is the entry sheet. All
-// data is the project's real feed; project zero's empty
-// registry renders as the honest empty state.
+// sits behind a toggle. Drill-in is the entry sheet. Like
+// the retired sibling section, the section honors its
+// route item segment — a Board or message link to an item
+// opens its detail directly. All data is the project's
+// real feed; project zero's empty registry renders as the
+// honest empty state.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -18,8 +23,9 @@ import { SegmentedControl } from "../../components/SegmentedControl";
 import { Toggle } from "../../components/Toggle";
 import { TriageRow } from "../../components/TriageRow";
 import { api } from "../../lib/api";
-import { mockupsKey } from "../../lib/keys";
+import { entriesKey } from "../../lib/keys";
 import { kindLabel, ruledStatusLabel } from "../../lib/labels";
+import { sectionHref } from "../../lib/routing";
 import { AnchoredComment } from "../inbox/AnchoredComment";
 import { DegradedBanner, ErrorWell, SkeletonWell, sectionTitleStyle } from "../shared";
 import {
@@ -32,8 +38,8 @@ import {
   isRuledStatus,
   PreviewSummary,
 } from "./helpers";
-import { MockupDetail } from "./MockupDetail";
-import type { Envelope, FullEntry, MockupsFeedFull } from "./types";
+import { EntryDetail } from "./EntryDetail";
+import type { EntriesFeedFull, Envelope, FullEntry } from "./types";
 import { ENTRY_KINDS, RULED_STATUSES } from "./types";
 
 type ViewMode = "storyboard" | "contact-sheet";
@@ -48,9 +54,17 @@ const headingStyle: React.CSSProperties = {
   margin: "0 0 var(--wb-space-8)",
 };
 
-export function MockupsSection({ slug, projectName }: { slug: string; projectName: string }) {
+export function EntriesSection({
+  slug,
+  projectName,
+  item,
+}: {
+  slug: string;
+  projectName: string;
+  item: string | null;
+}) {
   const queryClient = useQueryClient();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [localSelected, setLocalSelected] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("storyboard");
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
@@ -61,20 +75,31 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
       "olive",
   );
 
+  // The route item segment wins over local selection: a
+  // link to an item opens its detail from birth, and
+  // closing it returns to the list route.
+  const selectedId = item ?? localSelected;
+  const closeDetail = () => {
+    setLocalSelected(null);
+    if (item != null && typeof window !== "undefined") {
+      window.location.hash = sectionHref(slug, "entries");
+    }
+  };
+
   const activeQuery = useQuery({
-    queryKey: ["mockups", slug, false],
-    queryFn: () => api.getMockups({ slug }),
+    queryKey: ["entries", slug, false],
+    queryFn: () => api.getEntries({ slug }),
   });
   const archivedQuery = useQuery({
-    queryKey: ["mockups", slug, true],
-    queryFn: () => api.getMockups({ slug, archived: true }),
+    queryKey: ["entries", slug, true],
+    queryFn: () => api.getEntries({ slug, archived: true }),
     enabled: showArchived,
   });
 
-  const feedOf = (data: unknown): MockupsFeedFull | null => {
+  const feedOf = (data: unknown): EntriesFeedFull | null => {
     const envelope = data as Envelope | undefined;
     if (envelope?.status !== 200 || !envelope?.payload) return null;
-    return envelope.payload as MockupsFeedFull;
+    return envelope.payload as EntriesFeedFull;
   };
   const feed = feedOf(activeQuery.data);
   const archivedFeed = feedOf(archivedQuery.data);
@@ -92,15 +117,15 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
     return map;
   }, [feed, archivedFeed]);
 
-  if (activeQuery.isPending) return <SkeletonWell label={`mockups for ${projectName}`} />;
+  if (activeQuery.isPending) return <SkeletonWell label={`entries for ${projectName}`} />;
   if (activeQuery.isError) {
-    return <ErrorWell section="Mockups" message="the section feed could not be loaded." />;
+    return <ErrorWell section="Entries" message="the section feed could not be loaded." />;
   }
   if (!feed) {
     const envelope = activeQuery.data as Envelope | undefined;
     return (
       <ErrorWell
-        section="Mockups"
+        section="Entries"
         message={envelope?.error ?? "the companion server did not answer."}
       />
     );
@@ -109,14 +134,14 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
   if (selectedId) {
     return (
       <section>
-        <h1 style={sectionTitleStyle}>Mockups</h1>
-        <MockupDetail
+        <h1 style={sectionTitleStyle}>Entries</h1>
+        <EntryDetail
           slug={slug}
           entryId={selectedId}
           feedEntry={entryById.get(selectedId) ?? null}
-          onClose={() => setSelectedId(null)}
+          onClose={closeDetail}
           onMutated={() => {
-            queryClient.invalidateQueries({ queryKey: mockupsKey(slug) });
+            queryClient.invalidateQueries({ queryKey: entriesKey(slug) });
           }}
         />
         {/* D7's second compose surface: a comment box
@@ -159,12 +184,12 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
 
   return (
     <section>
-      <h1 style={sectionTitleStyle}>Mockups</h1>
+      <h1 style={sectionTitleStyle}>Entries</h1>
       <DegradedBanner feed={feed} />
       {reconcileProblems.length > 0 ? (
         <div style={{ marginBottom: "var(--wb-space-16)" }}>
           <KitDegradedBanner
-            message={`Mockups: reconciliation found ${reconcileProblems.length} problem(s) between the registry and the entry folders.`}
+            message={`Entries: reconciliation found ${reconcileProblems.length} problem(s) between the registry and the entry folders.`}
             detail="Run wb validate for the findings and their repairs."
           />
         </div>
@@ -172,7 +197,7 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
       {feed.reconcile?.error ? (
         <div style={{ marginBottom: "var(--wb-space-16)" }}>
           <KitDegradedBanner
-            message="Mockups: reconciliation could not be checked for this project."
+            message="Entries: reconciliation could not be checked for this project."
             detail={feed.reconcile.error}
           />
         </div>
@@ -182,8 +207,8 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
         <EmptyState
           message={
             feed.available
-              ? `No mockups in ${projectName} yet — nothing awaiting review, nothing stale.`
-              : `No mockups for ${projectName} — this project's registry is not set up, so there is nothing to review.`
+              ? `No entries in ${projectName} yet — nothing awaiting review, nothing stale.`
+              : `No entries for ${projectName} — this project's registry is not set up, so there is nothing to review.`
           }
           action={
             <Toggle checked={showArchived} onChange={setShowArchived} label="Show archived" />
@@ -217,7 +242,7 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
                           />
                         ) : undefined
                       }
-                      onOpen={() => setSelectedId(item.id)}
+                      onOpen={() => setLocalSelected(item.id)}
                     />
                   );
                 })}
@@ -300,10 +325,10 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
               </select>
             </label>
             <label>
-              <span className="sr-only">Search mockups</span>
+              <span className="sr-only">Search entries</span>
               <input
                 type="search"
-                aria-label="Search mockups"
+                aria-label="Search entries"
                 placeholder="Search title, id, source…"
                 value={filters.search}
                 onChange={(event) =>
@@ -336,7 +361,7 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
           </p>
 
           {visible.length === 0 ? (
-            <EmptyState message="No mockups match these filters" />
+            <EmptyState message="No entries match these filters" />
           ) : viewMode === "storyboard" ? (
             <div
               data-anchor="mockups/storyboard-grid"
@@ -378,7 +403,7 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
                             approval={entry.approval}
                             needsChanges={needsChanges}
                           />
-                          <Button variant="ghost" onClick={() => setSelectedId(entry.id)}>
+                          <Button variant="ghost" onClick={() => setLocalSelected(entry.id)}>
                             Open
                           </Button>
                         </>
@@ -422,7 +447,7 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
                         title={state.label}
                         archived={entry.archived}
                         footer={
-                          <Button variant="ghost" onClick={() => setSelectedId(entry.id)}>
+                          <Button variant="ghost" onClick={() => setLocalSelected(entry.id)}>
                             Open
                           </Button>
                         }

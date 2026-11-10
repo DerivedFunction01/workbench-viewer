@@ -10,8 +10,7 @@
 // ---------------------------------------------------------------------------
 
 export interface ProjectSections {
-  mockups: boolean;
-  artifacts: boolean;
+  entries: boolean;
   todos: boolean;
   plans: boolean;
   registry_declared: boolean;
@@ -56,7 +55,7 @@ export interface FeedEnvelope {
   captured_at?: string;
 }
 
-export interface MockupEntry {
+export interface EntryRow {
   id: string;
   title: string;
   kind: string;
@@ -67,9 +66,9 @@ export interface MockupEntry {
   [key: string]: unknown;
 }
 
-export interface MockupsFeed extends FeedEnvelope {
-  entries: MockupEntry[];
-  triage: MockupEntry[];
+export interface EntriesFeed extends FeedEnvelope {
+  entries: EntryRow[];
+  triage: EntryRow[];
   reconcile: { status: string; problems: unknown[]; error: string | null } | null;
 }
 

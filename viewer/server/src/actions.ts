@@ -12,15 +12,14 @@
 import { type ActionsModule, defineAction, z } from "@hatch/space-sdk";
 import { privileged } from "@space/privileged";
 import { callServer } from "./bridge";
-import { openEntryPage } from "./mirror";
+import { getEntryPage } from "./page";
 
 // ---------------------------------------------------------------------------
 // Payload schemas (loose: the server's fields, verbatim + typed where known)
 // ---------------------------------------------------------------------------
 
 const projectSections = z.looseObject({
-  mockups: z.boolean(),
-  artifacts: z.boolean(),
+  entries: z.boolean(),
   todos: z.boolean(),
   plans: z.boolean(),
   registry_declared: z.boolean(),
@@ -150,8 +149,8 @@ export const Actions = {
     },
   }),
 
-  getMockups: defineAction({
-    description: "Fetch one project's mockup feed, optionally including archived entries.",
+  getEntries: defineAction({
+    description: "Fetch one project's entries feed, optionally including archived entries.",
     request: z.object({ slug: z.string().min(1), archived: z.boolean().optional() }),
     response: feedResult,
     privileged: [privileged.wbApi],
@@ -159,27 +158,13 @@ export const Actions = {
       const suffix = args.archived ? "?archived=1" : "";
       return callServer<z.infer<typeof feedEnvelope>>(
         ctx,
-        `/api/projects/${enc(args.slug)}/mockups${suffix}`,
-      );
-    },
-  }),
-
-  getArtifacts: defineAction({
-    description: "Fetch one project's artifacts feed, optionally including archived entries.",
-    request: z.object({ slug: z.string().min(1), archived: z.boolean().optional() }),
-    response: feedResult,
-    privileged: [privileged.wbApi],
-    async handler(ctx, args) {
-      const suffix = args.archived ? "?archived=1" : "";
-      return callServer<z.infer<typeof feedEnvelope>>(
-        ctx,
-        `/api/projects/${enc(args.slug)}/artifacts${suffix}`,
+        `/api/projects/${enc(args.slug)}/entries${suffix}`,
       );
     },
   }),
 
   getEntry: defineAction({
-    description: "Fetch one mockup or artifact entry's detail, files, and history.",
+    description: "Fetch one entry's detail, files, and history.",
     request: entryArg,
     // The entry-detail payload ({entry, files, history,
     // latest_review, approval, derived}) is NOT a feed
@@ -197,7 +182,7 @@ export const Actions = {
 
   getEntryFile: defineAction({
     description:
-      "Read one file of a mockup or artifact entry, optionally revealing a withheld secret-shaped file.",
+      "Read one file of an entry, optionally revealing a withheld secret-shaped file.",
     request: z.object({
       slug: z.string().min(1),
       entryId: z.string().min(1),
@@ -247,13 +232,13 @@ export const Actions = {
     },
   }),
 
-  // The hosted byte route's mirror action (mirror.ts): the
-  // one action that is not a proxy of one companion route.
-  openEntryPage,
+  // The in-viewer render's action (page.ts): the one
+  // action that is not a proxy of one companion route.
+  getEntryPage,
 
   entryAction: defineAction({
     description:
-      "Run a lifecycle action such as review, approve, or archive on a mockup or artifact entry.",
+      "Run a lifecycle action such as review, approve, or archive on an entry.",
     request: z.object({
       slug: z.string().min(1),
       entryId: z.string().min(1),

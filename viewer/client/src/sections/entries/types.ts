@@ -1,4 +1,4 @@
-// Local feed/detail types for the Mockups section — the
+// Local feed/detail types for the Entries section — the
 // companion server's shapes (SPEC §4/§7), read off the bridge
 // envelopes in lib/api-types.ts, which carries the loose feed
 // envelope; the full entry rows (the export fold: entry +
@@ -67,7 +67,7 @@ export interface Reconcile {
   error: string | null;
 }
 
-export interface MockupsFeedFull {
+export interface EntriesFeedFull {
   slug: string;
   name: string;
   degraded: boolean;
@@ -148,10 +148,15 @@ export const RULED_STATUSES = [
 
 export type RuledStatusName = (typeof RULED_STATUSES)[number];
 
+// The kind vocabulary (SPEC §4.1): kinds are labels in
+// the unified collection — `artifact` included, since the
+// 2026-11-10 unification retired the feed split that kept
+// it out of this list.
 export const ENTRY_KINDS = [
   "mockup",
   "prototype",
   "test-route",
   "component-variant",
   "storyboard",
+  "artifact",
 ] as const;

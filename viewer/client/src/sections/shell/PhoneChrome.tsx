@@ -190,7 +190,7 @@ export function PhoneSectionNav({ slug, current }: { slug: string; current: Sect
         marginBottom: "var(--wb-space-16)",
       }}
     >
-      {(["overview", "mockups", "artifacts", "plans", "todos", "board"] as SectionId[]).map(
+      {(["overview", "entries", "plans", "todos", "board"] as SectionId[]).map(
         (section) => {
           const isCurrent = section === current;
           return (

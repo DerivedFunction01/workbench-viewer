@@ -7,11 +7,10 @@
 import type { ProjectSummary } from "../../lib/api-types";
 import type { Appearance } from "../../lib/preferences";
 import { homeHref, type Route } from "../../lib/routing";
-import { ArtifactsSection } from "../artifacts/Artifacts";
 import { BoardSection } from "../board/Board";
+import { EntriesSection } from "../entries/Entries";
 import { HomeSection, ProjectPickerSection } from "../homepage/Home";
 import { InboxSection } from "../inbox/Inbox";
-import { MockupsSection } from "../mockups/Mockups";
 import { OverviewSection } from "../overview/Overview";
 import { PlansSection } from "../plans/Plans";
 import { ReposSection } from "../repos/Repos";
@@ -60,12 +59,9 @@ export function ShellRoutes({
     if (route.section === "overview") {
       return <OverviewSection slug={route.slug} projectName={selected?.name ?? route.slug} />;
     }
-    if (route.section === "mockups") {
-      return <MockupsSection slug={route.slug} projectName={selected?.name ?? route.slug} />;
-    }
-    if (route.section === "artifacts") {
+    if (route.section === "entries") {
       return (
-        <ArtifactsSection
+        <EntriesSection
           slug={route.slug}
           projectName={selected?.name ?? route.slug}
           item={route.item}

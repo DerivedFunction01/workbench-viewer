@@ -365,11 +365,9 @@ export function BoardSection({
       draggable={false}
       onOpen={() => {
         if (item.project) {
-          // Each card opens in its own collection: an
-          // artifact item lands on its Artifacts detail,
-          // a design-kind entry on Mockups (SPEC §8.4).
-          const section = item.kind === "artifact" ? "artifacts" : "mockups";
-          window.location.hash = sectionHref(item.project, section, item.id);
+          // Every review card opens in the one Entries
+          // collection (SPEC §8.4), whatever its kind.
+          window.location.hash = sectionHref(item.project, "entries", item.id);
         }
       }}
       footer={

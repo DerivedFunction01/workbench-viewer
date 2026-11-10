@@ -20,10 +20,10 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(here, "..", "client", "src", rel), "utf8");
 
-const PLANS = read("sections/Plans.tsx");
+const PLANS = read("sections/plans/Plans.tsx");
 const PLAN_BODY = read("sections/plans/PlanBody.tsx");
-const MOCKUPS = read("sections/Mockups.tsx");
-const DETAIL = read("sections/mockups/MockupDetail.tsx");
+const MOCKUPS = read("sections/entries/Entries.tsx");
+const DETAIL = read("sections/entries/EntryDetail.tsx");
 
 /** Required anchor sites: [description, source, pattern]. */
 const REQUIRED: [string, string, RegExp][] = [

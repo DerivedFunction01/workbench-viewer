@@ -1,6 +1,6 @@
 // Drill-in for one entry (Subplan 06 Step 2 + 3): the
-// entry's open control over the hosted byte route
-// (2026-11-10) beside the recorded-state summary the
+// entry's page rendered in the stage (2026-11-10)
+// beside the recorded-state summary the
 // annotation machinery selects into, metadata, lifecycle
 // actions, files, review log and history. Every write
 // goes through the server's entry action (lib/ mutation,
@@ -11,7 +11,12 @@
 // the byte route, and its review disposition retired with
 // the hosted route: an entry's questions live in its page
 // now, and answers are recorded by transcription in the
-// owning thread (SPEC §5.1).
+// owning thread (SPEC §5.1). Since the 2026-11-10
+// unification this one drill-in serves every kind — the
+// retired sibling detail for kind `artifact` composed
+// the same cards over the same blocks, and its surfaces
+// (stage, metadata, lifecycle, files, review log,
+// history) all live here.
 //
 // Composition only (2026-11-05 follow-up split):
 // useEntryDetail + Disposition + useEntryAnnotations.
@@ -22,7 +27,6 @@ import { Card } from "../../components/Card";
 import { Frame } from "../../components/Frame";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { useIsPhone } from "../../lib/responsive";
-import { PreviewStage } from "../artifacts/PreviewStage";
 import { AnnotationList, AnnotationThreadCard, SelectionTintStyle } from "./Annotations";
 import { useDisposition } from "./Disposition";
 import { FilePanel } from "./FilePanel";
@@ -30,11 +34,12 @@ import { HistoryList, ReviewLog } from "./HistoryLog";
 import { EntryBadges, OwnerLine, PreviewSummary } from "./helpers";
 import { LifecycleCard } from "./LifecycleCard";
 import { MetaCard } from "./meta";
+import { PreviewStage } from "./PreviewStage";
 import type { FullEntry } from "./types";
 import { SelectionComposer, useEntryAnnotations } from "./useEntryAnnotations";
 import { useEntryDetail } from "./useEntryDetail";
 
-export function MockupDetail({
+export function EntryDetail({
   slug,
   entryId,
   feedEntry,
@@ -86,10 +91,10 @@ export function MockupDetail({
     return (
       <section data-anchor="mockups/entry-sheet">
         <Button variant="ghost" onClick={onClose}>
-          ← All mockups
+          ← All entries
         </Button>
         <p role="alert" style={{ color: "var(--wb-danger)" }}>
-          Mockups: {detailError ?? `entry ${entryId} could not be loaded.`}
+          Entries: {detailError ?? `entry ${entryId} could not be loaded.`}
         </p>
       </section>
     );
@@ -115,7 +120,7 @@ export function MockupDetail({
         }}
       >
         <Button variant="ghost" onClick={onClose}>
-          ← All mockups
+          ← All entries
         </Button>
         <h2
           style={{
