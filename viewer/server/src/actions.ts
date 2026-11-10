@@ -9,9 +9,10 @@
 // shape, never as a hang or a thrown exception. The bridge
 // is boring on purpose: errors pass through with their
 // shape intact (SPEC §7 conventions: 400/403/404/409/413).
+import { createHash } from "node:crypto";
 import { type ActionsModule, defineAction, z } from "@hatch/space-sdk";
 import { privileged } from "@space/privileged";
-import { callServer } from "./bridge";
+import { callServer, callServerRaw } from "./bridge";
 
 // ---------------------------------------------------------------------------
 // Payload schemas (loose: the server's fields, verbatim + typed where known)
@@ -63,12 +64,26 @@ const proxied = <T extends z.ZodType>(payload: T) =>
     error: z.string().nullable(),
   });
 
+// The hosted byte route's result (2026-11-10): the mirror's
+// public URL, when the entry's mirror was last verified by
+// an open, how many files the mirror holds, and the files
+// the byte route refused (named, never silently dropped).
+const mirrorPayload = z.looseObject({
+  url: z.string(),
+  verified_at: z.string(),
+  files: z.number(),
+  digest: z.string(),
+  skipped: z.array(z.looseObject({ path: z.string(), reason: z.string() })),
+});
+const mirrorResult = proxied(mirrorPayload);
+
 const healthResult = proxied(healthPayload);
 const projectsResult = proxied(projectsPayload);
 const configResult = proxied(z.looseObject({ config: z.record(z.string(), z.unknown()) }));
 const feedResult = proxied(feedEnvelope);
 const rawResult = proxied(z.unknown());
 
+export type MirrorResult = z.infer<typeof mirrorResult>;
 export type HealthResult = z.infer<typeof healthResult>;
 export type ProjectsResult = z.infer<typeof projectsResult>;
 export type ConfigResult = z.infer<typeof configResult>;
@@ -243,6 +258,89 @@ export const Actions = {
           confirm_secret: args.confirmSecret === true,
         },
       );
+    },
+  }),
+
+  openEntryPage: defineAction({
+    description:
+      "Mirror an entry's page tree into hosted blob storage and return its public URL (the hosted byte route).",
+    request: entryArg,
+    response: mirrorResult,
+    // Not a proxy: the handler reads the entry detail over
+    // wbApi, the file bytes over wbRaw, and writes blobs.
+    privileged: [privileged.wbApi, privileged.wbRaw],
+    async handler(ctx, args) {
+      const fail = (status: number, error: string) => ({ status, payload: null, error });
+      const detail = await callServer<{
+        entry: { main_file: string | null; source_kind: string };
+        files: { path: string; is_main: boolean }[];
+      }>(ctx, `/api/projects/${enc(args.slug)}/entries/${enc(args.entryId)}`);
+      if (detail.error != null || detail.payload == null) {
+        return fail(detail.status, detail.error ?? "entry detail unavailable");
+      }
+      const { entry, files } = detail.payload;
+      if (entry.source_kind !== "entry-dir" || !entry.main_file || files.length === 0) {
+        return fail(400, "entry is held by reference — it has no page of its own to open");
+      }
+      // Fetch every file's exact bytes and hash them: the
+      // tree digest keys the mirror, so any file's change
+      // re-mirrors under a fresh prefix and a repeat open of
+      // an unchanged tree puts nothing.
+      const fetched: { path: string; bytes: Buffer; contentType: string }[] = [];
+      const skipped: { path: string; reason: string }[] = [];
+      for (const file of files) {
+        const rawPath =
+          `/raw/${enc(args.slug)}/entries/${enc(args.entryId)}/` +
+          file.path.split("/").map(enc).join("/");
+        const raw = await callServerRaw(ctx, rawPath);
+        if (raw.status === 0) {
+          return fail(0, "companion server did not answer the byte route in time");
+        }
+        if (raw.status !== 200) {
+          const note =
+            Buffer.from(raw.bodyBase64, "base64").toString("utf8").trim() ||
+            `byte route refused the file (${raw.status})`;
+          if (file.is_main) return fail(raw.status, note);
+          skipped.push({ path: file.path, reason: note });
+          continue;
+        }
+        fetched.push({
+          path: file.path,
+          bytes: Buffer.from(raw.bodyBase64, "base64"),
+          contentType: raw.contentType ?? "application/octet-stream",
+        });
+      }
+      const digest = createHash("sha256")
+        .update(
+          fetched
+            .map((f) => `${f.path}\0${createHash("sha256").update(f.bytes).digest("hex")}\n`)
+            .sort()
+            .join(""),
+        )
+        .digest("hex");
+      const prefix = `entries/${args.slug}/${args.entryId}/${digest.slice(0, 16)}`;
+      for (const file of fetched) {
+        const key = `${prefix}/${file.path}`;
+        const existing = await ctx.blobs.head(key).catch(() => null);
+        if (existing == null) {
+          await ctx.blobs.put(key, file.bytes, {
+            contentType: file.contentType,
+            public: true,
+          });
+        }
+      }
+      const url = await ctx.blobs.getUrl(`${prefix}/${entry.main_file}`, { public: true });
+      return {
+        status: 200,
+        payload: {
+          url,
+          verified_at: new Date().toISOString(),
+          files: fetched.length,
+          digest: digest.slice(0, 16),
+          skipped,
+        },
+        error: null,
+      };
     },
   }),
 
