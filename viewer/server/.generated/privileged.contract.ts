@@ -14,4 +14,20 @@ export const privileged = definePrivilegedContracts({
     capabilities: ["network.loopback"],
     timeoutMs: 20000,
   },
+  wbRaw: {
+    request: z.object({
+      host: z.string().min(1),
+      port: z.number().int().min(1).max(65535),
+      method: z.enum(["GET", "POST"]).default("GET"),
+      path: z.string(),
+      body: z.string().nullable().optional(),
+    }),
+    response: z.object({
+      status: z.number(),
+      contentType: z.string().nullable(),
+      bodyBase64: z.string(),
+    }),
+    capabilities: ["network.loopback"],
+    timeoutMs: 20000,
+  },
 });

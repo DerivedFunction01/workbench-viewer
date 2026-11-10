@@ -81,6 +81,29 @@ async function callServerOnce<T>(
   return { timedOut: false, reply: { status: res.status, payload: json as T, error: null } };
 }
 
+// The raw-bytes read (hosted byte route, 2026-11-10): one
+// wbRaw attempt against the companion's /raw route. No
+// retry and no JSON anywhere — the caller (the mirror
+// action) decides what a status means; status 0 is the
+// socket failure shape and is never an empty file.
+export interface RawReply {
+  status: number;
+  contentType: string | null;
+  bodyBase64: string;
+}
+
+export async function callServerRaw(ctx: Ctx, path: string): Promise<RawReply> {
+  const address = companionAddress();
+  const res = await ctx.executePrivileged(privileged.wbRaw, {
+    host: address.host,
+    port: address.port,
+    method: "GET",
+    path,
+    body: null,
+  });
+  return { status: res.status, contentType: res.contentType, bodyBase64: res.bodyBase64 };
+}
+
 export async function callServer<T>(
   ctx: Ctx,
   path: string,

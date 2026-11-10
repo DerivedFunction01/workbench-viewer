@@ -586,14 +586,24 @@ exception (byte-route plan, 2026-11-10):
 
 - `GET /raw/<slug>/entries/<id>/<path...>` — an entry's file
   bytes served verbatim as a document, under the file's own
-  content type. The bridge the artifact consumes carries
-  JSON only, so a rendered artifact page cannot ride it;
-  the viewer's frame loads this route directly and the page
-  runs as a real document (scripts and relative assets
-  intact). Guards are the entry reads' guards: containment
-  to the entry dir, secret-shaped paths refused (403), a
-  16 MiB payload bound (413). Errors are plain text under
-  the same status conventions; successes are never JSON.
+  content type. Guards are the entry reads' guards:
+  containment to the entry dir, secret-shaped paths refused
+  (403), a 16 MiB payload bound (413). Errors are plain text
+  under the same status conventions; successes are never
+  JSON.
+
+The route's consumer is the artifact server, never a
+client: the companion's loopback address resolves on the
+reader's own device, so no client surface may navigate to
+it (the loopback frame shipped 2026-11-10 read
+ERR_CONNECTION_REFUSED on the owner's phone — the route
+was healthy, the address was the device's own). The
+bridge carries a raw sibling contract (wbRaw) beside the
+JSON one: the same socket, the body carried as base64 with
+its content type, so the artifact server can fetch an
+entry's exact bytes and mirror them into the space's
+hosted blob storage (§8.5), whose public URLs are the
+addresses readers actually open.
 
 The 15 legacy unprefixed patterns were served as exact
 aliases for one published checkpoint cycle after the
