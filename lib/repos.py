@@ -18,6 +18,7 @@ or the list.
 import fnmatch
 import os
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -61,7 +62,34 @@ def _label(stderr: str) -> str:
     return "git command failed"
 
 
-def _git(cwd, *args, timeout=10) -> str:
+# Aggregate wall-clock budget for one census derivation
+# pass over the whole workspace (wedge fix, 2026-11-10):
+# the per-call timeout bounds a single child, but the
+# census fan-out derives ~20 repos × a dozen calls each,
+# and under a storage stall every call burns its full
+# timeout — minutes of parked git threads, the same
+# shape the sweep fix bounds. The healthy full pass is
+# ~7 s cold; the budget sits well above it. When it is
+# exhausted, remaining repos degrade to their error
+# shape (the derivation boundary's own honest-absence
+# path) instead of queueing; the feed serves the last
+# good payload meanwhile (stale-while-recompute).
+CENSUS_BUDGET_S = 30.0
+
+
+def _git(cwd, *args, timeout=10, deadline=None) -> str:
+    """One git call. With a deadline (a census budget),
+    an exhausted budget raises before spawning and the
+    per-call timeout shrinks to whatever budget remains,
+    so the pass is bounded in aggregate, not per call.
+    Deadline exhaustion reads as a timeout downstream —
+    RepoError("git timed out") — which degrades the repo's
+    record at its own boundary."""
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RepoError("git timed out")
+        timeout = min(timeout, remaining)
     try:
         out = subprocess.run(
             ["git", "-C", str(cwd), *args],
@@ -76,11 +104,17 @@ def _git(cwd, *args, timeout=10) -> str:
     return out.stdout
 
 
-def _git_ok(cwd, *args) -> bool:
+def _git_ok(cwd, *args, deadline=None) -> bool:
+    timeout = 10
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        timeout = min(timeout, remaining)
     try:
         out = subprocess.run(
             ["git", "-C", str(cwd), *args],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=timeout,
             env=_GIT_ENV)
         return out.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
@@ -94,15 +128,16 @@ def _pruned(name: str, prune) -> bool:
     return any(fnmatch.fnmatchcase(name, pat) for pat in prune)
 
 
-def _worktree_parent(here: Path, root: Path):
+def _worktree_parent(here: Path, root: Path,
+                     deadline=None):
     """The census id of a linked worktree's parent repo:
     resolve --git-common-dir against the worktree, take
     its parent directory, and express it relative to the
     census root. None when resolution fails or the parent
     lives outside the walked root."""
     try:
-        common = _git(here, "rev-parse",
-                      "--git-common-dir").strip()
+        common = _git(here, "rev-parse", "--git-common-dir",
+                      deadline=deadline).strip()
     except RepoError:
         return None
     main_root = (here / common).resolve().parent
@@ -112,13 +147,16 @@ def _worktree_parent(here: Path, root: Path):
         return None
 
 
-def discover_repos(root, max_depth=3, prune=DEFAULT_PRUNE) -> list:
+def discover_repos(root, max_depth=3, prune=DEFAULT_PRUNE,
+                   deadline=None) -> list:
     """Every repo under `root`, as records sorted by id:
     {id, name, root, is_worktree, parent_id}. The id is
     the root-relative path (a repo AT the root takes the
     root's own name). The walk never descends into a found
     repo or a pruned directory, and never looks deeper
-    than `max_depth` segments below the root."""
+    than `max_depth` segments below the root. The one git
+    call per found worktree rides the caller's census
+    deadline when one is given."""
     root = Path(root).resolve()
     records = {}
     base = len(root.parts)
@@ -134,7 +172,8 @@ def discover_repos(root, max_depth=3, prune=DEFAULT_PRUNE) -> list:
                 "name": root.name if rel == "." else rel,
                 "root": str(here),
                 "is_worktree": is_wt,
-                "parent_id": _worktree_parent(here, root)
+                "parent_id": _worktree_parent(
+                    here, root, deadline=deadline)
                 if is_wt else None,
             }
             dirnames[:] = []  # never descend into a repo
@@ -150,12 +189,12 @@ def discover_repos(root, max_depth=3, prune=DEFAULT_PRUNE) -> list:
 # ----------------------------------------------------------------
 # Status pieces
 
-def _porcelain(root) -> tuple:
+def _porcelain(root, deadline=None) -> tuple:
     """(staged, unstaged, untracked) path lists from
     porcelain v1; a path may appear in both staged and
     unstaged. Renames report their target path."""
     out = _git(root, "status", "--porcelain=v1",
-               "--untracked-files=normal")
+               "--untracked-files=normal", deadline=deadline)
     staged, unstaged, untracked = [], [], []
     for line in out.splitlines():
         if len(line) < 4:
@@ -193,16 +232,17 @@ def _numstat(root, cached: bool) -> dict:
     return result
 
 
-def _has_upstream(root) -> bool:
+def _has_upstream(root, deadline=None) -> bool:
     return _git_ok(root, "rev-parse", "--abbrev-ref",
-                   "@{upstream}")
+                   "@{upstream}", deadline=deadline)
 
 
-def _upstream(root):
-    if not _has_upstream(root):
+def _upstream(root, deadline=None):
+    if not _has_upstream(root, deadline=deadline):
         return None
     return _git(root, "rev-parse", "--abbrev-ref",
-                "--symbolic-full-name", "@{upstream}").strip()
+                "--symbolic-full-name", "@{upstream}",
+                deadline=deadline).strip()
 
 
 # ----------------------------------------------------------------
@@ -230,24 +270,26 @@ def _url_host(url: str) -> str:
     return d.split("/", 1)[0] or None
 
 
-def _remotes(root) -> list:
+def _remotes(root, deadline=None) -> list:
     out = []
-    for name in _git(root, "remote").split():
-        url = _git(root, "remote", "get-url", name).strip()
+    for name in _git(root, "remote",
+                     deadline=deadline).split():
+        url = _git(root, "remote", "get-url", name,
+                   deadline=deadline).strip()
         out.append({"name": name,
                     "url_display": _display_url(url),
                     "host": _url_host(url)})
     return out
 
 
-def _remote_view_as_of(root):
+def _remote_view_as_of(root, deadline=None):
     """Newest mtime among the remote-tracking ref files
     and FETCH_HEAD, as an ISO string (None when the repo
     has never fetched). Ahead/behind numbers are only as
     fresh as this timestamp."""
     try:
-        common = _git(root, "rev-parse",
-                      "--git-common-dir").strip()
+        common = _git(root, "rev-parse", "--git-common-dir",
+                      deadline=deadline).strip()
     except RepoError:
         return None
     gitdir = (Path(root) / common).resolve()
@@ -271,15 +313,15 @@ def _remote_view_as_of(root):
         newest, timezone.utc).isoformat()
 
 
-def _unpushed(root, ref: str) -> tuple:
+def _unpushed(root, ref: str, deadline=None) -> tuple:
     """(count, oldest_date) of commits on `ref` that are
     in NO remote-tracking ref."""
-    shas = _git(root, "rev-list", ref, "--not",
-                "--remotes").split()
+    shas = _git(root, "rev-list", ref, "--not", "--remotes",
+                deadline=deadline).split()
     if not shas:
         return 0, None
     oldest = _git(root, "log", "-1", "--format=%aI",
-                  shas[-1]).strip()
+                  shas[-1], deadline=deadline).strip()
     return len(shas), oldest
 
 
@@ -328,10 +370,11 @@ def _branch_details(root) -> tuple:
 
 
 def _publication(root, summary: dict, *,
-                 remote_stale_after_hours, now) -> dict:
+                 remote_stale_after_hours, now,
+                 deadline=None) -> dict:
     """Fill remotes / publication / sync / exposure /
     remote freshness onto a summary dict, in place."""
-    remotes = _remotes(root)
+    remotes = _remotes(root, deadline=deadline)
     summary["remotes"] = remotes
     upstream = summary.get("upstream")
     if not remotes:
@@ -341,7 +384,8 @@ def _publication(root, summary: dict, *,
     else:
         publication = "tracking"
     summary["publication"] = publication
-    as_of = _remote_view_as_of(root) if remotes else None
+    as_of = _remote_view_as_of(root, deadline=deadline) \
+        if remotes else None
     summary["remote_view_as_of"] = as_of
     stale = False
     if as_of:
@@ -351,7 +395,8 @@ def _publication(root, summary: dict, *,
     branch = summary.get("branch")
     unpushed, oldest = (0, None)
     if branch and branch != "HEAD":
-        unpushed, oldest = _unpushed(root, branch)
+        unpushed, oldest = _unpushed(root, branch,
+                                     deadline=deadline)
     if publication == "local_only":
         state = "local_only"
     elif not upstream:
@@ -371,7 +416,7 @@ def _publication(root, summary: dict, *,
     dirty_total = sum(dirty_counts.values())
     if publication == "local_only":
         total = int(_git(root, "rev-list", "--count",
-                         "HEAD").strip())
+                         "HEAD", deadline=deadline).strip())
         level = "local_only" if total > 0 else "backed_up"
         exposed_commits = total
     elif dirty_total > 0:
@@ -391,34 +436,40 @@ def _publication(root, summary: dict, *,
 
 def repo_summary(repo: dict, *,
                  remote_stale_after_hours=REMOTE_STALE_AFTER_HOURS,
-                 now=None) -> dict:
+                 now=None, deadline=None) -> dict:
     """The list-level derivation for one census record:
     branch, head, upstream, ahead/behind, dirty counts,
     and the publication / sync / exposure block. A repo
     whose git state cannot be read degrades in place:
     the identity fields survive, the derived fields go
-    None, and `error` carries the reason."""
+    None, and `error` carries the reason. With a census
+    deadline, budget exhaustion lands on the same error
+    shape as any git failure."""
     now = now or datetime.now(timezone.utc)
     root = Path(repo["root"])
     s = dict(repo)
     try:
         s["branch"] = _git(
-            root, "rev-parse", "--abbrev-ref", "HEAD").strip()
-        s["head"] = _git(root, "rev-parse", "HEAD").strip()
+            root, "rev-parse", "--abbrev-ref", "HEAD",
+            deadline=deadline).strip()
+        s["head"] = _git(root, "rev-parse", "HEAD",
+                         deadline=deadline).strip()
         s["head_full"] = s["head"]
         s["head_short"] = s["head"][:7]
         s["head_subject"] = _git(
-            root, "log", "-1", "--format=%s").strip()
-        upstream = _upstream(root)
+            root, "log", "-1", "--format=%s",
+            deadline=deadline).strip()
+        upstream = _upstream(root, deadline=deadline)
         s["upstream"] = upstream
         if upstream:
             counts = _git(root, "rev-list", "--left-right",
-                          "--count",
-                          "HEAD...@{upstream}").split()
+                          "--count", "HEAD...@{upstream}",
+                          deadline=deadline).split()
             s["ahead"], s["behind"] = int(counts[0]), int(counts[1])
         else:
             s["ahead"] = s["behind"] = None
-        staged, unstaged, untracked = _porcelain(root)
+        staged, unstaged, untracked = _porcelain(
+            root, deadline=deadline)
         s["dirty_counts"] = {"staged": len(staged),
                              "unstaged": len(unstaged),
                              "untracked": len(untracked)}
@@ -427,7 +478,7 @@ def repo_summary(repo: dict, *,
         s = _publication(
             root, s,
             remote_stale_after_hours=remote_stale_after_hours,
-            now=now)
+            now=now, deadline=deadline)
     except RepoError as e:
         s.update(branch=None, head=None, head_full=None,
                  head_short=None,

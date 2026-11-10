@@ -34,13 +34,14 @@ from common import CFG, ApiError  # noqa: E402
 # this layer only resolves ids and shapes payloads.
 # ----------------------------------------------------------------
 
-def _census() -> dict:
+def _census(deadline=None) -> dict:
     """id -> census record, freshly walked (the walk is
     the cheap part; derivations run per feed)."""
     prune = CFG["repos_prune"] or repos_mod.DEFAULT_PRUNE
     records = repos_mod.discover_repos(
         CFG["workspace_root"],
-        max_depth=CFG["repos_max_depth"], prune=prune)
+        max_depth=CFG["repos_max_depth"], prune=prune,
+        deadline=deadline)
     return {r["id"]: r for r in records}
 
 
@@ -66,8 +67,16 @@ def _compute_repos_feed() -> dict:
     missing rows. Serves record history, as the reference
     did. Expensive — a git fan-out per repo — so the
     request path goes through the cache below, never
-    straight here."""
-    census = _census()
+    straight here. The whole pass runs under ONE
+    aggregate deadline (lib/repos CENSUS_BUDGET_S): under
+    a storage stall, per-call timeouts alone let ~20
+    repos × a dozen calls burn minutes in sequence; at
+    the deadline the remaining repos degrade to their
+    error shape and the payload still lands, with the
+    stale payload serving meanwhile (wedge fix,
+    2026-11-10)."""
+    deadline = time.monotonic() + repos_mod.CENSUS_BUDGET_S
+    census = _census(deadline=deadline)
     data = repo_state_mod.load_registry(_repos_registry_path())
     data, changed = repo_state_mod.reconcile(
         data, list(census.values()),
@@ -80,7 +89,12 @@ def _compute_repos_feed() -> dict:
     # registry attach and the history recording stay
     # serial, in the original iteration order.
     records = list(census.values())
-    computed = fan_out(repos_mod.repo_summary, records,
+
+    def _summary(record):
+        return repos_mod.repo_summary(record,
+                                      deadline=deadline)
+
+    computed = fan_out(_summary, records,
                        workers=CFG["feed_pool_workers"])
     summaries = []
     for record, s in zip(records, computed):

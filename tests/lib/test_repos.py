@@ -7,6 +7,7 @@ than a real repo exercises them honestly."""
 import os
 import subprocess
 import tempfile
+import time
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -389,6 +390,59 @@ class TestRepoDir(unittest.TestCase):
             out = repos_mod.repo_dir(self.record, "")
         self.assertTrue(out["truncated"])
         self.assertLessEqual(len(out["entries"]), 2)
+
+
+class TestCensusBudget(unittest.TestCase):
+    """The census aggregate deadline (wedge fix,
+    2026-11-10): under a storage stall every git call
+    burns its per-call timeout, so the pass over the
+    workspace must be bounded in aggregate. An exhausted
+    budget degrades a repo to its error shape; a live
+    budget changes nothing."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        self.base = Path(self._td.name)
+        make_repo(self.base / "solo")
+        self.record = record_for(self.base, "solo")
+
+    def test_exhausted_deadline_degrades_not_hangs(self):
+        t0 = time.monotonic()
+        summary = repos_mod.repo_summary(
+            self.record,
+            deadline=time.monotonic() - 1.0)
+        # No spawn, no wait: the exhausted budget lands
+        # on the standard degraded shape immediately.
+        self.assertLess(time.monotonic() - t0, 1.0)
+        self.assertEqual(summary["error"], "git timed out")
+        self.assertIsNone(summary["branch"])
+        self.assertEqual(summary["id"], "solo")
+
+    def test_live_deadline_is_transparent(self):
+        summary = repos_mod.repo_summary(
+            self.record,
+            deadline=time.monotonic() + 30.0)
+        self.assertIsNone(summary["error"])
+        self.assertEqual(summary["branch"], "main")
+
+    def test_parked_git_bounded_by_deadline(self):
+        def parked_run(*a, **kw):
+            # Every git call parks past its (deadline-
+            # clamped) timeout — the stall shape.
+            time.sleep(kw["timeout"] + 0.05)
+            raise subprocess.TimeoutExpired(
+                cmd=a[0], timeout=kw["timeout"])
+
+        t0 = time.monotonic()
+        with unittest.mock.patch(
+                "lib.repos.subprocess.run",
+                side_effect=parked_run):
+            summary = repos_mod.repo_summary(
+                self.record,
+                deadline=time.monotonic() + 0.6)
+        self.assertLess(time.monotonic() - t0, 2.0)
+        self.assertEqual(summary["error"], "git timed out")
 
 
 if __name__ == "__main__":
