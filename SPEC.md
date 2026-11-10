@@ -354,9 +354,12 @@ Review dispositions are history rows (verb `review`,
 `new` = JSON `{disposition, comment?, state_sha256?}`); an
 approval's state snapshot rides in that row, and approval
 coverage (§1.3) is derived from the latest approval row.
-Review comments live in the same append-only log — the
-triage trail travels with the entry, never as chat
-paste-back.
+Reviews already recorded stay readable in the log. The
+viewer takes no new reviews (retired 2026-11-10): an
+artifact's answers travel as the kit page's Copy payload
+pasted back to the owning thread and transcribed from
+there (§5.1) — the paste-back is the transport, the
+transcription is the record.
 
 ### 4.3 `todos` + `todo_events`
 
@@ -424,9 +427,15 @@ Rules:
 
 For kind `artifact` (§8.5) the same vocabulary reads
 against the item's question set, which is its declared
-`state_schema`; selections are its `state_json`, and the
-answer act is a review disposition binding the answer
-set's `state_sha256` (approval binds to state, §1):
+`state_schema`; selections are its `state_json`. The
+answer act is the owner's use of the item's own page:
+the kit page's Copy payload ({artifact, answers,
+unanswered, feedback}) is pasted back to the owning
+thread, which records the answers into the registry
+through lib/ — the viewer offers no answer or approval
+surface of its own (its review disposition retired
+2026-11-10; §1's approval-binds-to-state survives as the
+recorded-history semantics of reviews already taken):
 
 - `unexplored` — questions open; no answer recorded.
 - `canonical` — answered: the recorded answer set is the
@@ -435,13 +444,11 @@ set's `state_sha256` (approval binds to state, §1):
   applied in the owning project.
 - `deferred`, `hard-gate`, `abandoned` — as above.
 
-Rendering of the question set is the StateControls
-decision-block form (context/component-contracts.md#statecontrols):
-a select question's options render as full-width rows,
-and each option's explanation lives inside its row —
-stated once, with the recommended badge in the same
-row; no explanation or recommendation is repeated
-under the control.
+Rendering of the question set happens in the item's own
+page (the choice kit, §8.5); the StateControls
+decision-block form (context/component-contracts.md#statecontrols)
+remains the form contract for the component specimen
+that still renders it.
 
 Durability rule for this kind: registry data is untracked
 and prunable by design, so an answer set is not done
@@ -787,23 +794,35 @@ entries of kind `artifact` only (§4.1), served by their
 own feed. An item is admitted iff it awaits or records an
 owner disposition (§0); its questions live inside the
 item's own page (the choice kit carries the question,
-feedback, and Copy-JSON contract in-page), and the
-viewer's review disposition binds the recorded state
-hash (§5.1). The detail stage renders the item's main
-file as a live page: an iframe over the companion
-server's byte route (§7), sandboxed to scripts in an
-opaque origin — the page's own scripts run, its relative
-assets resolve, and neither side can reach the other.
-The viewer's former rendered preview (the peek-fed
-scriptless frame and its beside-the-stage question
-controls) retired with the byte route (2026-11-10).
-Per-item messages anchor to the entry exactly as for
-mockups; exhibit annotations are not offered on artifact
-items (the framed page cannot be selected into). View
-modes are list + drill-in only — the storyboard and
-contact-sheet modes stay Mockups-only. Supersede pickers
-scope to the item's own collection; the lib supersede
-operation stays kind-blind.
+feedback, and Copy-JSON contract in-page), and the answer
+record is the kit payload transcribed by the owning
+thread (§5.1) — the viewer offers no review disposition
+over artifacts or mockups (retired 2026-11-10; recorded
+review history still renders in the log cards). The
+detail stage is the item's open control, not an embedded
+frame: the openEntryPage action mirrors the item's file
+tree verbatim into the space's hosted blob storage —
+fetched over the bridge's raw contract from the
+companion's byte route (§7), keyed by the tree's digest
+so a changed tree re-mirrors and an unchanged one serves
+its existing copy — and the stage navigates to the
+mirror's public URL in a new tab. The page runs as a real
+document with its scripts and relative assets intact,
+from an address any device can reach; the entry dir
+stays the source of truth and the mirror a cache. The
+viewer's former rendered preview (the peek-fed scriptless
+frame and its beside-the-stage question controls) retired
+with the byte route (2026-11-10), and the byte route's
+own loopback iframe retired the same day it shipped: a
+loopback address resolves on the reader's device, never
+on the companion's machine. Per-item messages anchor to
+the entry exactly as for mockups; exhibit annotations are
+not offered on artifact items (the page is not embedded,
+so it cannot be selected into). View modes are list +
+drill-in only — the storyboard and contact-sheet modes
+stay Mockups-only. Supersede pickers scope to the item's
+own collection; the lib supersede operation stays
+kind-blind.
 
 ## 9. Mockup authoring + promotion
 

@@ -1,10 +1,8 @@
-// Component labels and the selection/disposition
-// vocabulary of the mockup drill-in (§12): the pieces
-// MockupDetail and its card leaves share.
+// Component labels and the selection vocabulary of the
+// mockup drill-in (§12): the pieces MockupDetail and its
+// card leaves share.
 
 import type { TextSelection } from "../../lib/api-types";
-
-export type Disposition = "approve" | "needs-changes" | "stale";
 
 /** Display labels for the drill-in's components (§12):
  * the stored snapshot an annotation carries. An explicit
@@ -12,10 +10,8 @@ export type Disposition = "approve" | "needs-changes" | "stale";
  * form is the fallback. */
 const COMPONENT_LABELS: Record<string, string> = {
   "mockups/exhibit-stage": "Exhibit stage",
-  "mockups/disposition": "Disposition",
   "mockups/metadata-card": "Metadata",
   "mockups/state-card": "State",
-  "mockups/approval-card": "Approval",
   "mockups/lifecycle-card": "Lifecycle",
   "mockups/files-card": "Files",
   "mockups/review-log-card": "Review log",

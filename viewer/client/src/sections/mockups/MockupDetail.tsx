@@ -1,16 +1,17 @@
 // Drill-in for one entry (Subplan 06 Step 2 + 3): the
-// entry's page as a live frame over the byte route
+// entry's open control over the hosted byte route
 // (2026-11-10) beside the recorded-state summary the
-// annotation machinery selects into, metadata, Approval
-// panel (the frozen snapshot an approval covered), the
-// disposition bar, lifecycle actions, files, review log
-// and history. Every write goes through the server's
-// entry action (lib/ mutation, actor=viewer); a refusal
-// — ruling required, uniformity findings, version
-// conflict — is surfaced with the server's own reason,
-// never as a silent failure or a spinner. The viewer's
-// own state controls retired with the byte route: an
-// entry's questions live in its page now.
+// annotation machinery selects into, metadata, lifecycle
+// actions, files, review log and history. Every write
+// goes through the server's entry action (lib/ mutation,
+// actor=viewer); a refusal — ruling required, uniformity
+// findings, version conflict — is surfaced with the
+// server's own reason, never as a silent failure or a
+// spinner. The viewer's own state controls retired with
+// the byte route, and its review disposition retired with
+// the hosted route: an entry's questions live in its page
+// now, and answers are recorded by transcription in the
+// owning thread (SPEC §5.1).
 //
 // Composition only (2026-11-05 follow-up split):
 // useEntryDetail + Disposition + useEntryAnnotations.
@@ -23,8 +24,7 @@ import { SegmentedControl } from "../../components/SegmentedControl";
 import { useIsPhone } from "../../lib/responsive";
 import { PreviewStage } from "../artifacts/PreviewStage";
 import { AnnotationList, AnnotationThreadCard, SelectionTintStyle } from "./Annotations";
-import { ApprovalCard } from "./ApprovalCard";
-import { ApproveSheet, DispositionCard, useDisposition } from "./Disposition";
+import { useDisposition } from "./Disposition";
 import { FilePanel } from "./FilePanel";
 import { HistoryList, ReviewLog } from "./HistoryLog";
 import { EntryBadges, OwnerLine, PreviewSummary } from "./helpers";
@@ -36,14 +36,12 @@ import { useEntryDetail } from "./useEntryDetail";
 
 export function MockupDetail({
   slug,
-  projectName,
   entryId,
   feedEntry,
   onClose,
   onMutated,
 }: {
   slug: string;
-  projectName: string;
   entryId: string;
   feedEntry: FullEntry | null;
   onClose: () => void;
@@ -64,7 +62,6 @@ export function MockupDetail({
     entry,
     derived,
     approval,
-    latestReview,
     needsChanges,
     supersedeCandidates,
     candidateLabel,
@@ -227,8 +224,6 @@ export function MockupDetail({
               ))}
             </div>
           ) : null}
-
-          <DispositionCard projectName={projectName} disposition={disposition} />
         </div>
 
         <div
@@ -240,8 +235,6 @@ export function MockupDetail({
           }}
         >
           <MetaCard entry={entry} derived={derived} supersededByTitle={supersededByTitle} />
-
-          <ApprovalCard approval={approval} latestReview={latestReview} />
 
           <LifecycleCard
             entry={entry}
@@ -300,8 +293,6 @@ export function MockupDetail({
           ) : null}
         </div>
       </div>
-
-      <ApproveSheet entry={entry} approval={approval} disposition={disposition} />
     </section>
   );
 }

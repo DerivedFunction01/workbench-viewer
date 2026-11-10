@@ -122,7 +122,6 @@ export function ArtifactsSection({
         <h1 style={sectionTitleStyle}>Artifacts</h1>
         <ArtifactDetail
           slug={slug}
-          projectName={projectName}
           entryId={selectedId}
           feedEntry={entryById.get(selectedId) ?? null}
           onClose={closeDetail}

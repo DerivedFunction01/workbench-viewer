@@ -112,7 +112,6 @@ export function MockupsSection({ slug, projectName }: { slug: string; projectNam
         <h1 style={sectionTitleStyle}>Mockups</h1>
         <MockupDetail
           slug={slug}
-          projectName={projectName}
           entryId={selectedId}
           feedEntry={entryById.get(selectedId) ?? null}
           onClose={() => setSelectedId(null)}

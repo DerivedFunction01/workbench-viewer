@@ -1,48 +1,44 @@
 // Drill-in for one artifact item — the sibling of
-// MockupDetail (SPEC §8.5): the same cards, the same
-// entryAction verbs, the same confirm-approve sheet
-// semantics, composed over the shared blocks. Two
-// deliberate differences from the mockup pane: the stage
-// renders the item's main file as a live page over the
-// companion server's byte route (its own scripts run —
-// the item's questions, feedback, and Copy JSON payload
-// live inside the page itself, per the choice kit), and
-// there is no exhibit-annotation machinery (the framed
-// page cannot be selected into; per-item messages mount
-// under the detail in the section, as they do for
-// mockups). The viewer's own question controls retired
-// with the byte route (2026-11-10): the page carries the
-// contract now.
+// MockupDetail (SPEC §8.5): the same cards and the same
+// entryAction verbs, composed over the shared blocks.
+// Two deliberate differences from the mockup pane: the
+// stage is the item's open control over the hosted byte
+// route (the page opens as its own document from the
+// mirror's public URL — its questions, feedback, and
+// Copy JSON payload live inside the page itself, per the
+// choice kit), and there is no exhibit-annotation
+// machinery (per-item messages mount under the detail in
+// the section, as they do for mockups). The viewer's own
+// question controls retired with the byte route
+// (2026-11-10), and its review disposition retired with
+// the hosted route: answers are recorded by transcription
+// in the owning thread (SPEC §5.1); recorded review
+// history still renders in the log cards.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
-import { Sheet } from "../../components/Sheet";
 import { api } from "../../lib/api";
-import { formatDate, formatDateTime, formatShortHash } from "../../lib/format";
+import { formatDate } from "../../lib/format";
 import { ruledStatusLabel } from "../../lib/labels";
 import { useIsPhone } from "../../lib/responsive";
 import { FilePanel } from "../mockups/FilePanel";
 import { HistoryList, ReviewLog } from "../mockups/HistoryLog";
-import { EntryBadges, OwnerLine, stateValues } from "../mockups/helpers";
+import { EntryBadges, OwnerLine } from "../mockups/helpers";
 import { RULED_STATUSES } from "../mockups/types";
-import { labelStyle, MetaCard, MetaRow } from "./meta";
+import { labelStyle, MetaCard } from "./meta";
 import { PreviewStage } from "./PreviewStage";
 import type { ArtifactsFeed, EntryDetail, Envelope, FullEntry } from "./types";
 
-type Disposition = "approve" | "needs-changes" | "stale";
-
 export function ArtifactDetail({
   slug,
-  projectName,
   entryId,
   feedEntry,
   onClose,
   onMutated,
 }: {
   slug: string;
-  projectName: string;
   entryId: string;
   feedEntry: FullEntry | null;
   onClose: () => void;
@@ -50,11 +46,8 @@ export function ArtifactDetail({
 }) {
   const queryClient = useQueryClient();
   const isPhone = useIsPhone();
-  const [comment, setComment] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
-  const [confirmApprove, setConfirmApprove] = useState(false);
-  const [approveComment, setApproveComment] = useState("");
   const [statusChoice, setStatusChoice] = useState("canonical");
   const [ruling, setRuling] = useState("");
   const [gate, setGate] = useState("");
@@ -111,7 +104,6 @@ export function ArtifactDetail({
     onSuccess: (result, body) => {
       if (result.status === 200) {
         setActionError(null);
-        setConfirmApprove(false);
         setActionNotice(`Recorded — ${String(body.verb)} applied to ${entryId}.`);
         if (result.payload) {
           queryClient.setQueryData(["entry", slug, entryId], {
@@ -176,24 +168,6 @@ export function ArtifactDetail({
     ? ((feed?.entries ?? []).find((candidate) => candidate.id === entry.superseded_by)?.title ??
       null)
     : null;
-
-  const doDisposition = (disposition: Disposition) => {
-    if (disposition === "approve") {
-      setApproveComment(comment);
-      setConfirmApprove(true);
-      return;
-    }
-    if (disposition === "needs-changes" && comment.trim() === "") {
-      setActionError("Needs changes requires a comment — say what must change.");
-      return;
-    }
-    runAction({
-      verb: "review",
-      disposition,
-      comment: comment.trim() ? comment.trim() : undefined,
-    });
-    setComment("");
-  };
 
   const selectStyle: React.CSSProperties = {
     display: "block",
@@ -274,52 +248,6 @@ export function ArtifactDetail({
       >
         <div style={isPhone ? { minWidth: 0 } : { position: "sticky", top: "var(--wb-space-16)" }}>
           <PreviewStage slug={slug} entry={entry} />
-
-          <Card title="Disposition" anchor="artifacts/disposition">
-            <p style={{ margin: "0 0 var(--wb-space-8)", color: "var(--wb-content-secondary)" }}>
-              Review this item in {projectName}. Each disposition is recorded in the review log with
-              its comment. Approving binds the recorded state snapshot by hash.
-            </p>
-            <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
-              <span style={labelStyle}>Comment</span>
-              <textarea
-                aria-label="Review comment"
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                rows={3}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  marginTop: "var(--wb-space-4)",
-                  background: "var(--wb-surface-sunken)",
-                  color: "var(--wb-content-primary)",
-                  border: "1px solid var(--wb-border-default)",
-                  borderRadius: "var(--wb-radius-md)",
-                  padding: "var(--wb-space-8)",
-                  fontSize: "var(--wb-font-size-sm)",
-                }}
-              />
-            </label>
-            <div style={{ display: "flex", gap: "var(--wb-space-8)", flexWrap: "wrap" }}>
-              <Button disabled={busy} onClick={() => doDisposition("approve")}>
-                Approve
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={busy}
-                onClick={() => doDisposition("needs-changes")}
-              >
-                Needs changes
-              </Button>
-              <Button variant="secondary" disabled={busy} onClick={() => doDisposition("stale")}>
-                Mark stale
-              </Button>
-            </div>
-            <p style={{ color: "var(--wb-content-muted)", marginBottom: 0 }}>
-              Approve opens a confirm sheet with the state snapshot it will cover. Needs changes
-              requires a comment.
-            </p>
-          </Card>
         </div>
 
         <div
@@ -331,48 +259,6 @@ export function ArtifactDetail({
           }}
         >
           <MetaCard entry={entry} derived={derived} supersededByTitle={supersededByTitle} />
-
-          <Card title="Approval" anchor="artifacts/approval-card">
-            {approval?.approved ? (
-              <>
-                <p style={{ margin: "0 0 var(--wb-space-8)" }}>
-                  {approval.covers_current ? (
-                    <>This approval covers the current answer set.</>
-                  ) : (
-                    <>
-                      This approval does not cover the current answer set — re-approve to cover it.
-                    </>
-                  )}
-                </p>
-                <MetaRow label="Approved at">
-                  {approval.approved_at ? formatDateTime(approval.approved_at) : "—"}
-                </MetaRow>
-                <MetaRow label="Approved by">{latestReview?.actor ?? "—"}</MetaRow>
-                <MetaRow label="Covered state">
-                  <span className="mono">{formatShortHash(approval.approved_state_sha256)}</span>
-                </MetaRow>
-                <MetaRow label="Current state">
-                  <span className="mono">{formatShortHash(approval.current_state_sha256)}</span>
-                </MetaRow>
-                {latestReview?.payload?.state ? (
-                  <ul style={{ listStyle: "none", margin: "var(--wb-space-8) 0 0", padding: 0 }}>
-                    {Object.entries(latestReview.payload.state).map(([key, value]) => (
-                      <li key={key}>
-                        <span className="mono" style={{ color: "var(--wb-content-muted)" }}>
-                          {key}
-                        </span>{" "}
-                        {String(value)}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            ) : (
-              <p style={{ margin: 0, color: "var(--wb-content-secondary)" }}>
-                Not approved — no approval snapshot is recorded for this item.
-              </p>
-            )}
-          </Card>
 
           <Card title="Lifecycle" anchor="artifacts/lifecycle-card">
             <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
@@ -541,77 +427,6 @@ export function ArtifactDetail({
           ) : null}
         </div>
       </div>
-
-      <Sheet
-        open={confirmApprove}
-        title={`Approve ${entry.title}`}
-        onClose={() => setConfirmApprove(false)}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmApprove(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => {
-                runAction({
-                  verb: "review",
-                  disposition: "approve",
-                  comment: approveComment.trim() ? approveComment.trim() : undefined,
-                });
-                setComment("");
-              }}
-            >
-              Approve this state
-            </Button>
-          </>
-        }
-      >
-        <p style={{ color: "var(--wb-content-secondary)" }}>
-          Approval binds to the state snapshot below — a later state change will show as not covered
-          until re-approval.
-        </p>
-        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {Object.entries(stateValues(entry)).map(([key, value]) => (
-            <li key={key}>
-              <span className="mono" style={{ color: "var(--wb-content-muted)" }}>
-                {key}
-              </span>{" "}
-              {String(value)}
-            </li>
-          ))}
-          {Object.keys(stateValues(entry)).length === 0 ? (
-            <li style={{ color: "var(--wb-content-secondary)" }}>No state recorded.</li>
-          ) : null}
-        </ul>
-        <p className="mono" style={{ color: "var(--wb-content-muted)", overflowWrap: "anywhere" }}>
-          state {approval?.current_state_sha256 ?? "—"}
-        </p>
-        <label style={{ display: "block" }}>
-          <span style={labelStyle}>Comment</span>
-          <textarea
-            aria-label="Approval comment"
-            value={approveComment}
-            onChange={(event) => setApproveComment(event.target.value)}
-            rows={3}
-            style={{
-              display: "block",
-              width: "100%",
-              marginTop: "var(--wb-space-4)",
-              background: "var(--wb-surface-sunken)",
-              color: "var(--wb-content-primary)",
-              border: "1px solid var(--wb-border-default)",
-              borderRadius: "var(--wb-radius-md)",
-              padding: "var(--wb-space-8)",
-            }}
-          />
-        </label>
-        {actionError ? (
-          <p role="alert" style={{ color: "var(--wb-danger)" }}>
-            {actionError}
-          </p>
-        ) : null}
-      </Sheet>
     </section>
   );
 }
