@@ -35,6 +35,8 @@ STARTED_AT = datetime.now(timezone.utc)
 
 _sweep_cache = {"at": 0.0, "result": None}
 _sweep_compute_lock = threading.Lock()
+_sweep_state_lock = threading.Lock()
+_sweep_refreshing = False
 _fingerprint_cache = {"map": {}, "at": 0.0, "sweep": None}
 _fingerprint_lock = threading.Lock()
 
@@ -57,15 +59,75 @@ COMMIT = _git_head()
 # Sweep cache
 # ----------------------------------------------------------------
 
+def _compute_sweep():
+    return sweep_mod.sweep(
+        cfgmod.sweep_roots(CFG),
+        manifest_name=CFG["sweep_manifest"],
+        max_depth=CFG["sweep_max_depth"],
+        prune=CFG["sweep_prune"])
+
+
+def _sweep_store(result) -> None:
+    with _sweep_state_lock:
+        _sweep_cache.update(at=time.monotonic(),
+                            result=result)
+
+
+def _sweep_refresh_background() -> None:
+    global _sweep_refreshing
+    try:
+        # A background recompute serializes with a cold
+        # compute on the same lock; its result stores
+        # whenever it lands (no invalidation generation
+        # exists for the sweep cache — a fresher sweep is
+        # a fresher sweep).
+        with _sweep_compute_lock:
+            _sweep_store(_compute_sweep())
+    except Exception as e:
+        # The stale result keeps serving; the next stale
+        # request kicks another refresh.
+        print(f"workbench-viewer: sweep refresh failed: "
+              f"{e}", file=sys.stderr)
+    finally:
+        with _sweep_state_lock:
+            _sweep_refreshing = False
+
+
+def _sweep_kick_refresh() -> None:
+    global _sweep_refreshing
+    with _sweep_state_lock:
+        if _sweep_refreshing:
+            return
+        _sweep_refreshing = True
+    threading.Thread(target=_sweep_refresh_background,
+                     daemon=True).start()
+
+
 def get_sweep(force: bool = False):
-    """The swept projects, TTL-cached. The compute is
-    single-flighted (the feed caches' double-checked
-    idiom): concurrent cold requests share one walk
-    instead of each re-walking the tree."""
+    """The swept projects, TTL-cached, stale-while-
+    recompute (the repos feed's shape): within the TTL
+    the cached result serves as-is; past the TTL the
+    stale result serves while ONE background thread
+    recomputes; only a never-filled cache (or force)
+    computes on the caller's thread, single-flighted so
+    a burst of cold requests shares one walk.
+
+    The pre-2026-11-10 shape computed inline past the
+    TTL behind the lock, so under a storage stall every
+    request queued behind one slow recompute while the
+    last good result sat in memory (the wedge capture:
+    handler threads parked at this lock for minutes).
+    Stale data here costs one cadence of discovery lag;
+    queueing cost the whole server."""
     ttl = CFG["sweep_ttl_s"]
-    if not force and _sweep_cache["result"] is not None \
-            and time.monotonic() - _sweep_cache["at"] < ttl:
-        return _sweep_cache["result"]
+    if not force:
+        cached = _sweep_cache["result"]
+        if cached is not None:
+            if time.monotonic() - _sweep_cache["at"] \
+                    < ttl:
+                return cached
+            _sweep_kick_refresh()
+            return cached
     with _sweep_compute_lock:
         # A racing request may have filled the cache while
         # this one waited for the lock.
@@ -73,13 +135,8 @@ def get_sweep(force: bool = False):
                 and time.monotonic() - _sweep_cache["at"] \
                 < ttl:
             return _sweep_cache["result"]
-        result = sweep_mod.sweep(
-            cfgmod.sweep_roots(CFG),
-            manifest_name=CFG["sweep_manifest"],
-            max_depth=CFG["sweep_max_depth"],
-            prune=CFG["sweep_prune"])
-        _sweep_cache.update(at=time.monotonic(),
-                            result=result)
+        result = _compute_sweep()
+        _sweep_store(result)
         return result
 
 
