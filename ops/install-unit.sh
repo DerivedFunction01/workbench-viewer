@@ -11,7 +11,8 @@
 #   --check   CHECK_MODE=exit: exit 0 when the installed
 #             unit matches the render, 1 with a message
 #             when missing or stale. CHECK_MODE=print:
-#             print "current" or "stale", always exit 0.
+#             print the three-state vocabulary "missing",
+#             "stale" or "current", always exit 0.
 set -euo pipefail
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -79,16 +80,18 @@ done
 sed "${SED_ARGS[@]}" "$SCRIPT_DIR/$TEMPLATE" > "$tmp"
 
 if [[ "${1:-}" == "--check" ]]; then
-  if [[ -f "$UNIT_PATH" ]] && cmp -s "$tmp" "$UNIT_PATH"; then
-    if [[ "${CHECK_MODE:-exit}" == "print" ]]; then
+  if [[ "${CHECK_MODE:-exit}" == "print" ]]; then
+    if [[ ! -f "$UNIT_PATH" ]]; then
+      echo "missing"
+    elif cmp -s "$tmp" "$UNIT_PATH"; then
       echo "current"
     else
-      echo "install-unit: $UNIT_FILE_NAME matches the current render"
+      echo "stale"
     fi
     exit 0
   fi
-  if [[ "${CHECK_MODE:-exit}" == "print" ]]; then
-    echo "stale"
+  if [[ -f "$UNIT_PATH" ]] && cmp -s "$tmp" "$UNIT_PATH"; then
+    echo "install-unit: $UNIT_FILE_NAME matches the current render"
     exit 0
   fi
   echo "install-unit: $UNIT_FILE_NAME missing or differs from the current render"
