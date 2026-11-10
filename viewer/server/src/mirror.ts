@@ -10,13 +10,33 @@
 // on disk stays the source of truth. Split from
 // actions.ts by intent (the actions file carries the
 // proxy set; this module carries the mirror).
+//
+// Byte handling is WebCrypto / Uint8Array throughout:
+// action code runs on the platform runtime, which rejects
+// Node host modules (node:crypto, Buffer) — the first
+// publish proved that and adapted this file space-side;
+// the adaptation is canonical here now, digest-proven
+// identical to the Node form (the tree digest over the
+// dogfood entry matches both ways).
 
-import { createHash } from "node:crypto";
 import { defineAction, z } from "@hatch/space-sdk";
 import { privileged } from "@space/privileged";
 import { callServer, callServerRaw } from "./bridge";
 
 const enc = encodeURIComponent;
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function sha256Hex(data: Uint8Array | string): Promise<string> {
+  const input = typeof data === "string" ? new TextEncoder().encode(data) : data;
+  const digest = await crypto.subtle.digest("SHA-256", input);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 // The mirror's result: the public URL, when this open last
 // verified the mirror, how many files it holds, the tree
@@ -61,7 +81,7 @@ export const openEntryPage = defineAction({
     // tree digest keys the mirror, so any file's change
     // re-mirrors under a fresh prefix and a repeat open of
     // an unchanged tree puts nothing.
-    const fetched: { path: string; bytes: Buffer; contentType: string }[] = [];
+    const fetched: { path: string; bytes: Uint8Array; contentType: string }[] = [];
     const skipped: { path: string; reason: string }[] = [];
     for (const file of files) {
       const rawPath =
@@ -71,28 +91,23 @@ export const openEntryPage = defineAction({
       if (raw.status === 0) {
         return fail(0, "companion server did not answer the byte route in time");
       }
+      const bytes = base64ToBytes(raw.bodyBase64);
       if (raw.status !== 200) {
         const note =
-          Buffer.from(raw.bodyBase64, "base64").toString("utf8").trim() ||
-          `byte route refused the file (${raw.status})`;
+          new TextDecoder().decode(bytes).trim() || `byte route refused the file (${raw.status})`;
         if (file.is_main) return fail(raw.status, note);
         skipped.push({ path: file.path, reason: note });
         continue;
       }
       fetched.push({
         path: file.path,
-        bytes: Buffer.from(raw.bodyBase64, "base64"),
+        bytes,
         contentType: raw.contentType ?? "application/octet-stream",
       });
     }
-    const digest = createHash("sha256")
-      .update(
-        fetched
-          .map((f) => `${f.path}\0${createHash("sha256").update(f.bytes).digest("hex")}\n`)
-          .sort()
-          .join(""),
-      )
-      .digest("hex");
+    const parts: string[] = [];
+    for (const file of fetched) parts.push(`${file.path}\0${await sha256Hex(file.bytes)}\n`);
+    const digest = await sha256Hex(parts.sort().join(""));
     const prefix = `entries/${args.slug}/${args.entryId}/${digest.slice(0, 16)}`;
     for (const file of fetched) {
       const key = `${prefix}/${file.path}`;
