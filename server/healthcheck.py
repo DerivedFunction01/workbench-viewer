@@ -96,6 +96,8 @@ def main() -> int:
             result["version"] = health.get("version")
             result["projects_count"] = health.get(
                 "projects_count")
+            result["stackdump_last_at"] = health.get(
+                "stackdump_last_at")
             result["config_hash"] = health.get("config_hash")
             result["last_error"] = None
         else:

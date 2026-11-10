@@ -116,6 +116,11 @@ workbench-viewer/
   contract: survival-contract: v1 (canonical text in
   the starter SPEC; the watchdog driver runs on the
   contract's fast tier, a 2m scheduler entry).
+  Wedge diagnosis conforms to the fleet stack-dump
+  contract: stackdump-contract: v1 (canonical text in
+  the starter SPEC; the in-process watchdog is
+  server/stackdump.py and its dumps land in
+  state/stackdumps.log, the location this stamp names).
   viewer/                    the artifact source (canonical
                              here; synced by viewer.sh)
     SYNC.md                  the viewer.sh sync contract

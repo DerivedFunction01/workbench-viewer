@@ -57,6 +57,18 @@ DEFAULTS = {
     "health_file": "health.json",
     "link_file": "link.json",
     "repair_file": "repair.json",
+    # Wedge stack dumps (stackdump-contract: v1): the
+    # in-process watchdog (server/stackdump.py) checks the
+    # health computation every cadence; a check unanswered
+    # past the threshold dumps every thread's stack to the
+    # dump file; repeats under a persisting lag are spaced
+    # by the repeat interval and the file is capped in
+    # aggregate. Defaults are the contract's.
+    "stackdump_file": "stackdumps.log",
+    "stackdump_cadence_s": 5,
+    "stackdump_threshold_s": 15,
+    "stackdump_repeat_s": 60,
+    "stackdump_max_bytes": 16 * 1024 * 1024,
     # Auto-recovery (vm-restart bundle): the systemd unit
     # ops/install-unit.sh installs and ops/watchdog.sh keeps
     # the server under. The link probe verifies the running
@@ -186,6 +198,13 @@ def state_file(cfg: dict, key: str) -> Path:
 
 def sweep_roots(cfg: dict) -> list:
     return [Path(r) for r in cfg["sweep_roots"]]
+
+
+def stackdump_path(cfg: dict) -> Path:
+    """The stack-dump file (stackdump-contract: v1):
+    state_dir/stackdump_file unless the key is absolute."""
+    p = Path(cfg["stackdump_file"])
+    return p if p.is_absolute() else state_dir(cfg) / p
 
 
 def messages_db_path(cfg: dict) -> Path:

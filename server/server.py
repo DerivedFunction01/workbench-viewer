@@ -41,6 +41,7 @@ sys.path.insert(0, str(HERE))        # for config (flat, donor-style)
 
 import config as cfgmod  # noqa: E402
 import feedcache  # noqa: E402
+import stackdump  # noqa: E402
 from lib import export as export_mod  # noqa: E402
 from lib import files as files_mod  # noqa: E402
 from lib import messages as msg_mod  # noqa: E402
@@ -162,6 +163,7 @@ class Handler(BaseHTTPRequestHandler):
                 "uptime_s": round(uptime, 1),
                 "host": CFG["host"], "port": CFG["port"],
                 "projects_count": len(result.projects),
+                "stackdump_last_at": stackdump.last_dump_at(),
                 "config_hash": cfgmod.config_hash(CFG),
                 "sweep": {"projects": len(result.projects),
                           "errors": len(result.errors)},
@@ -526,6 +528,13 @@ def _warm_feeds() -> None:
 def main() -> int:
     acquire_lock()
     get_sweep()  # warm the cache; sweep errors never block
+    # stackdump-contract: v1 — the in-process watchdog
+    # supervises the health computation (the same get_sweep
+    # the health handler serves) and dumps thread stacks on
+    # a lag, before any external restart can destroy them.
+    stackdump.start_stackdump(
+        lambda: get_sweep(), cfgmod.stackdump_path(CFG),
+        server_name="workbench-viewer", cfg=CFG)
     start_message_maintenance()  # repo-home §5.3 cleanup
     # Warm the cached feeds off the request path: their
     # first derivations cost seconds and must not land on
