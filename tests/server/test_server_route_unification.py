@@ -240,10 +240,11 @@ class RouteServerCase(unittest.TestCase):
         return type(self).req_raw(method, path, body)
 
 
-class TestFormerLegacyPaths404(RouteServerCase):
-    """Every former legacy pattern is dead: the router's
-    own 404, never a handler response — while its canonical
-    counterpart still reaches its handler."""
+class RouteProbeHelpers:
+    """The router-probe assertions shared by the route
+    test classes below: a retired path reads as the
+    router's own 404, a canonical path reaches its
+    handler."""
 
     def assert_router_404(self, method, path, body=None):
         status, payload = self.req(method, path, body)
@@ -266,6 +267,13 @@ class TestFormerLegacyPaths404(RouteServerCase):
             and payload.get("error", "").startswith("no route"),
             f"{method} {path} did not reach its handler: "
             f"{status} {payload!r}")
+
+
+class TestFormerLegacyPaths404(RouteProbeHelpers,
+                               RouteServerCase):
+    """Every former legacy pattern is dead: the router's
+    own 404, never a handler response — while its canonical
+    counterpart still reaches its handler."""
 
     def test_collection_gets(self):
         for canonical, legacy in [
@@ -354,7 +362,8 @@ class TestFormerLegacyPaths404(RouteServerCase):
                 self.assert_router_404(method, path)
 
 
-class TestServedWithoutAliasTripwire(RouteServerCase):
+class TestServedWithoutAliasTripwire(RouteProbeHelpers,
+                                     RouteServerCase):
     """Legacy-shaped candidates derived by stripping /api
     from every canonical pattern: with the aliases removed
     there are no exclusions — every candidate must be the

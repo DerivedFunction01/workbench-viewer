@@ -307,6 +307,12 @@ class TestEntriesFeedKinds(ServerCase):
         main.write_text("<h1>Open questions</h1>\n",
                         encoding="utf-8")
         reg.verify_entry(db, "sheet-q", accept_drift=True)
+        # An unexplored entry is what puts an artifact-kind
+        # row in the triage lane (lib/staleness): verification
+        # alone leaves the entry verified, hence untriaged —
+        # the lane membership this class asserts needs the
+        # status set explicitly.
+        reg.set_status(db, "sheet-q", "unexplored")
 
     def test_entries_feed_carries_every_kind(self):
         status, feed = self.req(
