@@ -519,29 +519,46 @@ def acquire_lock():
 
 
 def _warm_feeds() -> None:
-    """Fill the TTL-cached feeds (repos census, home)
-    once at startup, off the request path."""
+    """Fill the TTL-cached derivations (the sweep, the
+    repos census, home) once at startup, off the request
+    path. The sweep warms here too (wedge fix, 2026-11-10):
+    it used to warm synchronously in main() before the
+    bind, so a startup under a storage stall parked in
+    D state inside the warm and never reached the port —
+    restarts coin-flipped during the morning stall.
+    Binding first costs a cold first request only when a
+    request beats this thread, and that compute is the
+    bounded sweep."""
+    get_sweep()
     repos_feed()
     home_feed()
 
 
 def main() -> int:
     acquire_lock()
-    get_sweep()  # warm the cache; sweep errors never block
     # stackdump-contract: v1 — the in-process watchdog
     # supervises the health computation (the same get_sweep
     # the health handler serves) and dumps thread stacks on
     # a lag, before any external restart can destroy them.
+    # The check rides the sweep cache's read path: fresh or
+    # stale it returns without queueing behind a recompute
+    # (stale-while-recompute), so a lag the watchdog reports
+    # is a genuinely unanswering server, never the cache's
+    # own refresh. Started before the bind so even a stall
+    # during warm-up is captured.
     stackdump.start_stackdump(
         lambda: get_sweep(), cfgmod.stackdump_path(CFG),
         server_name="workbench-viewer", cfg=CFG)
     start_message_maintenance()  # repo-home §5.3 cleanup
-    # Warm the cached feeds off the request path: their
-    # first derivations cost seconds and must not land on
-    # the first open after a restart.
-    threading.Thread(target=_warm_feeds, daemon=True).start()
+    # Bind BEFORE any warm-up: the cached derivations
+    # (sweep included) fill on the daemon thread, off the
+    # request path — their first computations cost seconds
+    # and must not land on the first open after a restart,
+    # and a storage stall during warm-up must not park the
+    # process before it ever answers (wedge fix, 2026-11-10).
     server = ThreadingHTTPServer((CFG["host"], CFG["port"]),
                                  Handler)
+    threading.Thread(target=_warm_feeds, daemon=True).start()
     print(f"workbench-viewer server v{VERSION} on "
           f"{CFG['host']}:{CFG['port']} "
           f"(workspace {CFG['workspace_root']})",
