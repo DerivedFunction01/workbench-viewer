@@ -775,22 +775,25 @@ never waits out a bound.
 Per project: the sibling collection beside Mockups —
 entries of kind `artifact` only (§4.1), served by their
 own feed. An item is admitted iff it awaits or records an
-owner disposition (§0); its questions are its declared
-state schema, rendered as controls beside its preview,
-and answering is a review disposition binding the answer
-set's state hash (§5.1). The detail stage renders the
-item's main file as a live preview: a sandboxed,
-scriptless iframe fed by the guarded file-peek path (§7)
-— hosted artifacts are never embedded and entry content
-is never executed; content the peek refuses (truncated,
-binary, withheld) falls back to the recorded-state
-summary with the reason shown. Per-item messages anchor
-to the entry exactly as for mockups; exhibit annotations
-are not offered on artifact items (the sandboxed frame
-cannot be selected into). View modes are list + drill-in
-only — the storyboard and contact-sheet modes stay
-Mockups-only. Supersede pickers scope to the item's own
-collection; the lib supersede operation stays kind-blind.
+owner disposition (§0); its questions live inside the
+item's own page (the choice kit carries the question,
+feedback, and Copy-JSON contract in-page), and the
+viewer's review disposition binds the recorded state
+hash (§5.1). The detail stage renders the item's main
+file as a live page: an iframe over the companion
+server's byte route (§7), sandboxed to scripts in an
+opaque origin — the page's own scripts run, its relative
+assets resolve, and neither side can reach the other.
+The viewer's former rendered preview (the peek-fed
+scriptless frame and its beside-the-stage question
+controls) retired with the byte route (2026-11-10).
+Per-item messages anchor to the entry exactly as for
+mockups; exhibit annotations are not offered on artifact
+items (the framed page cannot be selected into). View
+modes are list + drill-in only — the storyboard and
+contact-sheet modes stay Mockups-only. Supersede pickers
+scope to the item's own collection; the lib supersede
+operation stays kind-blind.
 
 ## 9. Mockup authoring + promotion
 

@@ -196,13 +196,12 @@ export const Actions = {
 
   getEntryFile: defineAction({
     description:
-      "Read one file of a mockup or artifact entry, optionally revealing a withheld secret-shaped file, or reading the whole file as a rendered preview (preview: the peek caps do not apply).",
+      "Read one file of a mockup or artifact entry, optionally revealing a withheld secret-shaped file.",
     request: z.object({
       slug: z.string().min(1),
       entryId: z.string().min(1),
       path: z.string().optional(),
       reveal: z.boolean().optional(),
-      preview: z.boolean().optional(),
     }),
     response: rawResult,
     privileged: [privileged.wbApi],
@@ -210,7 +209,6 @@ export const Actions = {
       const params = new URLSearchParams();
       if (args.path) params.set("path", args.path);
       if (args.reveal) params.set("reveal", "1");
-      if (args.preview) params.set("preview", "1");
       const query = params.toString();
       const suffix = query ? `?${query}` : "";
       return callServer<unknown>(

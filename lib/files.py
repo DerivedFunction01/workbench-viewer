@@ -40,10 +40,6 @@ BINARY_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico",
                ".otf", ".mp3", ".mp4", ".mov", ".wasm"}
 PEEK_MAX_BYTES = 200 * 1024
 PEEK_MAX_LINES = 2000
-# The rendered-preview payload bound (entry_preview):
-# an order above the peek caps, a bound on the payload,
-# not a content cut.
-PREVIEW_MAX_BYTES = 4 * 1024 * 1024
 # The raw byte-route bound (entry_bytes): a guard on the
 # served size, not a transport limit — the route streams
 # from disk, so the bound only refuses absurd payloads.
@@ -106,48 +102,6 @@ def list_entry_files(entry: dict) -> list:
                 == entry.get("main_file"),
             })
     return out
-
-
-def entry_preview(entry: dict, rel_raw: str) -> dict:
-    """The rendered-preview read of an entry's own file:
-    the whole file, decapped. A rendered study is not a
-    guarded source file — the peek caps exist for the
-    diff/source surface, and cutting a study at them
-    served a refusal where a preview was asked for. The
-    preview keeps the peek's guards (entry containment,
-    secret-shaped paths withheld, binary refusal) and
-    drops only the caps: content rides whole, up to
-    PREVIEW_MAX_BYTES as a payload bound, above which
-    the read refuses plainly (`too_large`) rather than
-    truncating silently."""
-    target, rel = resolve_in_entry(entry, rel_raw)
-    if is_secret(rel):
-        size = target.stat().st_size if target.is_file() else 0
-        return {"path": rel.as_posix(), "size_bytes": size,
-                "is_binary": False, "withheld": "secret",
-                "content": None, "sha256": None}
-    if not target.is_file():
-        raise FileError_(404, "no such file in the entry")
-    raw = target.read_bytes()
-    sha = hashlib.sha256(raw).hexdigest()
-    binary = _is_binary(target, raw[:8192])
-    if binary:
-        return {"path": rel.as_posix(),
-                "size_bytes": len(raw), "is_binary": True,
-                "withheld": None, "content": None,
-                "sha256": sha}
-    if len(raw) > PREVIEW_MAX_BYTES:
-        return {"path": rel.as_posix(),
-                "size_bytes": len(raw), "is_binary": False,
-                "withheld": None, "content": None,
-                "sha256": sha, "too_large": True}
-    return {"path": rel.as_posix(),
-            "size_bytes": len(raw), "is_binary": False,
-            "withheld": None,
-            "content": raw.decode("utf-8",
-                                  errors="replace"),
-            "sha256": sha,
-            "captured_at": now_iso()}
 
 
 def entry_bytes(entry: dict, rel_raw: str):

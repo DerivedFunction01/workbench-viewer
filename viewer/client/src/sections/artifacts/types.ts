@@ -9,10 +9,4 @@ import type { MockupsFeedFull } from "../mockups/types";
 
 export type ArtifactsFeed = MockupsFeedFull;
 
-export type {
-  EntryDetail,
-  Envelope,
-  FullEntry,
-  PeekResult,
-  PreviewResult,
-} from "../mockups/types";
+export type { EntryDetail, Envelope, FullEntry, PeekResult } from "../mockups/types";
