@@ -58,8 +58,8 @@ class PlanRefDisplay(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_absolute_plan_ref_serves_basename_only(self):
-        feed = feeds.artifacts_feed(self.project,
-                                    archived=False)
+        feed = feeds.entries_feed(self.project,
+                                  archived=False)
         self.assertTrue(feed["available"])
         by_id = {e["id"]: e for e in feed["entries"]}
         served = by_id["abs-ref"]["plan_ref"]

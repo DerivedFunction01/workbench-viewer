@@ -7,7 +7,7 @@ one project degrades ONLY that project's payload; a wrong-sha
 save is a 409 and leaves the file byte-identical; editing
 disabled is a 403; a canonical transition without a ruling
 via the action endpoint is refused; reconciliation problems
-surface in the mockups payload.
+surface in the entries payload.
 """
 
 import json
@@ -182,15 +182,15 @@ class TestFeeds(ServerCase):
         self.assertEqual(slugs, {"alpha", "beta"})
         alpha = [p for p in summary["projects"]
                  if p["slug"] == "alpha"][0]
-        self.assertTrue(alpha["sections"]["mockups"])
+        self.assertTrue(alpha["sections"]["entries"])
         self.assertTrue(alpha["sections"]["plans"])
         status, _ = self.req("POST", "/api/projects/rescan")
         self.assertEqual(status, 200)
 
-    def test_mockups_feed_two_projects(self):
+    def test_entries_feed_two_projects(self):
         for slug in ("alpha", "beta"):
             status, feed = self.req(
-                "GET", f"/api/projects/{slug}/mockups")
+                "GET", f"/api/projects/{slug}/entries")
             self.assertEqual(status, 200)
             self.assertTrue(feed["available"])
             self.assertFalse(feed["degraded"])
@@ -213,7 +213,7 @@ class TestFeeds(ServerCase):
         status, _ = self.req(
             "GET", "/api/projects/alpha/entries/nope")
         self.assertEqual(status, 404)
-        status, _ = self.req("GET", "/api/projects/nope/mockups")
+        status, _ = self.req("GET", "/api/projects/nope/entries")
         self.assertEqual(status, 404)
 
     def test_plans_feed_and_doc(self):
@@ -287,11 +287,12 @@ class TestFeeds(ServerCase):
         self.assertEqual(queue_projects, {"alpha", "beta"})
 
 
-class TestArtifactsFeed(ServerCase):
-    """The Artifacts collection (kind artifact): each
-    collection's feed serves only its own kinds — entries
-    and triage — and the board's review queue unions both,
-    each item carrying its kind, exactly once."""
+class TestEntriesFeedKinds(ServerCase):
+    """The unified entries feed (2026-11-10): one feed
+    serves every kind — entries and triage carry each
+    entry with its kind as a label, no kind filtered out —
+    and the board's review queue carries each item exactly
+    once."""
 
     @classmethod
     def setUpClass(cls):
@@ -307,31 +308,21 @@ class TestArtifactsFeed(ServerCase):
                         encoding="utf-8")
         reg.verify_entry(db, "sheet-q", accept_drift=True)
 
-    def test_artifacts_feed_carries_only_the_artifact(self):
+    def test_entries_feed_carries_every_kind(self):
         status, feed = self.req(
-            "GET", "/api/projects/alpha/artifacts")
+            "GET", "/api/projects/alpha/entries")
         self.assertEqual(status, 200)
         self.assertTrue(feed["available"])
-        self.assertEqual([e["id"] for e in feed["entries"]],
-                         ["sheet-q"])
-        self.assertEqual(feed["entries"][0]["kind"],
-                         "artifact")
-        self.assertEqual([t["id"] for t in feed["triage"]],
-                         ["sheet-q"])
-        self.assertEqual(feed["triage"][0]["kind"],
-                         "artifact")
+        by_id = {e["id"]: e for e in feed["entries"]}
+        self.assertEqual(sorted(by_id), ["sheet-q", "tile-a"])
+        self.assertEqual(by_id["sheet-q"]["kind"], "artifact")
+        self.assertEqual(by_id["tile-a"]["kind"], "mockup")
+        triage = {t["id"]: t for t in feed["triage"]}
+        self.assertEqual(sorted(triage), ["sheet-q", "tile-a"])
+        self.assertEqual(triage["sheet-q"]["kind"], "artifact")
+        self.assertEqual(triage["tile-a"]["kind"], "mockup")
 
-    def test_mockups_feed_excludes_the_artifact(self):
-        status, feed = self.req(
-            "GET", "/api/projects/alpha/mockups")
-        self.assertEqual(status, 200)
-        self.assertEqual([e["id"] for e in feed["entries"]],
-                         ["tile-a"])
-        self.assertEqual([t["id"] for t in feed["triage"]],
-                         ["tile-a"])
-        self.assertEqual(feed["triage"][0]["kind"], "mockup")
-
-    def test_board_review_queue_unions_both_collections(self):
+    def test_board_review_queue_carries_each_entry_once(self):
         status, board = self.req(
             "GET", "/api/projects/alpha/board")
         self.assertEqual(status, 200)
@@ -356,8 +347,9 @@ class TestArtifactsFeed(ServerCase):
         self.assertNotIn("sheet-q", [i["id"] for i in
                                      board["review_queue"]])
         status, feed = self.req(
-            "GET", "/api/projects/alpha/artifacts")
-        self.assertEqual(feed["triage"], [])
+            "GET", "/api/projects/alpha/entries")
+        self.assertNotIn("sheet-q",
+                         [t["id"] for t in feed["triage"]])
 
 
 def lock_exclusively(db_path: Path) -> sqlite3.Connection:
@@ -390,13 +382,13 @@ class TestContainment(ServerCase):
             conn.execute(
                 "UPDATE todos SET title = title WHERE 0")
             status, feed = self.req(
-                "GET", "/api/projects/beta/mockups")
+                "GET", "/api/projects/beta/entries")
             self.assertEqual(status, 200)
             self.assertTrue(feed["degraded"])
             self.assertTrue(feed["reason"])
             # the other project is untouched by beta's lock
             status, feed = self.req(
-                "GET", "/api/projects/alpha/mockups")
+                "GET", "/api/projects/alpha/entries")
             self.assertEqual(status, 200)
             self.assertFalse(feed["degraded"])
             self.assertEqual(len(feed["entries"]), 1)
@@ -410,7 +402,7 @@ class TestContainment(ServerCase):
         orphan.mkdir(parents=True)
         try:
             status, feed = self.req(
-                "GET", "/api/projects/alpha/mockups")
+                "GET", "/api/projects/alpha/entries")
             self.assertEqual(status, 200)
             self.assertEqual(feed["reconcile"]["status"],
                              "problems")

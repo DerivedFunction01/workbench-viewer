@@ -113,8 +113,7 @@ class Project:
         created by `wb init` / first `wb add`)."""
         m = self.manifest
         return {
-            "mockups": m.registry is not None and m.registry.is_file(),
-            "artifacts": m.registry is not None and m.registry.is_file(),
+            "entries": m.registry is not None and m.registry.is_file(),
             "todos": m.registry is not None and m.registry.is_file(),
             "plans": m.plans is not None and m.plans.is_dir(),
             "registry_declared": m.registry is not None,

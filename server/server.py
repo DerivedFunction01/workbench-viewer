@@ -57,10 +57,10 @@ from common import (CFG, COMMIT, MAX_BODY,  # noqa: E402
                     STARTED_AT, VERSION, ApiError,
                     find_project, get_sweep)
 from feeds import (_home_invalidate_cache,  # noqa: E402
-                   artifacts_feed, board_project_feed,
-                   classification_feed, diff_feed,
-                   entry_detail, home_feed, mockups_feed,
-                   plans_feed, todos_feed, worktrees_feed)
+                   board_project_feed, classification_feed,
+                   diff_feed, entries_feed, entry_detail,
+                   home_feed, plans_feed, todos_feed,
+                   worktrees_feed)
 from messages_api import (effective_settings,  # noqa: E402
                           message_archive, message_cleanup,
                           message_create, message_done,
@@ -317,16 +317,11 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) >= 3 and parts[0] == "api" \
                 and parts[1] == "projects":
             project = self._project_or_404(parts[2])
-            if len(parts) == 4 and parts[3] == "mockups":
+            if len(parts) == 4 and parts[3] == "entries":
                 archived = query.get("archived") == "1"
                 return self._send(
-                    200, mockups_feed(project,
+                    200, entries_feed(project,
                                       archived=archived))
-            if len(parts) == 4 and parts[3] == "artifacts":
-                archived = query.get("archived") == "1"
-                return self._send(
-                    200, artifacts_feed(project,
-                                        archived=archived))
             if len(parts) == 4 and parts[3] == "plans":
                 return self._send(200, plans_feed(project))
             if len(parts) == 4 and parts[3] == "plan":

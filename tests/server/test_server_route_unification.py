@@ -46,8 +46,8 @@ FORMER_LEGACY_PATTERNS = [
     ("GET", ("projects",), ("api", "projects")),
     ("GET", ("board",), ("api", "board")),
     ("GET", ("todos",), ("api", "todos")),
-    ("GET", ("projects", "<slug>", "mockups"),
-     ("api", "projects", "<slug>", "mockups")),
+    ("GET", ("projects", "<slug>", "entries"),
+     ("api", "projects", "<slug>", "entries")),
     ("GET", ("projects", "<slug>", "plans"),
      ("api", "projects", "<slug>", "plans")),
     ("GET", ("projects", "<slug>", "plan"),
@@ -279,8 +279,8 @@ class TestFormerLegacyPaths404(RouteServerCase):
     def test_parameterized_gets(self):
         plan_q = "?path=2026-10-25-fixture-plan.md"
         for canonical, legacy in [
-                ("/api/projects/alpha/mockups",
-                 "/projects/alpha/mockups"),
+                ("/api/projects/alpha/entries",
+                 "/projects/alpha/entries"),
                 ("/api/projects/alpha/plans",
                  "/projects/alpha/plans"),
                 ("/api/projects/alpha/plan" + plan_q,
@@ -341,12 +341,12 @@ class TestFormerLegacyPaths404(RouteServerCase):
         # unrouted now that the matcher itself is gone.
         for method, path in [
                 ("GET", "/healthz"),
-                ("GET", "/projects/alpha/mockup"),
+                ("GET", "/projects/alpha/entry"),
                 ("POST", "/projects/rescans"),
                 ("GET", "/projects/alpha"),
                 ("POST", "/projects"),
                 ("GET", "/health/x"),
-                ("GET", "/projects/alpha/mockups/x"),
+                ("GET", "/projects/alpha/entries/x"),
                 ("POST", "/health"),
                 ("GET", "/projects/rescan"),
                 ("POST", "/board")]:
@@ -390,6 +390,18 @@ class TestServedWithoutAliasTripwire(RouteServerCase):
         # the 15 unified patterns included, now that their
         # aliases are gone.
         self.assertEqual(probed, len(CANONICAL_PATTERNS))
+
+    def test_retired_collection_routes_are_router_404(self):
+        # The Mockups/Artifacts collection split retired
+        # with the 2026-11-10 unification: both former
+        # routes are the router's own 404 now, and the one
+        # entries route answers in their place.
+        for path in ("/api/projects/alpha/mockups",
+                     "/api/projects/alpha/artifacts"):
+            with self.subTest(path=path):
+                self.assert_router_404("GET", path)
+        self.assert_canonical_ok(
+            "GET", "/api/projects/alpha/entries")
 
 
 # A legacy route literal in caller source: a quote directly

@@ -37,22 +37,25 @@ and loose to-dos until nobody can say which mockup is
 canonical, which plan is in flight, or what is blocked. The
 Workbench Viewer fixes that by structure: one always-on
 companion server reads every opt-in project's own data files
-and serves ONE artifact with five sections — **Mockups,
-Artifacts, Plans, Todos, Board**.
+and serves ONE artifact with five sections — **Entries,
+Plans, Todos, Board**, and the cross-project **Repos**.
 
-The Artifacts section is a sibling collection beside
-Mockups: a separate item type (kind `artifact`, §4.1) for
-material that is not a mockup but still awaits or records
-an owner disposition — ruling explainers, decision sheets,
-approval exhibits. The admittance test is disposition
-alone: an item belongs in the collection iff it awaits or
+Entries is one collection for every registry item,
+whatever its kind (§4.1). Kind `artifact` names material
+that is not a mockup but still awaits or records an owner
+disposition — ruling explainers, decision sheets,
+approval exhibits. The admittance test for that kind is
+disposition alone: an item belongs iff it awaits or
 records an owner ruling. Deliverables, outputs, and pure
 reference documents are never registered — they are
 project data, not disposition material. The collection
-rides the same per-project registry, the same lifecycle,
-and the same review machinery as Mockups; only its feed,
-its preview, and its uniformity checks are its own (§8.5,
-§10).
+was two sibling sections (Mockups and Artifacts, split
+at the feed by kind) until the 2026-11-10 unification
+retired the boundary: the split's census was lopsided —
+every registered entry was kind `artifact` and the
+design-kind feeds served zero rows — and the two
+surfaces had converged (one entry model, one stage, one
+lifecycle). Kinds ride as labels now (§8.5).
 
 Goals:
 
@@ -170,14 +173,14 @@ not escape it.
 | ---------- | -------- | ------- |
 | `name`     | yes | Display name |
 | `slug`     | no  | URL/id slug; default: directory name |
-| `registry` | no  | Registry DB path — Mockups + Todos live here |
+| `registry` | no  | Registry DB path — Entries + Todos live here |
 | `plans`    | no  | Plan-files directory — Plans + Board |
 | `mockups`  | no  | Entries dir; default: `entries` beside the registry |
 | `archive`  | no  | Archive dir; default: `archive` beside the registry |
 | `catalog_origin` / `catalog_generality` / `catalog_use_case` | no (all-or-nothing) | The manifest's catalog classification (§17) |
 
 Sections degrade independently: absent `registry` → no
-Mockups/Todos for that project; absent `plans` → no Plans;
+Entries/Todos for that project; absent `plans` → no Plans;
 a missing `finished/` subdir is an empty plan archive, not
 an error. No manifest = invisible to the sweep (opt-in by
 layout). Removing the manifest, or the root from the sweep
@@ -185,7 +188,7 @@ config, un-discovers the project and changes nothing in it.
 
 The project's data — registry DB, the generated
 `registry.json` beside it, `entries/`, `archive/` — is
-**untracked** in the project repo (gitignored). Mockups are
+**untracked** in the project repo (gitignored). Entries are
 transient workspace material; the durable record of a landed
 design is the project's own SPEC/plan amendment (§9), never
 the registry.
@@ -302,12 +305,13 @@ run on temp fixtures and no caller depends on ambient state.
   are display only.
 - `title`; `kind` (`mockup` | `prototype` | `test-route` |
   `component-variant` | `storyboard` | `artifact`). The
-  first five are the design kinds, browsed in the Mockups
-  section; `artifact` is the disposition-sheet kind,
-  browsed in the sibling Artifacts section (§8.5). The
-  kind column is the only discriminator — every lifecycle
-  function operates on any row regardless of kind, and the
-  collection boundary is drawn at the feed (§7), never in
+  first five are the design kinds; `artifact` is the
+  disposition-sheet kind. All six are labels in the one
+  Entries collection (§8.5): every lifecycle function
+  operates on any row regardless of kind, and no feed,
+  route, or section discriminates by kind — the
+  collection boundary that was drawn at the feed retired
+  in the 2026-11-10 unification, and it never lived in
   the schema.
 - `status` — the RULED status (§5); `gate` — for hard-gate
   entries, the named blocker.
@@ -425,7 +429,7 @@ Rules:
   link is what distinguishes superseded from merely dead.
 - "Stale" is NOT in this vocabulary (§5.2).
 
-For kind `artifact` (§8.5) the same vocabulary reads
+For kind `artifact` (§8.1) the same vocabulary reads
 against the item's question set, which is its declared
 `state_schema`; selections are its `state_json`. The
 answer act is the owner's use of the item's own page:
@@ -445,7 +449,7 @@ recorded-history semantics of reviews already taken):
 - `deferred`, `hard-gate`, `abandoned` — as above.
 
 Rendering of the question set happens in the item's own
-page (the choice kit, §8.5); the StateControls
+page (the choice kit, §8.1); the StateControls
 decision-block form (context/component-contracts.md#statecontrols)
 remains the form contract for the component specimen
 that still renders it.
@@ -568,7 +572,7 @@ API (the feeds the artifact consumes):
 
 - `GET /api/health` · `GET /api/config` · `GET /api/projects` ·
   `POST /api/projects/rescan`
-- `GET /api/projects/<slug>/mockups` (`?archived=1`) ·
+- `GET /api/projects/<slug>/entries` (`?archived=1`) ·
   `GET /api/projects/<slug>/entries/<id>` ·
   `GET|POST /api/projects/<slug>/entries/<id>/file` ·
   `POST /api/projects/<slug>/entries/<id>/action`
@@ -608,9 +612,12 @@ was healthy, the address was the device's own). The
 bridge carries a raw sibling contract (wbRaw) beside the
 JSON one: the same socket, the body carried as base64 with
 its content type, so the artifact server can fetch an
-entry's exact bytes and mirror them into the space's
-hosted blob storage (§8.5), whose public URLs are the
-addresses readers actually open.
+entry's exact bytes for the stage's in-viewer render
+(§8.5): the render action returns them in its envelope
+and the client renders the page itself, in the app — no
+hosted copy, no external address. (A hosted blob mirror
+of the tree was tried and retired the same day: its URL
+was not viewable on the owner's phone.)
 
 The 15 legacy unprefixed patterns were served as exact
 aliases for one published checkpoint cycle after the
@@ -657,7 +664,7 @@ scan failure reports "unknown", never mass-flags.
 - Every save is recorded in the entry's history
   (actor=viewer).
 
-## 8. The artifact — one viewer, five sections
+## 8. The artifact — one viewer, four sections + Repos
 
 A single self-contained artifact serves every project and
 every entry (§1.8). It reaches the server over a raw
@@ -669,9 +676,10 @@ artifact settings. Deploy is a drift-guarded copy from this
 repo's `viewer/` (canonical) to the runtime tree, then a
 separate builder publish pass (§1.10).
 
-### 8.1 Mockups
+### 8.1 Entries
 
-Per project: the registry browser — ruled status chip +
+Per project: the registry browser — every kind in one
+collection (the unification, §8.5) — ruled status chip +
 derived stale badge per entry, filters, archive behind a
 toggle.
 
@@ -741,10 +749,9 @@ sources:
   step-marker convention is a future extension, out of
   scope). Derived — read-only on the board.
 - **Review queue** — registry entries awaiting
-  disposition (§8.1, §8.5) across both collections, as
-  their own lane. Each card carries its entry's kind and
-  opens in its own collection. Derived — read-only on the
-  board.
+  disposition (§8.1), as their own lane. Each card carries
+  its entry's kind and opens in the Entries collection.
+  Derived — read-only on the board.
 
 Acting on a derived card opens its source (the plan, the
 review item), where the action lives. The board shows no
@@ -787,42 +794,68 @@ shell refresh control (`POST /api/refresh`) forces the
 sweep and busts every feed cache, so a manual refresh
 never waits out a bound.
 
-### 8.5 Artifacts
+### 8.5 The unified collection (2026-11-10)
 
-Per project: the sibling collection beside Mockups —
-entries of kind `artifact` only (§4.1), served by their
-own feed. An item is admitted iff it awaits or records an
-owner disposition (§0); its questions live inside the
+Per project: ONE collection — Entries — for every
+registry item. Until this unification, kind `artifact`
+items were served by their own feed into a sibling
+Artifacts section beside Mockups; the boundary retired
+because the split no longer described the corpus (every
+registered entry was kind `artifact`; the design-kind
+feeds served zero rows) and the two surfaces had
+converged — one entry model, one lifecycle, one stage.
+Kinds are labels now (§4.1): one feed
+(`GET /api/projects/<slug>/entries`), one list, one
+drill-in serve every kind; no data migrated (the kind
+column keeps its values), and `wb artifact new` keeps
+stamping kind `artifact` — it routes nowhere special.
+Old `#/p/<slug>/mockups|artifacts` hashes land on the
+unified section with their item segment preserved.
+
+An `artifact` item is admitted iff it awaits or records
+an owner disposition (§0); its questions live inside the
 item's own page (the choice kit carries the question,
 feedback, and Copy-JSON contract in-page), and the answer
 record is the kit payload transcribed by the owning
 thread (§5.1) — the viewer offers no review disposition
-over artifacts or mockups (retired 2026-11-10; recorded
-review history still renders in the log cards). The
-detail stage is the item's open control, not an embedded
-frame: the openEntryPage action mirrors the item's file
-tree verbatim into the space's hosted blob storage —
-fetched over the bridge's raw contract from the
-companion's byte route (§7), keyed by the tree's digest
-so a changed tree re-mirrors and an unchanged one serves
-its existing copy — and the stage navigates to the
-mirror's public URL in a new tab. The page runs as a real
-document with its scripts and relative assets intact,
-from an address any device can reach; the entry dir
-stays the source of truth and the mirror a cache. The
-viewer's former rendered preview (the peek-fed scriptless
-frame and its beside-the-stage question controls) retired
-with the byte route (2026-11-10), and the byte route's
-own loopback iframe retired the same day it shipped: a
-loopback address resolves on the reader's device, never
-on the companion's machine. Per-item messages anchor to
-the entry exactly as for mockups; exhibit annotations are
-not offered on artifact items (the page is not embedded,
-so it cannot be selected into). View modes are list +
-drill-in only — the storyboard and contact-sheet modes
-stay Mockups-only. Supersede pickers scope to the item's
-own collection; the lib supersede operation stays
-kind-blind.
+over any entry (retired 2026-11-10; recorded review
+history still renders in the log cards).
+
+The detail stage shows the entry's page itself, in the
+app: the getEntryPage action fetches the main file's
+exact bytes over the bridge's raw contract from the
+companion's byte route (§7) and returns them in its
+envelope; the client renders them unmodified as a
+document in a frame sandboxed to scripts only
+(`sandbox="allow-scripts"`, opaque origin — the page
+cannot reach the viewer, the viewer cannot reach into
+the page). No navigation away, no download, no hosted
+copy: freshness is per open (the fetch keys on the
+entry's recorded fingerprint), and a refused page —
+secret-shaped, over the byte route's bound, bridge
+down — renders its reason in the stage, never a partial
+page. A page that reaches for sibling files cannot
+resolve them in-frame (an opaque origin has no base
+URL); every page on record is a self-contained single
+file, and a multi-file entry declares no-render with the
+reason shown (owner ruling, 2026-11-10). The stage's
+earlier forms all retired on 2026-11-10: the peek-fed
+scriptless frame (its byte source was capped text), the
+loopback iframe (a loopback address resolves on the
+reader's device, never on the companion's machine), and
+the hosted blob mirror (its URL was not viewable on the
+owner's phone). If the in-viewer render fails on the
+owner's device, the armed fallback is a scripted static
+install with a takedown — specified in the in-viewer
+render plan's appendix, built only on that verdict.
+
+Per-item messages anchor to the entry; exhibit
+annotations select into the recorded-state summary
+beside the stage for every kind (the stage's document
+itself is scripted and opaque, so it is never selected
+into). View modes are the storyboard and the contact
+sheet; supersede pickers scope to the project's entries;
+the lib supersede operation stays kind-blind.
 
 ## 9. Mockup authoring + promotion
 
@@ -1134,9 +1167,13 @@ for one project.)
   §14.4), `spec_ref` / `plan_ref` / link references, and
   files under the entry dir.
 - The `artifact` kind value (§4.1) is this escape valve in
-  use: a whole sibling collection (§8.5) entered through
-  one new kind value and a feed split, with no schema
-  change, no `user_version` bump, and no project fork.
+  use: a whole collection entered through one new kind
+  value, with no schema change, no `user_version` bump,
+  and no project fork. (It entered as a sibling collection
+  behind a feed split; the 2026-11-10 unification retired
+  the split, and the value rides as a label in the one
+  collection — the valve's point stands: the schema never
+  moved.)
 
 ### 14.2 The uniformity test
 
@@ -1157,11 +1194,11 @@ result, in every adopting repo. Channels: **V** = viewer,
 the server (V and S are one path, §1.1).
 
 The browse, review, lifecycle, state, and files
-interactions in this catalogue apply to both collections
-— Mockups and Artifacts. Each collection's feed serves
-only its own kinds (§4.1), so per-collection counts,
-filters, and triage stay honest; the gestures over an
-entry are identical whichever collection it lives in.
+interactions in this catalogue apply to the one Entries
+collection, over every kind (§4.1): one feed serves all
+kinds, so counts, filters, and triage are whole-store
+honest, and the gestures over an entry are identical
+whatever its kind.
 
 Discover & orient:
 
@@ -1173,7 +1210,7 @@ Discover & orient:
 - Combined cross-project views (todos, board) with the
   project always labeled. **[V]**
 
-Browse & inspect entries (both collections):
+Browse & inspect entries:
 
 - List entries; filter by ruled status, kind, archived,
   staleness, triage reason; open one entry. **[V/C]**
@@ -1272,10 +1309,10 @@ over:
 - Which sections a manifest declares (§2): an absent
   section is uniformly absent, never a project-specific
   substitute.
-- The Artifacts collection (§8.5) rides the manifest's
-  `registry` declaration: it exists exactly where Mockups
-  exists, under the same declaration — it has no manifest
-  key of its own.
+- The Entries collection (§8.5) rides the manifest's
+  `registry` declaration: it exists exactly where the
+  registry exists, under the same declaration — it has no
+  manifest key of its own.
 
 ### 14.5 What is NOT uniform (by design)
 

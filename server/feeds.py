@@ -1,7 +1,7 @@
 """Feed builders: the read-side payload assembly.
 
 One slice of the companion server: entry detail and
-the mockups, artifacts, todos, plans, board, home,
+the entries, todos, plans, board, home,
 worktrees, and diff feeds. Pure reads over lib/ — a locked or broken
 project degrades only its own payload (common.degraded),
 never the request.
@@ -72,16 +72,12 @@ def entry_detail(db_path, entry_id) -> dict:
     }
 
 
-DESIGN_KINDS = tuple(k for k in reg.KINDS if k != "artifact")
-ARTIFACT_KINDS = ("artifact",)
-
-
-def _entries_feed(project, *, archived: bool, kinds) -> dict:
-    """One collection's feed over the shared registry: the
-    collection boundary is the kind filter — entries and
-    triage serve only the given kinds, while the export and
-    the reconcile block stay whole-store (entry dirs share
-    one tree)."""
+def entries_feed(project, *, archived: bool) -> dict:
+    """The one entries feed over the shared registry
+    (2026-11-10 unification): there is no collection
+    boundary — every kind serves in this one feed, kinds
+    riding as row labels; the export and the reconcile
+    block stay whole-store (entry dirs share one tree)."""
     m = project.manifest
     base = {"slug": project.slug, "name": project.name,
             "degraded": False}
@@ -100,8 +96,7 @@ def _entries_feed(project, *, archived: bool, kinds) -> dict:
         data = export_mod.build_export(m.registry,
                                        project=project.slug)
         entries = [e for e in data["entries"]
-                   if bool(e["archived"]) == archived
-                   and e["kind"] in kinds]
+                   if bool(e["archived"]) == archived]
         # Attribution anchor (§16): resolve each entry's
         # plan_ref against the project's own plans corpus and
         # serve the plan's disposition ready-made — the
@@ -128,7 +123,7 @@ def _entries_feed(project, *, archived: bool, kinds) -> dict:
                 e["plan_ref"] = Path(ref).name
         triage = []
         for e in data["entries"]:
-            if e["archived"] or e["kind"] not in kinds:
+            if e["archived"]:
                 continue
             reasons = staleness.triage_reasons(
                 e, e["derived"],
@@ -145,16 +140,6 @@ def _entries_feed(project, *, archived: bool, kinds) -> dict:
         return degraded({**base, "available": True,
                          "entries": [], "triage": [],
                          "reconcile": None}, e)
-
-
-def mockups_feed(project, *, archived: bool) -> dict:
-    return _entries_feed(project, archived=archived,
-                         kinds=DESIGN_KINDS)
-
-
-def artifacts_feed(project, *, archived: bool) -> dict:
-    return _entries_feed(project, archived=archived,
-                         kinds=ARTIFACT_KINDS)
 
 
 def _attach_work_staleness(bundles,
@@ -509,14 +494,13 @@ def _board_project_feed_compute(project, offset,
         plan_cards[plan["status_bucket"]].append(
             _plan_card(plan, bundle, project))
     review = []
-    for feed in (mockups_feed(project, archived=False),
-                 artifacts_feed(project, archived=False)):
-        if feed["degraded"]:
-            errors.append({"slug": project.slug,
-                           "reason": feed["reason"]})
-        for item in feed.get("triage", []):
-            review.append({**item, "project": project.slug,
-                           "project_name": project.name})
+    feed = entries_feed(project, archived=False)
+    if feed["degraded"]:
+        errors.append({"slug": project.slug,
+                       "reason": feed["reason"]})
+    for item in feed.get("triage", []):
+        review.append({**item, "project": project.slug,
+                       "project_name": project.name})
     counts = {
         "todos": {k: len(v) for k, v in lanes.items()},
         "plans": {k: len(v) for k, v in plan_cards.items()},
