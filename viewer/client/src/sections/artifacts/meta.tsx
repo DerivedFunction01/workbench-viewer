@@ -1,12 +1,9 @@
 // The drill-in's metadata pieces: the shared label
-// style and row, the recorded-state projection, and
-// the Metadata card itself.
+// style and row, and the Metadata card itself.
 
 import { Card } from "../../components/Card";
-import type { StateValues } from "../../components/StateControls";
 import { formatDate, formatDateTime, formatShortHash } from "../../lib/format";
 import { kindLabel, ruledStatusLabel } from "../../lib/labels";
-import { stateValues } from "../mockups/helpers";
 import type { DerivedStaleness } from "../mockups/types";
 import type { FullEntry } from "./types";
 
@@ -34,17 +31,6 @@ export function MetaRow({ label, children }: { label: string; children: React.Re
       <span style={{ overflowWrap: "anywhere" }}>{children}</span>
     </div>
   );
-}
-
-export function toStateValues(source: FullEntry | null): StateValues {
-  const values: StateValues = {};
-  if (!source) return values;
-  for (const [key, value] of Object.entries(stateValues(source))) {
-    if (typeof value === "boolean" || typeof value === "string" || typeof value === "number") {
-      values[key] = value;
-    }
-  }
-  return values;
 }
 
 export function MetaCard({

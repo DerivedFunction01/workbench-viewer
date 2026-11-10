@@ -1,69 +1,55 @@
 import { useQuery } from "@tanstack/react-query";
 import { Frame } from "../../components/Frame";
-import type { StateValues } from "../../components/StateControls";
 import { api } from "../../lib/api";
-import { PreviewSummary } from "../mockups/helpers";
-import type { Envelope, FullEntry, PreviewResult } from "./types";
+import type { ConfigPayload } from "../../lib/api-types";
+import { configKey } from "../../lib/keys";
+import type { FullEntry } from "./types";
 
-/** The stage: the item's main file rendered in a sandboxed
- * iframe over the dedicated preview read — the entry's own
- * file served whole. A rendered study is not a guarded
- * source file, so the peek caps do not apply here; the
- * read's own guards (withheld, binary, payload bound) do,
- * and content under them never renders — the stage falls
- * back to the recorded-state summary with the reason. */
-export function PreviewStage({
-  slug,
-  entry,
-  draftState,
-}: {
-  slug: string;
-  entry: FullEntry;
-  draftState: StateValues | null;
-}) {
+/** The stage: the entry's main file as a real document in
+ * an iframe over the companion server's byte route
+ * (SPEC §7) — the page's own scripts run and its relative
+ * assets resolve, which the retired JSON/srcDoc preview
+ * could never do. The frame is sandboxed to scripts only:
+ * an opaque origin, so the artifact page and the viewer
+ * cannot reach each other. The byte route answers from the
+ * server's own config, so the client reads host/port from
+ * the config feed rather than assuming an address. */
+export function PreviewStage({ slug, entry }: { slug: string; entry: FullEntry }) {
   const mainFile = entry.source_kind === "entry-dir" ? entry.main_file : null;
-  const peekQuery = useQuery({
-    queryKey: ["entry-preview", slug, entry.id, mainFile],
-    queryFn: () =>
-      api.getEntryFile({ slug, entryId: entry.id, path: mainFile ?? "", preview: true }),
+  const configQuery = useQuery({
+    queryKey: configKey,
+    queryFn: () => api.getConfig({}),
     enabled: mainFile != null,
   });
-  const peekEnvelope = peekQuery.data as Envelope | undefined;
-  const peek =
-    peekEnvelope && peekEnvelope.status === 200 ? (peekEnvelope.payload as PreviewResult) : null;
-
-  let fallbackReason: string | null = null;
-  if (mainFile == null) {
-    fallbackReason =
-      "Preview unavailable — this item is held by reference; its files live outside the harness.";
-  } else if (peekQuery.isPending) {
-    fallbackReason = null;
-  } else if (!peek) {
-    fallbackReason = peekEnvelope?.error ?? "The main file could not be read for preview.";
-  } else if (peek.withheld) {
-    fallbackReason = "Preview withheld — this path is secret-shaped and is never shown here.";
-  } else if (peek.is_binary) {
-    fallbackReason = "Binary file — no rendered preview.";
-  } else if (peek.too_large) {
-    fallbackReason = "The file exceeds the preview size bound, so no rendered preview is shown.";
-  } else if (peek.content == null) {
-    fallbackReason = "The main file returned no content to preview.";
-  }
+  const config = (configQuery.data?.payload as ConfigPayload | undefined)?.config;
+  const host = typeof config?.host === "string" ? config.host : null;
+  const port = typeof config?.port === "number" ? config.port : null;
+  const rawUrl =
+    mainFile != null && host != null && port != null
+      ? `http://${host}:${port}/raw/${encodeURIComponent(slug)}/entries/${encodeURIComponent(entry.id)}/${mainFile
+          .split("/")
+          .map(encodeURIComponent)
+          .join("/")}`
+      : null;
 
   return (
     <Frame
       anchor="artifacts/exhibit-stage"
       title={entry.title}
-      viewportLabel={`${entry.source_kind} · rendered preview`}
+      viewportLabel={`${entry.source_kind} · live page`}
       archived={entry.archived}
     >
-      {mainFile != null && peekQuery.isPending ? (
+      {mainFile == null ? (
+        <p style={{ margin: 0, color: "var(--wb-content-muted)" }}>
+          Preview unavailable — this item is held by reference; its files live outside the harness.
+        </p>
+      ) : rawUrl == null ? (
         <p style={{ margin: 0, color: "var(--wb-content-muted)" }}>Loading preview…</p>
-      ) : peek && fallbackReason == null ? (
+      ) : (
         <iframe
           title={`Rendered preview of ${entry.title}`}
-          sandbox=""
-          srcDoc={peek.content ?? ""}
+          sandbox="allow-scripts"
+          src={rawUrl}
           style={{
             display: "block",
             width: "100%",
@@ -73,15 +59,6 @@ export function PreviewStage({
             background: "var(--wb-surface-1)",
           }}
         />
-      ) : (
-        <>
-          <PreviewSummary entry={entry} values={draftState ?? undefined} />
-          {fallbackReason ? (
-            <p style={{ margin: "var(--wb-space-8) 0 0", color: "var(--wb-content-muted)" }}>
-              {fallbackReason}
-            </p>
-          ) : null}
-        </>
       )}
     </Frame>
   );

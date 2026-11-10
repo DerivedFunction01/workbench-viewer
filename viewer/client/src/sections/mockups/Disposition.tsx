@@ -184,12 +184,10 @@ export function DispositionCard({
 export function ApproveSheet({
   entry,
   approval,
-  draftDirty,
   disposition,
 }: {
   entry: FullEntry;
   approval: ApprovalCoverage | null;
-  draftDirty: boolean;
   disposition: DispositionState;
 }) {
   const {
@@ -232,12 +230,6 @@ export function ApproveSheet({
         Approval binds to the state snapshot below — a later state change will show as not covered
         until re-approval.
       </p>
-      {draftDirty ? (
-        <p role="alert" style={{ color: "var(--wb-danger)" }}>
-          You have unsaved state changes. Approving now covers the recorded state, not the unsaved
-          edits — save the state first if the approval should cover them.
-        </p>
-      ) : null}
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {Object.entries(stateValues(entry)).map(([key, value]) => (
           <li key={key}>

@@ -1,17 +1,13 @@
 // Entry-detail data for the drill-in (split from
 // MockupDetail.tsx, 2026-11-05 follow-up): the detail +
-// active-feed queries, the feed-row fallback derivation,
-// and the draft-state lifecycle — returning the shaped
-// state the component renders from.
+// active-feed queries and the feed-row fallback
+// derivation — returning the shaped state the component
+// renders from.
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import type { StateValues } from "../../components/StateControls";
 import { api } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { ruledStatusLabel } from "../../lib/labels";
-import { stateValues } from "./helpers";
-import { toStateValues } from "./meta";
 import type { EntryDetail, Envelope, FullEntry, MockupsFeedFull } from "./types";
 
 export function useEntryDetail(slug: string, entryId: string, feedEntry: FullEntry | null) {
@@ -49,23 +45,6 @@ export function useEntryDetail(slug: string, entryId: string, feedEntry: FullEnt
   const derived = detail?.derived ?? feedEntry?.derived ?? null;
   const approval = detail?.approval ?? feedEntry?.approval ?? null;
 
-  const [draftState, setDraftState] = useState<StateValues | null>(() =>
-    entry ? toStateValues(entry) : null,
-  );
-
-  useEffect(() => {
-    if (entry) {
-      setDraftState(toStateValues(entry));
-    }
-  }, [entry]);
-
-  const savedStateJson = useMemo(
-    () => JSON.stringify(stateValues(entry ?? ({} as FullEntry))),
-    [entry],
-  );
-  const draftDirty =
-    draftState != null && entry != null && JSON.stringify(draftState) !== savedStateJson;
-
   const latestReview = detail?.latest_review ?? null;
   const needsChanges = latestReview?.payload?.disposition === "needs-changes";
 
@@ -102,9 +81,6 @@ export function useEntryDetail(slug: string, entryId: string, feedEntry: FullEnt
     entry,
     derived,
     approval,
-    draftState,
-    setDraftState,
-    draftDirty,
     latestReview,
     needsChanges,
     supersedeCandidates,

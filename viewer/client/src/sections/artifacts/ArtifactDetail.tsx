@@ -3,31 +3,31 @@
 // entryAction verbs, the same confirm-approve sheet
 // semantics, composed over the shared blocks. Two
 // deliberate differences from the mockup pane: the stage
-// renders the item's main file as a live preview (a
-// sandboxed, scriptless iframe fed by the guarded peek
-// path — entry content is never executed), and there is
-// no exhibit-annotation machinery (the sandboxed frame
-// cannot be selected into; per-item messages mount under
-// the detail in the section, as they do for mockups).
-// The item's questions are its state schema; Save state
-// records the answers, Approve binds them by hash, and
-// Copy answers JSON carries them out as text.
+// renders the item's main file as a live page over the
+// companion server's byte route (its own scripts run —
+// the item's questions, feedback, and Copy JSON payload
+// live inside the page itself, per the choice kit), and
+// there is no exhibit-annotation machinery (the framed
+// page cannot be selected into; per-item messages mount
+// under the detail in the section, as they do for
+// mockups). The viewer's own question controls retired
+// with the byte route (2026-11-10): the page carries the
+// contract now.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { Sheet } from "../../components/Sheet";
-import { StateControls, type StateValues } from "../../components/StateControls";
 import { api } from "../../lib/api";
 import { formatDate, formatDateTime, formatShortHash } from "../../lib/format";
 import { ruledStatusLabel } from "../../lib/labels";
 import { useIsPhone } from "../../lib/responsive";
 import { FilePanel } from "../mockups/FilePanel";
 import { HistoryList, ReviewLog } from "../mockups/HistoryLog";
-import { EntryBadges, hasState, OwnerLine, stateValues } from "../mockups/helpers";
+import { EntryBadges, OwnerLine, stateValues } from "../mockups/helpers";
 import { RULED_STATUSES } from "../mockups/types";
-import { labelStyle, MetaCard, MetaRow, toStateValues } from "./meta";
+import { labelStyle, MetaCard, MetaRow } from "./meta";
 import { PreviewStage } from "./PreviewStage";
 import type { ArtifactsFeed, EntryDetail, Envelope, FullEntry } from "./types";
 
@@ -60,7 +60,6 @@ export function ArtifactDetail({
   const [gate, setGate] = useState("");
   const [acceptDrift, setAcceptDrift] = useState(false);
   const [supersedeTarget, setSupersedeTarget] = useState("");
-  const [copyNotice, setCopyNotice] = useState<string | null>(null);
 
   const detailQuery = useQuery({
     queryKey: ["entry", slug, entryId],
@@ -94,23 +93,11 @@ export function ArtifactDetail({
   const derived = detail?.derived ?? feedEntry?.derived ?? null;
   const approval = detail?.approval ?? feedEntry?.approval ?? null;
 
-  const [draftState, setDraftState] = useState<StateValues | null>(() =>
-    entry ? toStateValues(entry) : null,
-  );
-
   useEffect(() => {
     if (entry) {
-      setDraftState(toStateValues(entry));
       setStatusChoice(entry.status);
     }
   }, [entry]);
-
-  const savedStateJson = useMemo(
-    () => JSON.stringify(stateValues(entry ?? ({} as FullEntry))),
-    [entry],
-  );
-  const draftDirty =
-    draftState != null && entry != null && JSON.stringify(draftState) !== savedStateJson;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["entry", slug, entryId] });
@@ -208,25 +195,6 @@ export function ArtifactDetail({
     setComment("");
   };
 
-  const copyAnswers = () => {
-    const payload = JSON.stringify(
-      { id: entry.id, title: entry.title, state: stateValues(entry) },
-      null,
-      2,
-    );
-    if (typeof navigator === "undefined" || !navigator.clipboard) {
-      setCopyNotice("Clipboard unavailable here — the answers JSON could not be copied.");
-      return;
-    }
-    navigator.clipboard.writeText(payload).then(
-      () =>
-        setCopyNotice(
-          "Answers JSON copied — it travels as text; the record is the transcription into the owning project's files.",
-        ),
-      () => setCopyNotice("Clipboard write failed — the answers JSON could not be copied."),
-    );
-  };
-
   const selectStyle: React.CSSProperties = {
     display: "block",
     width: "100%",
@@ -305,12 +273,12 @@ export function ArtifactDetail({
         }}
       >
         <div style={isPhone ? { minWidth: 0 } : { position: "sticky", top: "var(--wb-space-16)" }}>
-          <PreviewStage slug={slug} entry={entry} draftState={draftState} />
+          <PreviewStage slug={slug} entry={entry} />
 
           <Card title="Disposition" anchor="artifacts/disposition">
             <p style={{ margin: "0 0 var(--wb-space-8)", color: "var(--wb-content-secondary)" }}>
               Review this item in {projectName}. Each disposition is recorded in the review log with
-              its comment. Approving binds the recorded answers — the state snapshot — by hash.
+              its comment. Approving binds the recorded state snapshot by hash.
             </p>
             <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
               <span style={labelStyle}>Comment</span>
@@ -348,7 +316,7 @@ export function ArtifactDetail({
               </Button>
             </div>
             <p style={{ color: "var(--wb-content-muted)", marginBottom: 0 }}>
-              Approve opens a confirm sheet with the answer set it will cover. Needs changes
+              Approve opens a confirm sheet with the state snapshot it will cover. Needs changes
               requires a comment.
             </p>
           </Card>
@@ -363,62 +331,6 @@ export function ArtifactDetail({
           }}
         >
           <MetaCard entry={entry} derived={derived} supersededByTitle={supersededByTitle} />
-
-          {hasState(entry) && draftState ? (
-            <div>
-              <StateControls
-                anchor="artifacts/state-card"
-                schema={entry.state_schema}
-                values={draftState}
-                onChange={(key, value) =>
-                  setDraftState((prev) => ({ ...(prev ?? {}), [key]: value }))
-                }
-                title="Questions"
-              />
-              {draftDirty ? (
-                <p role="status" style={{ color: "var(--wb-content-secondary)" }}>
-                  Unsaved answers — the approval coverage below still describes the recorded
-                  answers.
-                </p>
-              ) : null}
-              <div
-                style={{
-                  marginTop: "var(--wb-space-8)",
-                  display: "flex",
-                  gap: "var(--wb-space-8)",
-                  flexWrap: "wrap",
-                }}
-              >
-                <Button
-                  variant="secondary"
-                  disabled={busy || !draftDirty}
-                  onClick={() =>
-                    runAction({
-                      verb: "set-state",
-                      state: draftState,
-                      expect_version: entry.version,
-                    })
-                  }
-                >
-                  Save state
-                </Button>
-                <Button variant="secondary" disabled={busy} onClick={copyAnswers}>
-                  Copy answers JSON
-                </Button>
-              </div>
-              {copyNotice ? (
-                <p role="status" style={{ color: "var(--wb-content-secondary)" }}>
-                  {copyNotice}
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <Card title="Questions" anchor="artifacts/state-card">
-              <p style={{ margin: 0, color: "var(--wb-content-secondary)" }}>
-                No questions declared — this item carries no state schema.
-              </p>
-            </Card>
-          )}
 
           <Card title="Approval" anchor="artifacts/approval-card">
             {approval?.approved ? (
@@ -656,15 +568,9 @@ export function ArtifactDetail({
         }
       >
         <p style={{ color: "var(--wb-content-secondary)" }}>
-          Approval binds to the answer set below — a later answer change will show as not covered
+          Approval binds to the state snapshot below — a later state change will show as not covered
           until re-approval.
         </p>
-        {draftDirty ? (
-          <p role="alert" style={{ color: "var(--wb-danger)" }}>
-            You have unsaved answers. Approving now covers the recorded answers, not the unsaved
-            edits — save the state first if the approval should cover them.
-          </p>
-        ) : null}
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
           {Object.entries(stateValues(entry)).map(([key, value]) => (
             <li key={key}>
@@ -675,7 +581,7 @@ export function ArtifactDetail({
             </li>
           ))}
           {Object.keys(stateValues(entry)).length === 0 ? (
-            <li style={{ color: "var(--wb-content-secondary)" }}>No answers recorded.</li>
+            <li style={{ color: "var(--wb-content-secondary)" }}>No state recorded.</li>
           ) : null}
         </ul>
         <p className="mono" style={{ color: "var(--wb-content-muted)", overflowWrap: "anywhere" }}>
