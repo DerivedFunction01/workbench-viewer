@@ -212,8 +212,17 @@ class KitFixture(unittest.TestCase):
         with open(self.template_dir / "kit.html", "w",
                   encoding="utf-8") as f:
             f.write(STUB_TEMPLATE)
+        # Hermetic back-default state: an ambient
+        # WB_KIT_BACK_HREF on the machine running the
+        # suite must not leak a stamped back into the
+        # no-override tests. The env-override test sets
+        # the variable itself, inside this patch.
+        self._env_patch = unittest.mock.patch.dict(os.environ)
+        self._env_patch.start()
+        os.environ.pop(kit.BACK_HREF_ENV, None)
 
     def tearDown(self):
+        self._env_patch.stop()
         self.tmp.cleanup()
 
     def create(self, slug="settings-study", **kw):
@@ -238,31 +247,36 @@ class TestCreateKit(KitFixture):
                          "reading-app-settings-study")
         with open(spec_file, encoding="utf-8") as f:
             saved = json.load(f)
-        self.assertEqual(
-            saved,
-            {**kit.demo_spec(),
-             "back": {"label": kit.DEFAULT_BACK_LABEL,
-                      "href": kit.DEFAULT_BACK_HREF}})
+        # No back is stamped by default: tracked code
+        # carries no back target, and the fixture sets no
+        # environment override — the saved spec is the
+        # demo spec exactly, back absent.
+        self.assertEqual(saved, kit.demo_spec())
+        self.assertNotIn("back", saved)
         self.assertEqual(e["content_sha256"],
                          reg.sha256_file(index))
         self.assertIsNotNone(e["state_schema"])
         self.assertNotIn("extras", e["state_schema"])
 
-    def test_back_default_stamped(self):
+    def test_back_absent_without_override(self):
         # The back control's target is data recorded at
-        # stamp time (byte-route plan): a spec without one
-        # gains the default in both spec.json and the page.
+        # stamp time (byte-route plan): the only default
+        # is the environment override, and tracked code
+        # carries no target of its own — with no override
+        # set (the fixture guarantees this), a spec
+        # without a back keeps none, in both spec.json
+        # and the page: the kit renders no back control.
+        self.assertIsNone(kit.DEFAULT_BACK_HREF)
         e = self.create()
         entry_dir = Path(e["entry_dir"])
         with open(entry_dir / "spec.json",
                   encoding="utf-8") as f:
             saved = json.load(f)
-        self.assertEqual(saved["back"]["href"],
-                         kit.DEFAULT_BACK_HREF)
+        self.assertNotIn("back", saved)
         with open(entry_dir / "index.html",
                   encoding="utf-8") as f:
             page_spec = embedded_spec(f.read())
-        self.assertEqual(page_spec["back"], saved["back"])
+        self.assertNotIn("back", page_spec)
 
     def test_back_spec_value_preserved(self):
         spec = minimal_spec(
@@ -275,16 +289,27 @@ class TestCreateKit(KitFixture):
         self.assertEqual(saved["back"], spec["back"])
 
     def test_back_env_override(self):
+        # The environment override is the one default a
+        # stamp applies: with it set, a spec without its
+        # own back gains the override's target in both
+        # spec.json and the page.
         with unittest.mock.patch.dict(
                 os.environ,
                 {kit.BACK_HREF_ENV:
                  "https://example.invalid/viewer"}):
             e = self.create("env-back")
-        with open(Path(e["entry_dir"]) / "spec.json",
+        entry_dir = Path(e["entry_dir"])
+        with open(entry_dir / "spec.json",
                   encoding="utf-8") as f:
             saved = json.load(f)
-        self.assertEqual(saved["back"]["href"],
-                         "https://example.invalid/viewer")
+        self.assertEqual(
+            saved["back"],
+            {"label": kit.DEFAULT_BACK_LABEL,
+             "href": "https://example.invalid/viewer"})
+        with open(entry_dir / "index.html",
+                  encoding="utf-8") as f:
+            page_spec = embedded_spec(f.read())
+        self.assertEqual(page_spec["back"], saved["back"])
 
     def test_back_malformed_refused(self):
         with self.assertRaises(kit.KitError):

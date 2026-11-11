@@ -39,12 +39,13 @@ Files:
 - `back` — optional `{label, href}`: a back link rendered at
   the head of the sticky bar, targeting the top frame, so a
   page opened inside the workbench viewer returns the reader
-  to the viewer. `wb artifact new` stamps the default
-  (the workbench viewer's own space; the `WB_KIT_BACK_HREF`
-  environment variable overrides it); a spec may set its own
-  target or, by carrying no `back` through a manual build,
-  render no control. A build never invents one — the field
-  rides the spec as recorded.
+  to the viewer. A stamp applies a back only from the
+  `WB_KIT_BACK_HREF` environment override — tracked code
+  carries no default target of its own — so with no
+  override set, a spec without its own `back` renders no
+  control; a spec may always set its own target. A build
+  never invents one — the field rides the spec as
+  recorded.
 - `intro` — optional markdown-lite text under the bar.
 - `sections` — content blocks, rendered in order.
 - `choices` — every choice, declared **once** (see Linking).

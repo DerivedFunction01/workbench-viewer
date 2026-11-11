@@ -33,12 +33,17 @@ from .util import sha256_file, write_text
 SPEC_TYPES = ("toggle", "single", "multi", "slider",
               "input-text", "input-number")
 
-# The back control's default target (byte-route plan,
-# 2026-11-10): a kit page opened from the workbench viewer
-# returns to the viewer's own space. An environment
-# override exists so a deployment elsewhere can point its
-# kit pages home without editing tracked defaults.
-DEFAULT_BACK_HREF = "https://muse.ai/spaces/workbench-viewer-2"
+# The back control's target is deployment data, never a
+# tracked default (byte-route plan, 2026-11-10;
+# portability fix, 2026-11-11): the target is recorded
+# in the spec at stamp time, and the only default a
+# stamp applies comes from the environment override
+# (BACK_HREF_ENV) — a deployment points its kit pages
+# home by setting it. Tracked code carries no target of
+# its own: with no override set, a spec without its own
+# back keeps none, and the page renders no back control
+# (honest absence) rather than a target invented here.
+DEFAULT_BACK_HREF = None
 DEFAULT_BACK_LABEL = "← Workbench"
 BACK_HREF_ENV = "WB_KIT_BACK_HREF"
 
@@ -383,15 +388,20 @@ def _read_template(template_dir) -> str:
 
 
 def with_default_back(spec) -> dict:
-    """The spec with the back control's default filled in
-    when the spec declares none (byte-route plan): the
-    control's target is data recorded in the spec at stamp
-    time, overridable per spec and by the environment.
-    An explicit spec value — including a deliberate custom
-    target — is preserved verbatim."""
+    """The spec with a back control stamped from the
+    environment when the spec declares none (byte-route
+    plan): the control's target is data recorded in the
+    spec at stamp time, and the only default is the
+    BACK_HREF_ENV override — tracked code carries no
+    target of its own. An explicit spec value — including
+    a deliberate custom target — is preserved verbatim,
+    and with no override set a spec without a back keeps
+    none: the page renders no back control."""
     if spec.get("back"):
         return spec
     href = os.environ.get(BACK_HREF_ENV) or DEFAULT_BACK_HREF
+    if not href:
+        return spec
     return {**spec, "back": {"label": DEFAULT_BACK_LABEL,
                              "href": href}}
 
