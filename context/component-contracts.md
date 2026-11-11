@@ -142,6 +142,15 @@ Unexplored, Hard gate, Abandoned. Glyphs (fixed):
 canonical ◆, implemented ✓, deferred ❚❚, unexplored ?,
 hard-gate ⬢, abandoned ✕.
 
+Pressable form's target: the pill keeps its 24px contract
+height; the BUTTON around it is the target — a transparent,
+borderless box at the full contract height (38px, 44px
+coarse) with the pill centered in it, so the measured
+target meets the target contract without the pill growing
+(amended 2026-11-10, critic fix pass Step 1: the pressable
+chip measured 26px rendered — pill + UA border — against
+the ≥38px target rule).
+
 Appearance matrix (per status S; tint =
 `color-mix(--wb-status-S 14%, transparent)`):
 
@@ -375,9 +384,14 @@ type SegmentedControlProps<V extends string> = {
 ```
 
 Appearance matrix (track: `--wb-surface-sunken` fill,
-`--wb-radius-sm`, padding `--wb-space-4`; segment
-min-height 30px inside a ≥38px control row, padding
-`--wb-space-4` × `--wb-space-12`, font 14px):
+`--wb-radius-sm`, no track padding — the pills ARE the
+track's height; segment pill min-height = the control's
+full contract height, 38px (44px coarse), padding
+`--wb-space-4` × `--wb-space-12`, font 14px; amended
+2026-11-10, critic fix pass Step 1: the pill is the
+visible control and its wrapping label the native hit
+area, so both carry the contract height — a 30px pill
+inside a 38px fieldset measured as a 30px target):
 
 | Segment state | Fill | Border | Text |
 |---|---|---|---|
@@ -393,6 +407,97 @@ PaletteSelect); icons without text labels; multi-select
 (that is Chip's pressable form or checkboxes, not this);
 a segment label forced onto one line (`nowrap`) — see
 the wrap guarantee above.
+
+## Fields — Select, Input, Field (native form controls)
+
+Purpose: the kit's form controls (added 2026-11-10 under
+critic finding F4). A native `<select>` and a native
+`<input>` under kit chrome, plus the Field labelled
+wrapper. Native semantics underneath, exactly as
+SegmentedControl sits on native radios. The appearance
+idiom (`FIELD_STYLE` / `FIELD_CLASSES` in Fields.tsx)
+is shared with StateControls' generated fields — one
+home, so the generated and hand-built forms never drift.
+
+Props:
+
+```ts
+type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
+  options: { value: string; label: string; disabled?: boolean }[];
+  ariaLabel?: string;
+};
+type InputProps = InputHTMLAttributes<HTMLInputElement> & {
+  ariaLabel?: string;
+};
+type FieldProps = {
+  label: string;
+  labelHidden?: boolean;   // visually hidden label (the
+                           // filter-bar form, where the
+                           // group heading names the field)
+  children: (id: string) => ReactNode;
+};
+```
+
+Appearance matrix (Select and Input share it verbatim):
+
+| State | Fill | Border | Text |
+|---|---|---|---|
+| default | `--wb-surface-2` | 1px `--wb-border-default` | `--wb-content-primary` |
+| focus-visible | `--wb-surface-2` + ring `--wb-focus-ring` | 1px `--wb-border-default` | `--wb-content-primary` |
+| disabled | `--wb-surface-2` at opacity 0.55 | 1px `--wb-border-default` | `--wb-content-primary` |
+
+Height = the Button contract height: min-height 38px,
+44px under a coarse pointer. Radius `--wb-button-radius`;
+padding `--wb-space-12` horizontal; font 14px. Field's
+label renders 12px uppercase `--wb-content-secondary`,
+bound to its control by `htmlFor` with a generated id.
+
+Never: a raw `<select>` / `<input>` in the entries
+section (the primitives lint fails it; its allowlist
+covers document-editing textareas only, each with its
+reason); options as children (options are data — the
+full set, including an explicit placeholder option,
+is stated at the call site); a label that carries
+validation or consequence text (that lives with the
+control's section).
+
+## ArmConfirm — the commit guard
+
+Purpose: a lifecycle commit never fires on a single
+activation (added 2026-11-10 under critic finding F3,
+ruling q2 arm-confirm). The first activation arms the
+control in place: the button takes its confirm label
+and a plain-voice statement of the action, its object,
+and its consequence renders under the control row. The
+second activation commits. Any change to the inputs the
+commit reads (`disarmKey`) disarms it, so the confirmed
+statement always describes the commit that fires. A
+disabled control states its reason beside it in plain
+voice. The behaviour is the primitive, not the paint:
+the guard wraps a kit Button and owns only the arm
+state and the statement.
+
+Props:
+
+```ts
+type ArmConfirmProps = {
+  label: string;          // the resting label, e.g. "Verify"
+  confirmLabel: string;   // the armed label, e.g. "Confirm verify"
+  statement: string;      // action + object + consequence, plain voice
+  variant?: ButtonVariant;
+  disabled?: boolean;
+  disabledReason?: string; // rendered beside a disabled control
+  busy?: boolean;          // a mutation is in flight; clears any arm
+  disarmKey: string;       // everything the commit reads, serialized
+  onConfirm: () => void;
+};
+```
+
+Never: a lifecycle verb firing outside this guard (the
+arm-guard check fails it structurally); a statement that
+names an action without its object or consequence; a
+disabled commit with no stated reason; an arm that
+survives an input change.
 
 ## ModeControl — appearance setting (shell contract)
 
@@ -486,7 +591,10 @@ a SUNKEN preview well holding the mock, an optional
 footer row (the section puts Chip + Badges there).
 Radius `--wb-frame-radius`, fill `--wb-surface-2`,
 1px `--wb-border-default`; well = `--wb-surface-sunken`
-with the viewport label in mono 12px `--wb-content-muted`.
+with the viewport label in mono 12px `--wb-content-secondary`
+(the label names the rendered page's source and kind —
+essential text, never the meta-only muted voice; amended
+2026-11-10 under critic finding F1).
 
 Props:
 
@@ -798,10 +906,10 @@ Appearance matrix (row = one `<button>`, min-height
 
 | State | Fill | Border | Title | Meta |
 |---|---|---|---|---|
-| default | `--wb-surface-2` | 1px `--wb-border-default` | `--wb-content-primary` | `--wb-content-muted` |
-| hover | `--wb-surface-1` | 1px `--wb-border-strong` | `--wb-content-primary` | `--wb-content-muted` |
-| active | `--wb-surface-sunken` | 1px `--wb-border-strong` | `--wb-content-primary` | `--wb-content-muted` |
-| focus-visible | `--wb-surface-2` + ring `--wb-focus-ring` | 1px `--wb-border-default` | `--wb-content-primary` | `--wb-content-muted` |
+| default | `--wb-surface-2` | 1px `--wb-border-default` | `--wb-content-primary` | `--wb-content-secondary` |
+| hover | `--wb-surface-1` | 1px `--wb-border-strong` | `--wb-content-primary` | `--wb-content-secondary` |
+| active | `--wb-surface-sunken` | 1px `--wb-border-strong` | `--wb-content-primary` | `--wb-content-secondary` |
+| focus-visible | `--wb-surface-2` + ring `--wb-focus-ring` | 1px `--wb-border-default` | `--wb-content-primary` | `--wb-content-secondary` |
 
 Never: interactive children inside the row button (chips
 in a row are the inert form; badges are always inert);

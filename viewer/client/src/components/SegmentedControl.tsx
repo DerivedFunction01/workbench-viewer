@@ -25,8 +25,16 @@ export type SegmentedControlProps<V extends string> = {
 // width instead of painting past it. Short labels are
 // unaffected: they still render single-line exactly as
 // before.
+//
+// Target size: the pill is the visible control, and the
+// label wrapping it is the native radio's hit area — both
+// carry the control's full contract height (38px, 44px
+// coarse) so the measured target IS the pill, not a 30px
+// box inside a 38px fieldset (the 2026-11-10 critic's F2
+// leg for this primitive). The fieldset's padding drops to
+// zero so the track hugs the pills at the same height.
 const SEGMENT_CLASSES = [
-  "inline-flex max-w-full min-w-0 min-h-[30px] cursor-pointer items-center rounded-[var(--wb-radius-sm)] border border-transparent px-3 text-sm",
+  "inline-flex min-h-[38px] max-w-full min-w-0 cursor-pointer items-center rounded-[var(--wb-radius-sm)] border border-transparent px-3 text-sm [@media(pointer:coarse)]:min-h-[44px]",
   "text-(--wb-content-secondary) hover:text-(--wb-content-primary)",
   "peer-checked:border-(--wb-border-default) peer-checked:bg-(--wb-surface-2) peer-checked:font-semibold peer-checked:text-(--wb-content-primary)",
   "peer-focus-visible:outline-2 peer-focus-visible:outline-solid peer-focus-visible:outline-offset-1 peer-focus-visible:outline-(--wb-focus-ring)",
@@ -45,7 +53,7 @@ export function SegmentedControl<V extends string>({
   return (
     <fieldset
       className={[
-        "m-0 inline-flex min-h-[38px] flex-wrap items-center gap-1 border-0 p-1 [@media(pointer:coarse)]:min-h-[44px]",
+        "m-0 inline-flex min-h-[38px] flex-wrap items-center gap-1 border-0 p-0 [@media(pointer:coarse)]:min-h-[44px]",
         disabled ? "opacity-55" : "",
         className ?? "",
       ]
@@ -65,7 +73,10 @@ export function SegmentedControl<V extends string>({
     >
       <legend className="sr-only">{ariaLabel}</legend>
       {options.map((opt) => (
-        <label key={opt.value} className="inline-flex max-w-full min-w-0">
+        <label
+          key={opt.value}
+          className="inline-flex min-h-[38px] max-w-full min-w-0 [@media(pointer:coarse)]:min-h-[44px]"
+        >
           <input
             type="radio"
             name={name}

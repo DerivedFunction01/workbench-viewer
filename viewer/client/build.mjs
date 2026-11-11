@@ -8,7 +8,19 @@
 // prove the client compiles offline from a fresh checkout. The
 // builder pipeline remains the only publish path; Subplan 05/08 may
 // swap this shim for the SDK one when the shell lands.
+//
+// The Tailwind plugin is load-bearing, not decoration: without it
+// the stylesheet ships the literal `@tailwind utilities;` directive
+// and NO utility rules — every utility class in the kit (the
+// Button's min-height, the coarse-pointer minimums) silently
+// renders at UA defaults. The canonical build passes the same
+// plugin (bun-plugin-tailwind, the SDK's own dependency); the
+// scaffold matches it so a gate build renders what the published
+// build renders. (Diagnosed 2026-11-10: the entries critic pass
+// measured kit Buttons at 24–26px in harness builds for exactly
+// this reason.)
 import { rm } from "node:fs/promises";
+import tailwindPlugin from "bun-plugin-tailwind";
 
 const ENTRY = "./client/index.html";
 const OUTDIR = "./client/dist";
@@ -21,6 +33,7 @@ await rm(OUTDIR, { force: true, recursive: true });
 const result = await Bun.build({
   entrypoints: [ENTRY],
   outdir: OUTDIR,
+  plugins: [tailwindPlugin],
   // Splitting keeps dynamic imports (mermaid, highlight.js)
   // as separate lazy chunks in the bundle — a page without
   // diagrams never loads the diagram chunk (Subplan 07).
