@@ -31,18 +31,26 @@ the main checkout carries no manifest there, the identity
 registers nothing — never a duplicate, never a phantom.
 Non-git manifest dirs and manifests in a repo subdirectory
 (not a checkout root) keep the historical behavior: the
-directory itself is the project.
+directory itself is the project — unless a git checkout
+claims the same slug in the same sweep (the export
+exclusion below).
 
-Two registration hygiene rules ride on top (2026-11-09):
-scratch never registers — a candidate under a temp root,
-or under a scratch-marked component (dot-directory, tmp /
-scratch name) below its sweep root, is pruned from the
-walk, so test fixtures living in scratch trees inside the
-workspace never appear as live projects; and slugs are
-unique — standalone clones declaring the same slug fold
-into one project (the most recently active root wins,
-the folded roots ride as `also_at`), because slug-keyed
-navigation cannot address two peers.
+Registration hygiene rules ride on top (2026-11-09;
+export exclusion 2026-11-11): scratch never registers —
+a candidate under a temp root, or under a scratch-marked
+component (dot-directory, tmp / scratch name) below its
+sweep root, is pruned from the walk, so test fixtures
+living in scratch trees inside the workspace never appear
+as live projects; slugs are unique — standalone clones
+declaring the same slug fold into one project (the most
+recently active root wins, the folded roots ride as
+`also_at`), because slug-keyed navigation cannot address
+two peers; and a checkout outranks a directory copy of
+itself — a slug claimed by a git identity excludes
+directory-identity claimants of that slug entirely (an
+export copy never registers and never rides as
+`also_at`), while a directory-identity project still
+registers for any slug no checkout claims.
 """
 
 import os
@@ -250,12 +258,19 @@ def _canonicalize(candidates, manifest_name: str,
             groups[key] = []
             order.append(key)
         groups[key].append((manifest, is_main))
+    git_slugs = set()
+    dir_projects = []
     for key in order:
         members = groups[key]
         main = next((m for m, is_main in members if is_main),
                     None)
         if main is not None:
-            result.projects.append(Project(main))
+            project = Project(main)
+            result.projects.append(project)
+            if key[0] == "git":
+                git_slugs.add(project.slug)
+            else:
+                dir_projects.append(project)
             continue
         # Only linked worktrees discovered: the project is
         # their main checkout, if it carries a manifest.
@@ -274,7 +289,24 @@ def _canonicalize(candidates, manifest_name: str,
                 result.errors.append(
                     {"manifest": str(mpath), "error": str(e)})
         else:
-            result.projects.append(Project(manifest))
+            project = Project(manifest)
+            result.projects.append(project)
+            git_slugs.add(project.slug)
+    # Export exclusion: a directory-identity project whose
+    # slug a git identity claims in this same sweep is a
+    # copy of that checkout (an export tree carries the
+    # tracked manifest but is not the project) — drop it
+    # outright, before the fold, so it never registers and
+    # never rides on the checkout's `also_at`.
+    # Directory-identity projects whose slug no checkout
+    # claims are untouched.
+    if dir_projects and git_slugs:
+        excluded = {id(p) for p in dir_projects
+                    if p.slug in git_slugs}
+        if excluded:
+            result.projects[:] = [
+                p for p in result.projects
+                if id(p) not in excluded]
     _fold_duplicate_slugs(result)
 
 

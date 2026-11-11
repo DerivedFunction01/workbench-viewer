@@ -332,6 +332,80 @@ class TestSweepHygiene(unittest.TestCase):
             self.assertIs(by, project)
 
 
+class TestSweepExportExclusion(unittest.TestCase):
+    """Export exclusion (2026-11-11): a directory-identity
+    copy of a project (an export tree carries the tracked
+    manifest but is not a git checkout) never registers
+    when a git checkout claims the same slug in the same
+    sweep — it neither wins the slug nor folds into the
+    checkout's `also_at`. A directory-identity project
+    whose slug no checkout claims registers as before."""
+
+    def _export_copy(self, ws, dirname="proj-export",
+                     slug="proj"):
+        """A plain directory carrying a copy of the
+        project's manifest — the export shape."""
+        return write_project(ws / dirname, "Proj",
+                             extra=f"slug: {slug}\n")
+
+    def test_newer_export_copy_never_wins_over_checkout(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            repo = make_repo(ws / "proj", name="Proj",
+                             slug="proj")
+            export = self._export_copy(ws)
+            old_t = 1_700_000_000
+            new_t = old_t + 10_000
+            # the checkout is the OLDER root, the export
+            # the most recently touched — under the plain
+            # slug fold the export would win the slug
+            os.utime(repo / "workbench.yaml", (old_t, old_t))
+            os.utime(repo / ".git", (old_t, old_t))
+            os.utime(export / "workbench.yaml",
+                     (new_t, new_t))
+            result = sweep([ws])
+            self.assertEqual(result.errors, [])
+            self.assertEqual(len(result.projects), 1)
+            project = result.projects[0]
+            self.assertEqual(project.slug, "proj")
+            self.assertEqual(project.root, repo.resolve())
+            self.assertEqual(project.also_at, [])
+            self.assertIs(result.by_slug("proj"), project)
+
+    def test_older_export_copy_never_folds_into_also_at(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            repo = make_repo(ws / "proj", name="Proj",
+                             slug="proj")
+            export = self._export_copy(ws)
+            old_t = 1_700_000_000
+            new_t = old_t + 10_000
+            # the checkout wins the fold on activity — the
+            # export must still not ride as `also_at`
+            os.utime(export / "workbench.yaml",
+                     (old_t, old_t))
+            os.utime(repo / "workbench.yaml", (new_t, new_t))
+            os.utime(repo / ".git", (new_t, new_t))
+            result = sweep([ws])
+            self.assertEqual(result.errors, [])
+            self.assertEqual(len(result.projects), 1)
+            project = result.projects[0]
+            self.assertEqual(project.root, repo.resolve())
+            self.assertEqual(project.also_at, [])
+
+    def test_directory_only_project_still_registers(self):
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            plain = write_project(ws / "plain", "Plain")
+            result = sweep([ws])
+            self.assertEqual(result.errors, [])
+            self.assertEqual([p.slug for p in result.projects],
+                             ["plain"])
+            self.assertEqual(result.projects[0].root,
+                             plain.resolve())
+            self.assertEqual(result.projects[0].also_at, [])
+
+
 class TestSweepGitBudget(unittest.TestCase):
     """The sweep's aggregate git budget (wedge fix,
     2026-11-10): under a storage stall every git child
