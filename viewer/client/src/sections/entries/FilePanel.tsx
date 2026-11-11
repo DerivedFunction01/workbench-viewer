@@ -44,30 +44,49 @@ export function FilePanel({
         <>
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {files.map((file) => (
-              <li
-                key={file.path}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "var(--wb-space-8)",
-                  padding: "var(--wb-space-4) 0",
-                }}
-              >
-                <Button
-                  variant={selected === file.path ? "secondary" : "ghost"}
+              <li key={file.path}>
+                {/* The row IS the action (F6): a full-width
+                    row button at row height, not a kit
+                    Button squeezed into a list row. The
+                    path and its annotations are the row's
+                    content; the selected row takes the
+                    pressed-row surface. */}
+                <button
+                  type="button"
+                  aria-pressed={selected === file.path}
                   onClick={() => setSelected(file.path)}
+                  className="focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-(--wb-focus-ring)"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--wb-space-8)",
+                    width: "100%",
+                    minHeight: "max(38px, var(--wb-row-height))",
+                    padding: "var(--wb-space-4) var(--wb-space-8)",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    background: selected === file.path ? "var(--wb-surface-1)" : "transparent",
+                    border:
+                      selected === file.path
+                        ? "1px solid var(--wb-border-strong)"
+                        : "1px solid transparent",
+                    borderRadius: "var(--wb-radius-md)",
+                    color: "var(--wb-content-primary)",
+                  }}
                 >
-                  <span className="mono">{file.path}</span>
-                </Button>
-                {file.is_main ? (
-                  <span style={{ color: "var(--wb-content-muted)" }}>main file</span>
-                ) : null}
-                {configPath && file.path === configPath ? (
-                  <span style={{ color: "var(--wb-content-muted)" }}>config</span>
-                ) : null}
-                <span className="num" style={{ color: "var(--wb-content-muted)" }}>
-                  {file.size_bytes} B
-                </span>
+                  <span className="mono" style={{ overflowWrap: "anywhere" }}>
+                    {file.path}
+                  </span>
+                  {file.is_main ? (
+                    <span style={{ color: "var(--wb-content-secondary)" }}>main file</span>
+                  ) : null}
+                  {configPath && file.path === configPath ? (
+                    <span style={{ color: "var(--wb-content-secondary)" }}>config</span>
+                  ) : null}
+                  <span className="num" style={{ color: "var(--wb-content-secondary)" }}>
+                    {file.size_bytes} B
+                  </span>
+                </button>
               </li>
             ))}
           </ul>
@@ -80,7 +99,7 @@ export function FilePanel({
               onMutated={onMutated}
             />
           ) : (
-            <p style={{ color: "var(--wb-content-muted)" }}>
+            <p style={{ color: "var(--wb-content-secondary)" }}>
               Select a file to peek it (content + sha + editability).
             </p>
           )}
@@ -145,14 +164,16 @@ function PeekView({
   return (
     <div style={{ marginTop: "var(--wb-space-12)" }}>
       {peekQuery.isPending ? (
-        <p style={{ color: "var(--wb-content-muted)" }}>Peeking {path}…</p>
+        <p style={{ color: "var(--wb-content-secondary)" }}>Peeking {path}…</p>
       ) : peekEnvelope && peekEnvelope.status !== 200 ? (
         <p role="alert" style={{ color: "var(--wb-danger)" }}>
           {peekEnvelope.error ?? "The file could not be peeked."}
         </p>
       ) : peek ? (
         <>
-          <p style={{ ...monoStyle, color: "var(--wb-content-muted)", overflowWrap: "anywhere" }}>
+          <p
+            style={{ ...monoStyle, color: "var(--wb-content-secondary)", overflowWrap: "anywhere" }}
+          >
             sha256 {peek.sha256 ?? "—"}
             {peek.truncated ? " · truncated at the peek caps" : ""}
             {peek.line_count != null ? ` · ${peek.line_count} lines` : ""}

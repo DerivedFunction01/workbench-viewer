@@ -24,6 +24,7 @@ const PLANS = read("sections/plans/Plans.tsx");
 const PLAN_BODY = read("sections/plans/PlanBody.tsx");
 const MOCKUPS = read("sections/entries/Entries.tsx");
 const DETAIL = read("sections/entries/EntryDetail.tsx");
+const STAGE = read("sections/entries/PreviewStage.tsx");
 
 /** Required anchor sites: [description, source, pattern]. */
 const REQUIRED: [string, string, RegExp][] = [
@@ -42,7 +43,11 @@ const REQUIRED: [string, string, RegExp][] = [
   ["mockups storyboard grid", MOCKUPS, /data-anchor="mockups\/storyboard-grid"/],
   ["mockups contact sheet", MOCKUPS, /data-anchor="mockups\/contact-sheet"/],
   ["entry sheet", DETAIL, /data-anchor="mockups\/entry-sheet"/],
-  ["exhibit stage (Frame)", DETAIL, /anchor="mockups\/exhibit-stage"/],
+  // The stage anchor lives in PreviewStage since the
+  // 2026-11-10 critic pass (F5): the detail's second,
+  // summary frame retired, and with it the duplicate
+  // mockups/exhibit-stage anchor the detail carried.
+  ["exhibit stage (Frame)", STAGE, /anchor="artifacts\/exhibit-stage"/],
   ["disposition card", DETAIL, /anchor="mockups\/disposition"/],
   ["metadata card", DETAIL, /anchor="mockups\/metadata-card"/],
   ["state card / controls", DETAIL, /anchor="mockups\/state-card"/],

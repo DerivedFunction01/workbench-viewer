@@ -21,11 +21,9 @@
 // Composition only (2026-11-05 follow-up split):
 // useEntryDetail + Disposition + useEntryAnnotations.
 
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
-import { Frame } from "../../components/Frame";
-import { SegmentedControl } from "../../components/SegmentedControl";
 import { useIsPhone } from "../../lib/responsive";
 import { AnnotationList, AnnotationThreadCard, SelectionTintStyle } from "./Annotations";
 import { useDisposition } from "./Disposition";
@@ -53,12 +51,6 @@ export function EntryDetail({
   onMutated: () => void;
 }) {
   const isPhone = useIsPhone();
-  const [frameMode, setFrameMode] = useState<"light" | "dark">("light");
-  const [palette, setPalette] = useState("olive");
-
-  useEffect(() => {
-    setPalette(document.documentElement.getAttribute("data-palette") ?? "olive");
-  }, []);
 
   const {
     detailQuery,
@@ -83,7 +75,7 @@ export function EntryDetail({
   if (detailQuery.isPending && !entry) {
     return (
       <section data-anchor="mockups/entry-sheet">
-        <p style={{ color: "var(--wb-content-muted)" }}>Loading {entryId}…</p>
+        <p style={{ color: "var(--wb-content-secondary)" }}>Loading {entryId}…</p>
       </section>
     );
   }
@@ -183,30 +175,31 @@ export function EntryDetail({
       >
         <div style={isPhone ? { minWidth: 0 } : { position: "sticky", top: "var(--wb-space-16)" }}>
           <PreviewStage slug={slug} entry={entry} />
-          <div data-palette={palette} data-mode={frameMode}>
-            <Frame
-              anchor="mockups/exhibit-stage"
-              title={entry.title}
-              viewportLabel={`${entry.source_kind} · ${frameMode}`}
-              archived={entry.archived}
-              headerActions={
-                <SegmentedControl
-                  options={[
-                    { value: "light", label: "Light" },
-                    { value: "dark", label: "Dark" },
-                  ]}
-                  value={frameMode}
-                  onChange={setFrameMode}
-                  ariaLabel="Preview mode"
-                />
-              }
-              footer={
-                <EntryBadges derived={derived} approval={approval} needsChanges={needsChanges} />
-              }
+          {/* The recorded state, ungrouped (F5, ruling q3
+              retitle-and-ungroup): the stage above IS the
+              preview — the rendered page in its own frame,
+              titled with the entry's title. The recorded
+              state is not a second preview of the entry and
+              does not wear its title or a frame of its own;
+              it is a headed record under the stage. The
+              section stays inside the annotation scope —
+              the machinery selects into this surface. */}
+          <section aria-label="Recorded state" style={{ marginTop: "var(--wb-space-16)" }}>
+            <h3
+              style={{
+                fontSize: "var(--wb-font-size-xs)",
+                lineHeight: "var(--wb-line-height-xs)",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: "var(--wb-content-secondary)",
+                margin: "0 0 var(--wb-space-8)",
+              }}
             >
-              <PreviewSummary entry={entry} />
-            </Frame>
-          </div>
+              Recorded state
+            </h3>
+            <PreviewSummary entry={entry} />
+          </section>
 
           {selected ? (
             <SelectionComposer
