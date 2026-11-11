@@ -52,7 +52,7 @@ export function Frame({
         {viewportLabel ? (
           <span
             className="mono absolute top-2 right-2 text-xs"
-            style={{ color: "var(--wb-content-muted)" }}
+            style={{ color: "var(--wb-content-secondary)" }}
           >
             {viewportLabel}
           </span>

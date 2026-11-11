@@ -76,7 +76,7 @@ What never varies by palette:
 | `--wb-surface-sunken` | `#e4e5d3` | `#12140c` | Preview wells, lane recess, code blocks |
 | `--wb-content-primary` | `#22251a` | `#eceeda` | Body text (14.5:1 / 14.2:1 on surface-1) |
 | `--wb-content-secondary` | `#5c604e` | `#a9ad97` | Meta, labels (6.0:1 / 7.3:1) |
-| `--wb-content-muted` | `#83876f` | `#82856f` | Timestamps, hints — meta only, never essential content alone (3.4:1 / 4.4:1) |
+| `--wb-content-muted` | `#83876f` | `#82856f` | Contract-pinned meta only (the annotation mockup's draft/archived word, the empty-state detail line) — never essential content alone (3.4:1 / 4.4:1 on surface-1; the widened contrast checker is fatal only for the essential voices — primary/secondary/status text at 4.5:1 — and for muted it reports every pair's measured ratio, enforcing only the documented 3.4:1 surface-1 minimum; the light-mode sunken pairs (2.91:1 / 2.96:1) are recorded as measured ratios with no claimed minimum, report-only) |
 | `--wb-border-default` | `#c9cbb4` | `#3a3e2e` | Hairlines, card borders |
 | `--wb-border-strong` | `#a9ac8f` | `#4c5138` | Hover borders, dividers that must read |
 | `--wb-accent` | `#4b5320` | `#9db45c` | Interactive accent: links, selected, primary buttons |

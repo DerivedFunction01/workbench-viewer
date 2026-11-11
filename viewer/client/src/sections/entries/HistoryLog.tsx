@@ -46,7 +46,7 @@ export function ReviewLog({ history }: { history: HistoryRow[] }) {
                 <span style={{ fontWeight: 600 }}>
                   {DISPOSITION_WORDS[disposition] ?? disposition}
                 </span>{" "}
-                <span style={{ color: "var(--wb-content-muted)" }}>
+                <span style={{ color: "var(--wb-content-secondary)" }}>
                   {row.actor} · {formatDateTime(row.ts)}
                 </span>
                 {payload?.comment ? (
@@ -59,7 +59,7 @@ export function ReviewLog({ history }: { history: HistoryRow[] }) {
                     className="mono"
                     style={{
                       margin: "var(--wb-space-4) 0 0",
-                      color: "var(--wb-content-muted)",
+                      color: "var(--wb-content-secondary)",
                       fontSize: "var(--wb-font-size-xs)",
                     }}
                   >
@@ -98,7 +98,7 @@ export function HistoryList({ history }: { history: HistoryRow[] }) {
                   {row.field}
                 </span>
               ) : null}{" "}
-              <span style={{ color: "var(--wb-content-muted)" }}>
+              <span style={{ color: "var(--wb-content-secondary)" }}>
                 {row.actor} · {formatDateTime(row.ts)}
               </span>
               {row.old != null || row.new != null ? (
@@ -106,7 +106,7 @@ export function HistoryList({ history }: { history: HistoryRow[] }) {
                   className="mono"
                   style={{
                     display: "block",
-                    color: "var(--wb-content-muted)",
+                    color: "var(--wb-content-secondary)",
                     fontSize: "var(--wb-font-size-xs)",
                     overflowWrap: "anywhere",
                   }}

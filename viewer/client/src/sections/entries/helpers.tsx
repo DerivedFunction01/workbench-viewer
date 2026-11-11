@@ -19,7 +19,9 @@ export function isRuledStatus(value: string): value is RuledStatusName {
 }
 
 export function EntryChip({ entry }: { entry: FullEntry }) {
-  if (!isRuledStatus(entry.status)) return <span>{entry.status}</span>;
+  // A status outside the ruled vocabulary still gets unit
+  // chrome: the honest derived badge, never bare text (F9).
+  if (!isRuledStatus(entry.status)) return <Badge kind="in-triage" text={entry.status} />;
   return <Chip status={entry.status as RuledStatus} gate={entry.gate ?? undefined} />;
 }
 
@@ -144,7 +146,7 @@ export function PreviewSummary({
         <ul style={{ listStyle: "none", margin: "var(--wb-space-8) 0 0", padding: 0 }}>
           {keys.map((key) => (
             <li key={key} style={{ overflowWrap: "anywhere" }}>
-              <span className="mono" style={{ color: "var(--wb-content-muted)" }}>
+              <span className="mono" style={{ color: "var(--wb-content-secondary)" }}>
                 {key}
               </span>{" "}
               {String(shown[key])}
@@ -152,12 +154,12 @@ export function PreviewSummary({
           ))}
         </ul>
       ) : (
-        <p style={{ margin: "var(--wb-space-8) 0 0", color: "var(--wb-content-muted)" }}>
+        <p style={{ margin: "var(--wb-space-8) 0 0", color: "var(--wb-content-secondary)" }}>
           No internal state recorded for this entry.
         </p>
       )}
       {entry.source_kind !== "entry-dir" ? (
-        <p style={{ margin: "var(--wb-space-8) 0 0", color: "var(--wb-content-muted)" }}>
+        <p style={{ margin: "var(--wb-space-8) 0 0", color: "var(--wb-content-secondary)" }}>
           Preview unavailable — this entry is held by reference ({entry.source_kind}); its files
           live outside the harness.
         </p>

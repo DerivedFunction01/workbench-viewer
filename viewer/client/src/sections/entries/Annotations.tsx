@@ -366,7 +366,7 @@ export function AnnotationComposer({
           {selection.kind === "component" ? (
             <span
               className="mono"
-              style={{ fontSize: "var(--wb-font-size-xs)", color: "var(--wb-content-muted)" }}
+              style={{ fontSize: "var(--wb-font-size-xs)", color: "var(--wb-content-secondary)" }}
             >
               anchor · {selection.component_label ?? selection.component_id}
             </span>
@@ -468,7 +468,7 @@ export function AnnotationThreadCard({
       >
         <AuthorAvatar author={root.author} />
         <span style={{ fontWeight: 600 }}>{authorLabelOf(root.author)}</span>
-        <span style={{ color: "var(--wb-content-muted)", fontSize: "var(--wb-font-size-xs)" }}>
+        <span style={{ color: "var(--wb-content-secondary)", fontSize: "var(--wb-font-size-xs)" }}>
           {formatRelative(root.created_at)}
         </span>
       </div>
@@ -480,7 +480,7 @@ export function AnnotationThreadCard({
               fontWeight: 600,
               letterSpacing: "0.04em",
               textTransform: "uppercase",
-              color: "var(--wb-content-muted)",
+              color: "var(--wb-content-secondary)",
             }}
           >
             Anchor moved
@@ -521,7 +521,9 @@ export function AnnotationThreadCard({
             <span style={{ fontWeight: 600, fontSize: "var(--wb-font-size-sm)" }}>
               {authorLabelOf(reply.author)}
             </span>
-            <span style={{ color: "var(--wb-content-muted)", fontSize: "var(--wb-font-size-xs)" }}>
+            <span
+              style={{ color: "var(--wb-content-secondary)", fontSize: "var(--wb-font-size-xs)" }}
+            >
               {formatRelative(reply.created_at)}
             </span>
           </div>
@@ -540,7 +542,7 @@ export function AnnotationThreadCard({
         {sel?.kind === "component" ? (
           <span
             className="mono"
-            style={{ fontSize: "var(--wb-font-size-xs)", color: "var(--wb-content-muted)" }}
+            style={{ fontSize: "var(--wb-font-size-xs)", color: "var(--wb-content-secondary)" }}
           >
             anchor · {sel.component_label ?? sel.component_id}
           </span>
@@ -628,7 +630,7 @@ export function AnnotationList({
                 {sel?.kind === "text" ? (
                   <span
                     style={{
-                      color: "var(--wb-content-muted)",
+                      color: "var(--wb-content-secondary)",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",

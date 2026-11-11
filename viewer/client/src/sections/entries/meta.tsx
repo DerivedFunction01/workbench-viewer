@@ -7,7 +7,7 @@ import { kindLabel, ruledStatusLabel } from "../../lib/labels";
 import type { DerivedStaleness, FullEntry } from "./types";
 
 export const labelStyle: React.CSSProperties = {
-  color: "var(--wb-content-muted)",
+  color: "var(--wb-content-secondary)",
   fontSize: "var(--wb-font-size-xs)",
   lineHeight: "var(--wb-line-height-xs)",
   textTransform: "uppercase",

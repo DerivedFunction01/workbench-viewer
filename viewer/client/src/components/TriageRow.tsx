@@ -58,7 +58,18 @@ export function TriageRow({ title, meta, leading, badges, onOpen, className }: T
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{title}</span>
         {meta ? (
-          <span className="block truncate text-xs" style={{ color: "var(--wb-content-muted)" }}>
+          // The meta line is the entry's triage reason — why
+          // it needs a ruling. That is essential content, so
+          // it wears the secondary voice (the meta-only
+          // muted voice never carries it, F1). Title and
+          // reason wrap inside the row's own column: at
+          // desktop widths eliding the reason into the
+          // title made the two run together (F10); the row
+          // grows instead of hiding the reason.
+          <span
+            className="block text-xs"
+            style={{ color: "var(--wb-content-secondary)", overflowWrap: "anywhere" }}
+          >
             {meta}
           </span>
         ) : null}

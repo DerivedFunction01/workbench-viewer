@@ -63,11 +63,11 @@ export function PreviewStage({ slug, entry }: { slug: string; entry: FullEntry }
       archived={entry.archived}
     >
       {mainFile == null ? (
-        <p style={{ margin: 0, color: "var(--wb-content-muted)" }}>
+        <p style={{ margin: 0, color: "var(--wb-content-secondary)" }}>
           Page unavailable — this item is held by reference; its files live outside the harness.
         </p>
       ) : pageQuery.isPending ? (
-        <p style={{ margin: 0, color: "var(--wb-content-muted)" }}>Loading page…</p>
+        <p style={{ margin: 0, color: "var(--wb-content-secondary)" }}>Loading page…</p>
       ) : pageError ? (
         <p role="alert" style={{ margin: 0, color: "var(--wb-danger)" }}>
           {pageError}
