@@ -2,8 +2,10 @@
 // archive, and supersede actions for one entry.
 
 import type { Dispatch, SetStateAction } from "react";
-import { Button } from "../../components/Button";
+import { ArmConfirm } from "../../components/ArmConfirm";
 import { Card } from "../../components/Card";
+import { Field, Input, Select } from "../../components/Fields";
+import { Toggle } from "../../components/Toggle";
 import { ruledStatusLabel } from "../../lib/labels";
 import { labelStyle } from "./meta";
 import type { DerivedStaleness, FullEntry } from "./types";
@@ -46,78 +48,55 @@ export function LifecycleCard({
 }) {
   return (
     <Card title="Lifecycle" anchor="mockups/lifecycle-card">
-      <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
-        <span style={labelStyle}>Set status</span>
-        <select
-          aria-label="New status"
-          value={statusChoice}
-          onChange={(event) => setStatusChoice(event.target.value)}
-          style={{
-            display: "block",
-            width: "100%",
-            minHeight: "38px",
-            marginTop: "var(--wb-space-4)",
-            background: "var(--wb-surface-2)",
-            color: "var(--wb-content-primary)",
-            border: "1px solid var(--wb-border-default)",
-            borderRadius: "var(--wb-button-radius)",
-            padding: "0 var(--wb-space-8)",
-          }}
-        >
-          {RULED_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {ruledStatusLabel(status)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
-        <span style={labelStyle}>Ruling note (required for Canonical and Hard gate)</span>
-        <input
-          aria-label="Ruling note"
-          type="text"
-          value={ruling}
-          onChange={(event) => setRuling(event.target.value)}
-          style={{
-            display: "block",
-            width: "100%",
-            minHeight: "38px",
-            marginTop: "var(--wb-space-4)",
-            background: "var(--wb-surface-2)",
-            color: "var(--wb-content-primary)",
-            border: "1px solid var(--wb-border-default)",
-            borderRadius: "var(--wb-button-radius)",
-            padding: "0 var(--wb-space-8)",
-          }}
-        />
-      </label>
-      {statusChoice === "hard-gate" ? (
-        <label style={{ display: "block", marginBottom: "var(--wb-space-8)" }}>
-          <span style={labelStyle}>Gate name</span>
-          <input
-            aria-label="Gate name"
-            type="text"
-            value={gate}
-            onChange={(event) => setGate(event.target.value)}
-            style={{
-              display: "block",
-              width: "100%",
-              minHeight: "38px",
-              marginTop: "var(--wb-space-4)",
-              background: "var(--wb-surface-2)",
-              color: "var(--wb-content-primary)",
-              border: "1px solid var(--wb-border-default)",
-              borderRadius: "var(--wb-button-radius)",
-              padding: "0 var(--wb-space-8)",
-            }}
+      <Field label="Set status" style={{ marginBottom: "var(--wb-space-8)" }}>
+        {(id) => (
+          <Select
+            id={id}
+            value={statusChoice}
+            onChange={(event) => setStatusChoice(event.target.value)}
+            style={{ display: "block", width: "100%" }}
+            options={RULED_STATUSES.map((status) => ({
+              value: status,
+              label: ruledStatusLabel(status),
+            }))}
           />
-        </label>
+        )}
+      </Field>
+      <Field
+        label="Ruling note (required for Canonical and Hard gate)"
+        style={{ marginBottom: "var(--wb-space-8)" }}
+      >
+        {(id) => (
+          <Input
+            id={id}
+            type="text"
+            value={ruling}
+            onChange={(event) => setRuling(event.target.value)}
+            style={{ display: "block", width: "100%" }}
+          />
+        )}
+      </Field>
+      {statusChoice === "hard-gate" ? (
+        <Field label="Gate name" style={{ marginBottom: "var(--wb-space-8)" }}>
+          {(id) => (
+            <Input
+              id={id}
+              type="text"
+              value={gate}
+              onChange={(event) => setGate(event.target.value)}
+              style={{ display: "block", width: "100%" }}
+            />
+          )}
+        </Field>
       ) : null}
       <div style={{ display: "flex", gap: "var(--wb-space-8)", flexWrap: "wrap" }}>
-        <Button
-          variant="secondary"
-          disabled={busy}
-          onClick={() =>
+        <ArmConfirm
+          label="Set status"
+          confirmLabel="Confirm status change"
+          statement={`Sets the status of “${entry.title}” to ${ruledStatusLabel(statusChoice)}. The ruling is recorded in the entry's history.`}
+          busy={busy}
+          disarmKey={`${statusChoice}|${ruling}|${gate}|${entry.version}`}
+          onConfirm={() =>
             runAction({
               verb: "set-status",
               status: statusChoice,
@@ -126,80 +105,63 @@ export function LifecycleCard({
               expect_version: entry.version,
             })
           }
-        >
-          Set status
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={busy}
-          onClick={() => runAction({ verb: "verify", accept_drift: acceptDrift })}
-        >
-          Verify
-        </Button>
+        />
+        <ArmConfirm
+          label="Verify"
+          confirmLabel="Confirm verify"
+          statement={`Records “${entry.title}” as verified at its current content${
+            acceptDrift ? ", accepting the drift since the last verify" : ""
+          }.`}
+          busy={busy}
+          disarmKey={`${acceptDrift}|${entry.version}`}
+          onConfirm={() => runAction({ verb: "verify", accept_drift: acceptDrift })}
+        />
         {entry.archived ? (
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() => runAction({ verb: "unarchive" })}
-          >
-            Unarchive
-          </Button>
+          <ArmConfirm
+            label="Unarchive"
+            confirmLabel="Confirm unarchive"
+            statement={`Returns “${entry.title}” to the active entries.`}
+            busy={busy}
+            disarmKey={`unarchive|${entry.version}`}
+            onConfirm={() => runAction({ verb: "unarchive" })}
+          />
         ) : (
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() => runAction({ verb: "archive" })}
-          >
-            Archive
-          </Button>
+          <ArmConfirm
+            label="Archive"
+            confirmLabel="Confirm archive"
+            statement={`Archives “${entry.title}”. It leaves the active lists and stays readable in the archive.`}
+            busy={busy}
+            disarmKey={`archive|${entry.version}`}
+            onConfirm={() => runAction({ verb: "archive" })}
+          />
         )}
       </div>
       {derived?.drift ? (
-        <label
-          style={{
-            display: "flex",
-            gap: "var(--wb-space-8)",
-            alignItems: "center",
-            marginTop: "var(--wb-space-8)",
-          }}
-        >
-          <input
-            type="checkbox"
+        <div style={{ marginTop: "var(--wb-space-8)" }}>
+          <Toggle
             checked={acceptDrift}
-            onChange={(event) => setAcceptDrift(event.target.checked)}
+            onChange={setAcceptDrift}
+            label="Accept drift on verify (the file changed since the last verify)"
           />
-          <span>Accept drift on verify (the file changed since the last verify)</span>
-        </label>
+        </div>
       ) : null}
       <div style={{ marginTop: "var(--wb-space-12)" }}>
         <span style={labelStyle}>Supersede with</span>
         {supersedeCandidates.length > 0 ? (
           <>
-            <select
-              aria-label="Superseding entry"
+            <Select
+              ariaLabel="Superseding entry"
               value={supersedeTarget}
               onChange={(event) => setSupersedeTarget(event.target.value)}
-              style={{
-                display: "block",
-                width: "100%",
-                minHeight: "38px",
-                marginTop: "var(--wb-space-4)",
-                background: "var(--wb-surface-2)",
-                color: "var(--wb-content-primary)",
-                border: "1px solid var(--wb-border-default)",
-                borderRadius: "var(--wb-button-radius)",
-                padding: "0 var(--wb-space-8)",
-              }}
-            >
-              <option value="" disabled>
-                Choose the superseding entry…
-              </option>
-              {supersedeCandidates.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidateLabel(candidate)}
-                </option>
-              ))}
-            </select>
+              style={{ display: "block", width: "100%", marginTop: "var(--wb-space-4)" }}
+              options={[
+                { value: "", label: "Choose the superseding entry…", disabled: true },
+                ...supersedeCandidates.map((candidate) => ({
+                  value: candidate.id,
+                  label: candidateLabel(candidate),
+                })),
+              ]}
+            />
             <div
               style={{
                 display: "flex",
@@ -208,23 +170,30 @@ export function LifecycleCard({
                 marginTop: "var(--wb-space-8)",
               }}
             >
-              <Button
+              <ArmConfirm
+                label="Supersede"
+                confirmLabel="Confirm supersede"
                 variant="danger"
-                disabled={busy || supersedeTarget.trim() === ""}
-                onClick={() =>
+                statement={`Marks “${entry.title}” as superseded by “${
+                  supersedeCandidates.find((c) => c.id === supersedeTarget.trim())?.title ??
+                  supersedeTarget.trim()
+                }”. The entry keeps its record; its status becomes Superseded.`}
+                disabled={supersedeTarget.trim() === ""}
+                disabledReason="Choose the superseding entry first."
+                busy={busy}
+                disarmKey={`${supersedeTarget}|${ruling}|${entry.version}`}
+                onConfirm={() =>
                   runAction({
                     verb: "supersede",
                     new_id: supersedeTarget.trim(),
                     ruling: ruling.trim() ? ruling.trim() : undefined,
                   })
                 }
-              >
-                Supersede
-              </Button>
+              />
             </div>
           </>
         ) : (
-          <p style={{ margin: "var(--wb-space-4) 0 0", color: "var(--wb-content-muted)" }}>
+          <p style={{ margin: "var(--wb-space-4) 0 0", color: "var(--wb-content-secondary)" }}>
             No other entries in this project to supersede with.
           </p>
         )}

@@ -15,9 +15,10 @@
 // render — an invalid schema yields honest error rows, never a
 // crash, and valid fields still render.
 // Contract: context/component-contracts.md#statecontrols.
-import { type CSSProperties, type ReactNode, useId } from "react";
+import { type ReactNode, useId } from "react";
 import { useIsPhone } from "../lib/responsive";
 import { Button } from "./Button";
+import { FIELD_CLASSES, FIELD_STYLE } from "./Fields";
 import { SegmentedControl } from "./SegmentedControl";
 import { Toggle } from "./Toggle";
 
@@ -124,17 +125,11 @@ function asSpec(raw: unknown): FieldSpec {
   return raw as FieldSpec;
 }
 
-const INPUT_STYLE: CSSProperties = {
-  backgroundColor: "var(--wb-surface-2)",
-  color: "var(--wb-content-primary)",
-  borderColor: "var(--wb-border-default)",
-  borderStyle: "solid",
-  borderWidth: 1,
-  borderRadius: "var(--wb-button-radius)",
-};
-
-const INPUT_CLASSES =
-  "min-h-[38px] px-3 text-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-1 focus-visible:outline-(--wb-focus-ring) disabled:cursor-not-allowed disabled:opacity-55 [@media(pointer:coarse)]:min-h-[44px]";
+// The field appearance idiom lives in Fields.tsx (one
+// kit home, F4 of the 2026-11-10 critic pass); the
+// generated controls here consume it unchanged.
+const INPUT_STYLE = FIELD_STYLE;
+const INPUT_CLASSES = FIELD_CLASSES;
 
 /** Option rows for a select QUESTION field — the decision
  * block's control. One full-width row per option carrying,
