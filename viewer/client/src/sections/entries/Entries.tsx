@@ -18,6 +18,7 @@ import { Button } from "../../components/Button";
 import { Chip } from "../../components/Chip";
 import { DegradedBanner as KitDegradedBanner } from "../../components/DegradedBanner";
 import { EmptyState } from "../../components/EmptyState";
+import { Field, Input, Select } from "../../components/Fields";
 import { Frame } from "../../components/Frame";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { Toggle } from "../../components/Toggle";
@@ -250,115 +251,139 @@ export function EntriesSection({
             )}
           </div>
 
+          {/* The filter bar, grouped (F7): each group is a
+              labelled fieldset — Status, View, Show, Kind,
+              Search — so the bar reads as five named
+              controls instead of one ungrouped wrap row.
+              Group labels use the section heading style. */}
           <div
             style={{
               display: "flex",
               flexWrap: "wrap",
-              gap: "var(--wb-space-12)",
-              alignItems: "center",
+              gap: "var(--wb-space-16)",
+              alignItems: "flex-start",
               marginBottom: "var(--wb-space-16)",
             }}
           >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--wb-space-4)" }}>
-              {RULED_STATUSES.map((status) =>
-                isRuledStatus(status) ? (
-                  <Chip
-                    key={status}
-                    status={status}
-                    pressed={filters.statuses.has(status)}
-                    onPress={() => toggleStatus(status)}
-                  />
-                ) : null,
-              )}
-            </div>
-            <SegmentedControl
-              options={[
-                { value: "storyboard", label: "Storyboard" },
-                { value: "contact-sheet", label: "Contact sheet" },
-              ]}
-              value={viewMode}
-              onChange={setViewMode}
-              ariaLabel="View mode"
-            />
-            <SegmentedControl
-              options={[
-                { value: "recent", label: "Recently changed" },
-                { value: "unverified", label: "Oldest unverified" },
-                { value: "title", label: "Title" },
-              ]}
-              value={filters.sort}
-              onChange={(sort) => setFilters((prev) => ({ ...prev, sort }))}
-              ariaLabel="Sort entries"
-            />
-            <Toggle
-              checked={filters.triageOnly}
-              onChange={(checked) => setFilters((prev) => ({ ...prev, triageOnly: checked }))}
-              label="Triage only"
-            />
-            <Toggle
-              checked={filters.staleOnly}
-              onChange={(checked) => setFilters((prev) => ({ ...prev, staleOnly: checked }))}
-              label="Stale only"
-            />
-            <Toggle checked={showArchived} onChange={setShowArchived} label="Show archived" />
-            <label>
-              <span className="sr-only">Kind</span>
-              <select
-                aria-label="Kind"
-                value={filters.kind}
-                onChange={(event) => setFilters((prev) => ({ ...prev, kind: event.target.value }))}
+            <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+              <legend style={headingStyle}>Status</legend>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--wb-space-4)" }}>
+                {RULED_STATUSES.map((status) =>
+                  isRuledStatus(status) ? (
+                    <Chip
+                      key={status}
+                      status={status}
+                      pressed={filters.statuses.has(status)}
+                      onPress={() => toggleStatus(status)}
+                    />
+                  ) : null,
+                )}
+              </div>
+            </fieldset>
+            <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+              <legend style={headingStyle}>View</legend>
+              <div
                 style={{
-                  minHeight: "38px",
-                  background: "var(--wb-surface-2)",
-                  color: "var(--wb-content-primary)",
-                  border: "1px solid var(--wb-border-default)",
-                  borderRadius: "var(--wb-button-radius)",
-                  padding: "0 var(--wb-space-8)",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "var(--wb-space-12)",
+                  alignItems: "center",
                 }}
               >
-                <option value="">All kinds</option>
-                {kindsPresent.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {kindLabel(kind)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Search entries</span>
-              <input
-                type="search"
-                aria-label="Search entries"
-                placeholder="Search title, id, source…"
-                value={filters.search}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, search: event.target.value }))
-                }
+                <SegmentedControl
+                  options={[
+                    { value: "storyboard", label: "Storyboard" },
+                    { value: "contact-sheet", label: "Contact sheet" },
+                  ]}
+                  value={viewMode}
+                  onChange={setViewMode}
+                  ariaLabel="View mode"
+                />
+                <SegmentedControl
+                  options={[
+                    { value: "recent", label: "Recently changed" },
+                    { value: "unverified", label: "Oldest unverified" },
+                    { value: "title", label: "Title" },
+                  ]}
+                  value={filters.sort}
+                  onChange={(sort) => setFilters((prev) => ({ ...prev, sort }))}
+                  ariaLabel="Sort entries"
+                />
+              </div>
+            </fieldset>
+            <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+              <legend style={headingStyle}>Show</legend>
+              <div
                 style={{
-                  minHeight: "38px",
-                  background: "var(--wb-surface-2)",
-                  color: "var(--wb-content-primary)",
-                  border: "1px solid var(--wb-border-default)",
-                  borderRadius: "var(--wb-button-radius)",
-                  padding: "0 var(--wb-space-8)",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "var(--wb-space-12)",
+                  alignItems: "center",
                 }}
-              />
-            </label>
+              >
+                <Toggle
+                  checked={filters.triageOnly}
+                  onChange={(checked) => setFilters((prev) => ({ ...prev, triageOnly: checked }))}
+                  label="Triage only"
+                />
+                <Toggle
+                  checked={filters.staleOnly}
+                  onChange={(checked) => setFilters((prev) => ({ ...prev, staleOnly: checked }))}
+                  label="Stale only"
+                />
+                <Toggle checked={showArchived} onChange={setShowArchived} label="Show archived" />
+              </div>
+            </fieldset>
+            <Field label="Kind">
+              {(id) => (
+                <Select
+                  id={id}
+                  value={filters.kind}
+                  onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, kind: event.target.value }))
+                  }
+                  options={[
+                    { value: "", label: "All kinds" },
+                    ...kindsPresent.map((kind) => ({ value: kind, label: kindLabel(kind) })),
+                  ]}
+                />
+              )}
+            </Field>
+            <Field label="Search entries">
+              {(id) => (
+                <Input
+                  id={id}
+                  type="search"
+                  placeholder="Search title, id, source…"
+                  value={filters.search}
+                  onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, search: event.target.value }))
+                  }
+                />
+              )}
+            </Field>
           </div>
 
-          <p style={{ color: "var(--wb-content-secondary)" }}>
-            <span className="num">{visible.length}</span> of{" "}
-            <span className="num">{allEntries.length}</span> entries
-            {showArchived ? " (archive included)" : ""}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--wb-space-12)",
+              flexWrap: "wrap",
+              marginBottom: "var(--wb-space-16)",
+            }}
+          >
+            <p style={{ color: "var(--wb-content-secondary)", margin: 0 }}>
+              <span className="num">{visible.length}</span> of{" "}
+              <span className="num">{allEntries.length}</span> entries
+              {showArchived ? " (archive included)" : ""}
+            </p>
             {filtersActive ? (
-              <>
-                {" · "}
-                <Button variant="ghost" onClick={() => setFilters(DEFAULT_FILTERS)}>
-                  Clear filters
-                </Button>
-              </>
+              <Button variant="ghost" onClick={() => setFilters(DEFAULT_FILTERS)}>
+                Clear filters
+              </Button>
             ) : null}
-          </p>
+          </div>
 
           {visible.length === 0 ? (
             <EmptyState message="No entries match these filters" />
@@ -429,7 +454,7 @@ export function EntriesSection({
                     }}
                   >
                     {entry.title} <EntryChip entry={entry} />
-                    <span style={{ color: "var(--wb-content-muted)", fontWeight: 400 }}>
+                    <span style={{ color: "var(--wb-content-secondary)", fontWeight: 400 }}>
                       {ruledStatusLabel(entry.status)} · featured states are state variations of
                       this one entry
                     </span>
