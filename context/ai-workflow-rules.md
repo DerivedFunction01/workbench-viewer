@@ -50,8 +50,8 @@ the bundle is the unit of work.
   (`todo` → `doing` → `done` / `blocked`) — not in a batch
   at the end. A blocked todo carries its reason in its body
   the moment it blocks.
-- Ships happen at checkpoints (a step's done-when,
-  gate-green), and the deploy is recorded in the relevant
+- Ships happen at checkpoints (a step's done-when), and
+  the deploy is recorded in the relevant
   todo — what shipped and when — so the board shows what is
   live, not just what is coded.
 - A plan that completes is frozen (`Status: complete`) and

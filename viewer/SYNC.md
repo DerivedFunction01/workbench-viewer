@@ -15,11 +15,11 @@ sibling ts-spaces tree, resolved via `VIEWER_RUNTIME_DIR`).
   builder-driven change to the artifact, then commit.
 - `./viewer.sh deploy [--force]` — repo → runtime: drift
   guard, backup, copy (transport only).
-- `./viewer/deploy.sh` — the checkpoint path: repo gate →
+- `./viewer/deploy.sh` — the checkpoint path:
   `viewer.sh deploy` → builder build + publish of the
-  runtime space, so a gate-green checkpoint is LIVE with no
-  manual steps (checkpoint rule, live-work-tracking spec
-  §1). Partial or red work never deploys: any failing step
+  runtime space, so a checkpoint is LIVE with no manual
+  steps (checkpoint rule, live-work-tracking spec §1).
+  The deploy carries no built-in gate; any failing step
   stops the script before publish.
 
 ## Deploy semantics

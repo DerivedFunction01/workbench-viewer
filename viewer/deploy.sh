@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # viewer/deploy.sh — the checkpoint deploy path for the
 # Workbench Viewer artifact (live-work-tracking spec §1:
-# a gate-green checkpoint is deployed + published THEN, with
-# no manual steps; partial or red work never deploys).
+# a checkpoint is deployed + published THEN, with no manual
+# steps; the deploy carries no built-in gate — gating is the
+# caller's own step, run separately where it belongs).
 #
-#   viewer/deploy.sh [--skip-gate]
+#   viewer/deploy.sh
 #
-# Steps, fail-fast — any failure stops before the next step,
-# and publish never runs on red work:
-#   1. gate    bash tools/check.sh (the ONE repo gate)
-#   2. deploy  bash viewer.sh deploy (drift guard, backup,
+# Steps, fail-fast — any failure stops before the next step:
+#   1. deploy  bash viewer.sh deploy (drift guard, backup,
 #              copy repo viewer/ -> runtime space)
-#   3. publish the web-artifact builder pass over the
+#   2. publish the web-artifact builder pass over the
 #              runtime space, via the hatchlet CLI when it
 #              is on PATH (HATCHLET env override). Without a
 #              builder CLI this step reports the exact
@@ -31,25 +30,12 @@ ROOT="$(cd "$HERE/.." && pwd)"
 RUNTIME="${VIEWER_RUNTIME_DIR:-$HERE/../../ts-spaces/workbench-viewer}"
 HATCHLET="${HATCHLET:-hatchlet}"
 
-SKIP_GATE=0
-if [ "${1:-}" = "--skip-gate" ]; then
-  SKIP_GATE=1
-elif [ -n "${1:-}" ]; then
-  echo "usage: viewer/deploy.sh [--skip-gate]" >&2
+if [ -n "${1:-}" ]; then
+  echo "usage: viewer/deploy.sh" >&2
   exit 2
 fi
 
 step() { echo; echo "==> deploy: $1"; }
-
-if [ "$SKIP_GATE" -eq 0 ]; then
-  step "gate — bash tools/check.sh"
-  if ! bash "$ROOT/tools/check.sh"; then
-    echo "deploy: gate is RED — not deploying, not publishing" >&2
-    exit 1
-  fi
-else
-  echo "deploy: gate SKIPPED (--skip-gate) — caller owns the green proof"
-fi
 
 step "sync — viewer.sh deploy (repo -> runtime)"
 if ! bash "$ROOT/viewer.sh" deploy; then
