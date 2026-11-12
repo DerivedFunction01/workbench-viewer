@@ -331,6 +331,63 @@ class TestSweepHygiene(unittest.TestCase):
             by = result.by_slug("proj")
             self.assertIs(by, project)
 
+    def test_registry_carrying_clone_wins_the_fold(self):
+        # The 2026-11-12 live shape: a fresh working
+        # clone (the tracked manifest, no registry —
+        # registry state is never tracked) is MORE
+        # recently active than the checkout carrying
+        # the project's registry. The data-carrying
+        # root wins: electing the data-less clone
+        # served the project's entries as
+        # uninitialized and flapped its doctor
+        # findings with the election.
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            carrier = make_repo(ws / "copy-carrier",
+                                name="Proj", slug="proj")
+            bare = make_repo(ws / "copy-bare",
+                             name="Proj", slug="proj")
+            (carrier / "workbench").mkdir()
+            (carrier / "workbench" / "registry.db") \
+                .write_text("x")
+            old_t = 1_700_000_000
+            new_t = old_t + 10_000
+            for base, t in ((carrier, old_t), (bare, new_t)):
+                os.utime(base / "workbench.yaml", (t, t))
+                os.utime(base / ".git", (t, t))
+            result = sweep([ws])
+            self.assertEqual(result.errors, [])
+            self.assertEqual(len(result.projects), 1)
+            project = result.projects[0]
+            self.assertEqual(project.root, carrier.resolve())
+            self.assertEqual(project.also_at,
+                             [bare.resolve()])
+
+    def test_two_registry_carriers_fold_to_most_recent(self):
+        # Equal data standing: activity still decides,
+        # exactly as before the data-standing rule.
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            older = make_repo(ws / "copy-old", name="Proj",
+                              slug="proj")
+            newer = make_repo(ws / "copy-new", name="Proj",
+                              slug="proj")
+            for base in (older, newer):
+                (base / "workbench").mkdir()
+                (base / "workbench" / "registry.db") \
+                    .write_text("x")
+            old_t = 1_700_000_000
+            new_t = old_t + 10_000
+            for base, t in ((older, old_t), (newer, new_t)):
+                os.utime(base / "workbench.yaml", (t, t))
+                os.utime(base / ".git", (t, t))
+            result = sweep([ws])
+            self.assertEqual(len(result.projects), 1)
+            project = result.projects[0]
+            self.assertEqual(project.root, newer.resolve())
+            self.assertEqual(project.also_at,
+                             [older.resolve()])
+
 
 class TestSweepExportExclusion(unittest.TestCase):
     """Export exclusion (2026-11-11): a directory-identity

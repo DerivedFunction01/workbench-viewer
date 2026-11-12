@@ -324,6 +324,17 @@ def _root_activity(root: Path) -> float:
     return newest
 
 
+def _carries_registry(project) -> bool:
+    """Whether a root carries its project's data of
+    record: the manifest declares a registry and the
+    registry file exists there. A fresh clone carries
+    the tracked manifest but no registry (it is local
+    working state, never tracked) until the project is
+    initialized in that copy."""
+    registry = project.manifest.registry
+    return registry is not None and Path(registry).is_file()
+
+
 def _fold_duplicate_slugs(result: SweepResult) -> None:
     """One project per slug. Canonicalization keys on
     repo identity, so standalone clones of one project
@@ -331,11 +342,24 @@ def _fold_duplicate_slugs(result: SweepResult) -> None:
     tracked manifest) still register once per clone
     under the same slug — and slug-keyed navigation
     lands on whichever the enumeration met first. Fold
-    them: the most recently active root's project
-    survives, and the folded roots ride on it as
-    `also_at` — visible, never silent, never a second
-    peer. The fold never deletes anything; a copy's
-    removal is its owning work's act."""
+    them: one root's project survives, and the folded
+    roots ride on it as `also_at` — visible, never
+    silent, never a second peer. The fold never deletes
+    anything; a copy's removal is its owning work's
+    act.
+
+    The survivor is the most recently active root
+    AMONG THE ROOTS THAT CARRY THE PROJECT'S REGISTRY —
+    a data-less copy never outranks the copy holding
+    the data of record. Activity alone elected a fresh
+    working clone over the main checkout on 2026-11-12:
+    the clone's live .git made it the winner while its
+    registry did not exist, so the project's entries
+    served as uninitialized and its doctor findings
+    flapped with the election as work alternated
+    between the trees. Activity still orders roots of
+    equal data standing (two initialized copies, or a
+    project with no registry anywhere)."""
     by_slug: dict = {}
     for project in result.projects:
         by_slug.setdefault(project.slug, []).append(project)
@@ -344,8 +368,10 @@ def _fold_duplicate_slugs(result: SweepResult) -> None:
         if len(group) == 1:
             survivors.append(group[0])
             continue
-        group.sort(key=lambda p: _root_activity(p.root),
-                   reverse=True)
+        group.sort(
+            key=lambda p: (_carries_registry(p),
+                           _root_activity(p.root)),
+            reverse=True)
         winner = group[0]
         winner.also_at = sorted(
             [p.root for p in group[1:]]
