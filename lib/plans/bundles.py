@@ -514,10 +514,17 @@ PLAN_TERMINAL_WORDS = ("complete", "completed", "done",
 
 def resolve_plan_link(plans_dir, plan_ref, *, bundles=None):
     """Resolve an entry's plan_ref against a project's plans
-    dir — the attribution anchor. Candidates, in order: the
-    ref as given, minus a trailing .md, minus a bundle's
-    trailing /plan.md. Matched against each bundle's id,
-    slug, and plan path, active and finished alike.
+    dir — the attribution anchor. A ref resolves in the
+    forms the corpus writes it (the same forms the doctor's
+    todo check documents): plans-dir-relative, or
+    project-root-relative with a leading `.plans/` — the
+    prefix is a spelling of the same anchor, stripped
+    before matching — and a trailing `#fragment` locates a
+    section inside the plan, never a different plan, so
+    it is stripped too. Candidates: each base spelling,
+    minus a trailing .md, minus a bundle's trailing /plan.
+    Matched against each bundle's id, slug, and plan path,
+    active and finished alike.
 
     Returns {"ref", "found", "bundle_id", "path", "archived",
     "status", "terminal"}: status is the plan's declared
@@ -531,11 +538,24 @@ def resolve_plan_link(plans_dir, plan_ref, *, bundles=None):
     if not plan_ref or plans_dir is None:
         return miss
     ref = str(plan_ref).strip()
-    candidates = {ref}
-    if ref.endswith(".md"):
-        candidates.add(ref[:-3])
-    if ref.endswith("/plan"):
-        candidates.add(ref[:-5])
+    # A `#fragment` qualifies where in the plan, not
+    # which plan — the corpus's spec-extraction refs
+    # carry one per inventory item; the anchor is the
+    # plan in front of it.
+    ref = ref.split("#", 1)[0].strip()
+    bases = {ref}
+    if ref.startswith(".plans/"):
+        bases.add(ref[len(".plans/"):])
+    candidates = set(bases)
+    frontier = list(bases)
+    while frontier:
+        current = frontier.pop()
+        for suffix in (".md", "/plan"):
+            if current.endswith(suffix):
+                reduced = current[:-len(suffix)]
+                if reduced not in candidates:
+                    candidates.add(reduced)
+                    frontier.append(reduced)
     for b in (bundles if bundles is not None
               else list_bundles(plans_dir)):
         plan = b.get("plan")

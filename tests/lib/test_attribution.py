@@ -146,6 +146,8 @@ class TestPlanLink(unittest.TestCase):
         fin.mkdir()
         (fin / "2026-01-01-old-study.md").write_text(
             "# Old study\n\nStatus: draft\n")
+        (self.plans / "2026-01-03-flat-study.md").write_text(
+            "# Flat study\n\nStatus: draft\n")
         from lib.plans import bundles as bundle_parser
         self.bp = bundle_parser
 
@@ -171,6 +173,50 @@ class TestPlanLink(unittest.TestCase):
         link = self.bp.resolve_plan_link(
             self.plans, "2026-01-02-widget-study/plan.md")
         self.assertTrue(link["found"])
+
+    def test_root_relative_flat_plan_form(self):
+        # The corpus's written form: a registry entry's
+        # plan_ref spelled project-root-relative
+        # (`.plans/<file>.md`) must resolve to the plan
+        # at exactly that path — the resolver once
+        # matched only the plans-dir-relative spellings,
+        # so entry-plan-missing fired for every entry
+        # carrying the corpus form.
+        link = self.bp.resolve_plan_link(
+            self.plans,
+            ".plans/2026-01-03-flat-study.md")
+        self.assertTrue(link["found"])
+        self.assertEqual(link["status"], "draft")
+        self.assertFalse(link["archived"])
+
+    def test_root_relative_bundle_forms(self):
+        for ref in (".plans/2026-01-02-widget-study",
+                    ".plans/2026-01-02-widget-study/plan.md"):
+            link = self.bp.resolve_plan_link(
+                self.plans, ref)
+            self.assertTrue(link["found"], ref)
+
+    def test_root_relative_finished_plan_form(self):
+        link = self.bp.resolve_plan_link(
+            self.plans,
+            ".plans/2026-01-01-old-study.md")
+        self.assertTrue(link["found"])
+        self.assertTrue(link["terminal"])
+
+    def test_fragment_form_resolves_to_the_plan(self):
+        # The spec-extraction corpus form: the ref
+        # names a plan plus a section inside it.
+        link = self.bp.resolve_plan_link(
+            self.plans,
+            ".plans/2026-01-03-flat-study.md#item-7")
+        self.assertTrue(link["found"])
+        self.assertEqual(link["bundle_id"],
+                         "2026-01-03-flat-study.md")
+
+    def test_root_relative_missing_still_misses(self):
+        link = self.bp.resolve_plan_link(
+            self.plans, ".plans/2026-01-09-nope.md")
+        self.assertFalse(link["found"])
 
     def test_missing_ref_is_a_miss_not_a_disposition(self):
         link = self.bp.resolve_plan_link(
