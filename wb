@@ -30,6 +30,8 @@ from lib import bundles as bundle_mod  # noqa: E402
 from lib import kit as kit_mod  # noqa: E402
 from lib import doctor as doctor_mod  # noqa: E402
 from lib import progress as progress_mod  # noqa: E402
+from lib.progress import attention as \
+    attention_mod  # noqa: E402
 from lib.progress import schedule as \
     progress_schedule_mod  # noqa: E402
 from lib import export as export_mod  # noqa: E402
@@ -493,7 +495,8 @@ def cmd_todo_new(args):
             ("id", "title", "status", "feature", "plan",
              "plan_step", "worktree", "created", "updated",
              "progress_check", "progress_armed",
-             "progress_entry", "bundle", "file")})
+             "progress_entry", "attention_row",
+             "bundle", "file")})
     return 0
 
 
@@ -506,7 +509,8 @@ def cmd_todo_file_set(args):
     _print({k: result[k] for k in
             ("id", "title", "status", "updated",
              "progress_check", "progress_armed",
-             "progress_entry", "bundle", "file")})
+             "progress_entry", "attention_row",
+             "bundle", "file")})
     return 0
 
 
@@ -648,7 +652,10 @@ def cmd_progress(args):
     result = sweep(roots)
     if args.sync_entries:
         _print({"sync": progress_schedule_mod.sync_all(
-            result.projects)})
+                    result.projects),
+                "sync_attention":
+                    attention_mod.sync_all(
+                        result.projects)})
         return 0
     projects = []
     for project in result.projects:

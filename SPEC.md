@@ -534,6 +534,18 @@ disarming deletes it — `wb progress --sync-entries`
 reconciles the registry against the armed set, and the
 doctor flags drift. (The staleness check's
 `print-schedule` remains platform-scheduled.) The
+same arming also writes the todo's row into the
+owner-attention service's armed registry
+(`lib/progress/attention.py`: one JSON row per armed
+work item in that repo's `var/armed/`, carrying the
+work item's handle — its todo id — its programme, and
+its cadence; the opt-out writes no row, a terminal
+move retires it, and `wb progress --sync-entries`
+reconciles the rows with the scheduler entries), so
+supervision attaches at work start with no
+hand-authored job per programme; the attention
+evaluator consumes the rows, the harness only writes
+and retires them. The
 arm / run / disarm contract lives in
 `context/ai-workflow-rules.md`.
 

@@ -19,6 +19,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .progress import attention as attention_mod
 from .progress import schedule as progress_schedule_mod
 from . import registry as reg
 from .plans import bundles as bundle_parser
@@ -351,6 +352,11 @@ def create_todo(plans_dir, bundle_ref, title, *, step=None,
     # its outcome never fails this write.
     result["progress_entry"] = \
         progress_schedule_mod.sync_todo(plans_dir, result)
+    # The same arming writes the todo's owner-attention
+    # row (lib/progress/attention.py): supervision
+    # attaches at work start, beside the schedule.
+    result["attention_row"] = \
+        attention_mod.sync_todo(plans_dir, result)
     return result
 
 
@@ -508,6 +514,11 @@ def set_todo_status(plans_dir, todo_id, status, *,
     # its outcome never fails this write.
     result["progress_entry"] = \
         progress_schedule_mod.sync_todo(plans_dir, result)
+    # The same transition writes or retires the todo's
+    # owner-attention row (lib/progress/attention.py):
+    # a terminal move retires the row in this write.
+    result["attention_row"] = \
+        attention_mod.sync_todo(plans_dir, result)
     return result
 
 
