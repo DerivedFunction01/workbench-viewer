@@ -545,7 +545,19 @@ reconciles the rows with the scheduler entries), so
 supervision attaches at work start with no
 hand-authored job per programme; the attention
 evaluator consumes the rows, the harness only writes
-and retires them. The
+and retires them. A programme's standing bundle may
+also carry the goal contract (`contract.md` in the
+bundle directory: Programme, Objective, Complete
+when, and Work record filled per programme; Blocked
+only when, Cadence, and Continuation verbatim from
+the template — `lib/plans/bundles.py` holds the
+text, `wb bundle contract` writes it). Where a
+bundle carries a contract, arming verifies its
+completeness: an incomplete contract refuses the
+arm, naming the empty field, before any write; a
+bundle with no contract arms as before. The bundle
+record serves the parsed contract with its
+completeness verdict. The
 arm / run / disarm contract lives in
 `context/ai-workflow-rules.md`.
 

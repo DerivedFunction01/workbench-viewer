@@ -91,6 +91,100 @@ PROGRESS_OPT_OUT = "off"
 PROGRESS_DEFAULT_CADENCE = "15m"
 
 
+# The goal contract (goal-prompt contract plan,
+# 2026-11-12): a programme's standing bundle may carry
+# a contract — contract.md in the bundle directory —
+# as a field block. Four fields are filled per
+# programme (Programme, Objective, Complete when,
+# Work record); the other three are the template's
+# verbatim clauses everywhere — handwritten variants
+# are a defect. The template text below is the plan's
+# fixed text; the starter repo's supervision rules
+# carry the same text as the generic home. The doing
+# transition's arming gate (lib/bundles.py) verifies
+# completeness on any bundle carrying a contract and
+# refuses to arm an incomplete record, naming the
+# empty field.
+CONTRACT_FILE = "contract.md"
+CONTRACT_FIELDS = (
+    "Programme", "Objective", "Complete when",
+    "Blocked only when", "Work record", "Cadence",
+    "Continuation")
+CONTRACT_FILLED_FIELDS = (
+    "Programme", "Objective", "Complete when",
+    "Work record")
+CONTRACT_FIXED = {
+    "Blocked only when": (
+        "a named hard stop, a genuine owner-only "
+        "decision, or a verified external blocker — "
+        "the claim carries its cited basis with its "
+        "time and a verification stamp; an uncited or "
+        "unverified claim is void, the work resumes "
+        "under its standing authorization, and the "
+        "claim is surfaced as a defect; sequencing "
+        "choices, agent-clearable waits, and matters "
+        "already decided are never blocked states"),
+    "Cadence": (
+        "conforming progress-checkpoints every 15 "
+        "minutes while doing; two missed intervals "
+        "is a stall"),
+    "Continuation": (
+        "a step landing staffs the next in the same "
+        "movement; a turn ends only with work in "
+        "flight, a complete report, or a blocked "
+        "report satisfying the clause; attention "
+        "dispatches continuation pings against this "
+        "contract and an acknowledgement does not "
+        "clear a stall — measured movement does"),
+}
+
+_CONTRACT_LINE_RE = re.compile(
+    r"^-\s+(" + "|".join(CONTRACT_FIELDS) + r"):\s*(.*)$")
+
+
+def render_contract(programme, objective, complete_when,
+                    work_record) -> str:
+    """The contract block as file text: the four
+    per-programme fields filled, the three fixed
+    clauses verbatim from CONTRACT_FIXED."""
+    filled = {
+        "Programme": programme,
+        "Objective": objective,
+        "Complete when": complete_when,
+        "Work record": work_record,
+    }
+    lines = [f"# Goal contract — {programme}", ""]
+    for field in CONTRACT_FIELDS:
+        value = filled.get(field) \
+            or CONTRACT_FIXED[field]
+        lines.append(f"- {field}: {value}")
+    return "\n".join(lines) + "\n"
+
+
+def parse_contract(bundle_dir):
+    """A bundle's goal contract, or None when the
+    bundle carries none. Returns the field values
+    plus the completeness verdict the arming gate
+    consumes: `missing` names every field that is
+    absent or empty, in template order."""
+    path = Path(bundle_dir) / CONTRACT_FILE
+    if not path.is_file():
+        return None
+    fields = {}
+    for line in path.read_text(
+            encoding="utf-8").splitlines():
+        m = _CONTRACT_LINE_RE.match(line.strip())
+        if m:
+            fields[m.group(1)] = m.group(2).strip()
+    missing = [f for f in CONTRACT_FIELDS
+               if not fields.get(f)]
+    return {
+        "fields": fields,
+        "missing": missing,
+        "complete": not missing,
+    }
+
+
 def _valid_instant(value: str) -> bool:
     try:
         datetime.fromisoformat(
@@ -292,6 +386,7 @@ def _read_bundle(bundle_dir: Path, rel_prefix: str,
         "archived": archived,
         "feature": feature,
         "plan": plan,
+        "contract": parse_contract(bundle_dir),
         "todos": todos,
         "errors": errors,
         "todo_count": len(todos),
@@ -345,6 +440,7 @@ def _flat_bundle(plan_path: Path, rel: str,
         "archived": archived,
         "feature": plan["feature"],
         "plan": plan,
+        "contract": None,
         "todos": [],
         "errors": errors,
         "todo_count": 0,

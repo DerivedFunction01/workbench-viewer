@@ -483,6 +483,37 @@ def cmd_bundle_new(args):
     return 0
 
 
+def cmd_bundle_contract(args):
+    ctx = PlansCtx(args)
+    filled = (args.programme, args.objective,
+              args.complete_when, args.work_record)
+    if any(v is not None for v in filled):
+        if not all(v is not None for v in filled):
+            raise SystemExit(
+                "wb bundle contract: setting a contract "
+                "takes all four fields — --programme, "
+                "--objective, --complete-when, "
+                "--work-record")
+        result = bundle_mod.set_bundle_contract(
+            ctx.plans_dir, args.bundle,
+            programme=args.programme,
+            objective=args.objective,
+            complete_when=args.complete_when,
+            work_record=args.work_record)
+        _print(result)
+        return 0
+    bundle_dir = bundle_mod.find_bundle_dir(
+        ctx.plans_dir, args.bundle)
+    if bundle_dir is None:
+        raise SystemExit(
+            f"wb bundle contract: unknown bundle: "
+            f"{args.bundle!r}")
+    _print({"bundle": bundle_dir.name,
+            "contract": bundle_parser.parse_contract(
+                bundle_dir)})
+    return 0
+
+
 def cmd_todo_new(args):
     ctx = PlansCtx(args)
     result = bundle_mod.create_todo(
@@ -880,6 +911,16 @@ def build_parser():
     nb.add_argument("--date",
                     help="bundle date prefix (default: today)")
     nb.set_defaults(fn=cmd_bundle_new)
+
+    cb = bsub.add_parser(
+        "contract",
+        help="show or set a bundle's goal contract")
+    cb.add_argument("bundle")
+    cb.add_argument("--programme")
+    cb.add_argument("--objective")
+    cb.add_argument("--complete-when", dest="complete_when")
+    cb.add_argument("--work-record", dest="work_record")
+    cb.set_defaults(fn=cmd_bundle_contract)
 
     sp = sub.add_parser(
         "todo", help="file todos in bundles (spec §3.4)")
