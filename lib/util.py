@@ -114,16 +114,39 @@ def scratch_marked(path) -> bool:
 
 
 def write_text(path, text, *, encoding="utf-8") -> None:
-    """Write text to a file through the builtin open().
+    """Write text to a file, atomically: stage the full
+    text to a sibling temp file, then rename it over the
+    target.
 
     Path.write_text is deliberately not used anywhere in
     lib/ or server/: this environment intermittently denies
-    it to agent-domain processes (EPERM windows, first
-    observed 2026-10-26) while builtin open() keeps working
-    in strictly more of those conditions. One seam, so the
-    write strategy can change in exactly one place."""
-    with open(path, "w", encoding=encoding) as f:
-        f.write(text)
+    writes to agent-domain processes (EPERM windows, first
+    observed 2026-10-26). The earlier form of this seam
+    opened the target directly — truncate first, then
+    write — so a flush denied inside one of those windows
+    left the target at 0 bytes (a steampowernj programme
+    todo was lost exactly that way, 2026-11-13: the
+    truncated file parsed as an invalid todo and its id
+    resolved nowhere). Rename-over was never denied in
+    any probe of those windows, and a failed stage now
+    leaves the target untouched. The target's existing
+    mode is carried onto the staged file before the
+    rename. One seam, so the write strategy can change
+    in exactly one place."""
+    target = Path(path)
+    tmp = target.with_name(target.name + ".tmp")
+    try:
+        with open(tmp, "w", encoding=encoding) as f:
+            f.write(text)
+        if target.exists():
+            os.chmod(tmp, target.stat().st_mode & 0o7777)
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def fan_out(fn, items, *, workers=1) -> list:
