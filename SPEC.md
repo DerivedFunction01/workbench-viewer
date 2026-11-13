@@ -530,7 +530,14 @@ itself: arming writes a scheduler-registry entry
 (`lib/progress/schedule.py`; the scheduler server's
 registry is files, rescanned every tick) whose command
 is `wb progress-check <id>` at the todo's cadence, and
-disarming deletes it — `wb progress --sync-entries`
+disarming deletes it. A progress verdict is only ever
+read from a pinned context: the harness's entries pin
+`--root`, and `wb progress-check` fails loud (exit 2)
+when an unpinned invocation's id is absent from the
+ambiently resolved project — a todo id names one
+project's store only, so an ambient miss is no verdict
+at all, while a pinned miss keeps the quiet orphan
+zero the doctor reconciles — `wb progress --sync-entries`
 reconciles the registry against the armed set, and the
 doctor flags drift. (The staleness check's
 `print-schedule` remains platform-scheduled.) The

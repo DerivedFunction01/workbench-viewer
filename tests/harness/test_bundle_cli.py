@@ -155,5 +155,74 @@ class BundleCli(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
 
 
+class ProgressCheckContext(unittest.TestCase):
+    """`wb progress-check` reads a verdict from a pinned
+    context only: the harness's scheduler entries pin
+    --root, where a missing id is the quiet orphan zero.
+    An unpinned (cwd-resolved) invocation whose id is
+    absent from the ambient project fails loud — the id
+    may live in any other project's store, so the
+    ambient miss is no verdict (the phantom-stall
+    shape: a done todo in one project read as orphaned
+    from another project's directory)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.proj_a = base / "proj-a"
+        self.proj_b = base / "proj-b"
+        for root in (self.proj_a, self.proj_b):
+            root.mkdir(parents=True)
+            (root / "workbench.yaml").write_text(
+                "name: Fixture\n"
+                "registry: workbench/registry.db\n"
+                "plans: .plans\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_wb(self, *argv, cwd=None, pin=None):
+        cmd = [PY, str(WB)]
+        if pin is not None:
+            cmd += ["--root", str(pin)]
+        cmd += list(argv)
+        return subprocess.run(cmd, capture_output=True,
+                              text=True, cwd=cwd)
+
+    def make_done_todo(self, root):
+        r = self.run_wb("bundle", "new", "work",
+                        pin=root)
+        bundle = json.loads(r.stdout)["id"]
+        r = self.run_wb("todo", "new", bundle, "Task",
+                        pin=root)
+        todo = json.loads(r.stdout)
+        self.run_wb("todo", "set", todo["id"], "done",
+                    pin=root)
+        return todo["id"]
+
+    def test_pinned_miss_is_the_quiet_orphan_zero(self):
+        r = self.run_wb("progress-check",
+                        "t-01MISSING0000000000000000",
+                        pin=self.proj_a)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("orphaned", r.stdout)
+
+    def test_ambient_miss_fails_loud(self):
+        todo_id = self.make_done_todo(self.proj_b)
+        r = self.run_wb("progress-check", todo_id,
+                        cwd=self.proj_a)
+        self.assertEqual(r.returncode, 2, r.stdout)
+        self.assertIn("proj-a", r.stdout)
+        self.assertIn("pin the programme context",
+                      r.stdout)
+
+    def test_ambient_hit_verdicts_normally(self):
+        todo_id = self.make_done_todo(self.proj_b)
+        r = self.run_wb("progress-check", todo_id,
+                        cwd=self.proj_b)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("not armed", r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

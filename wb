@@ -708,7 +708,20 @@ def cmd_progress_check(args):
     A root that no longer exists is the gone case, not
     a crash: the project (or a fixture's tempdir) went
     away, so the check exits 0 and the doctor flags the
-    orphaned entry."""
+    orphaned entry.
+
+    Context rule: a todo id names one project's store
+    only, so a verdict is only ever read from a pinned
+    context. The harness's own entries pin --root; a
+    reader who resolves the context ambiently (the cwd
+    walk-up) and finds the id absent has learned
+    nothing — the id may live in any other project —
+    so an ambient miss fails loud (exit 2, naming the
+    resolved project) instead of returning the pinned
+    path's quiet orphan line. A pinned miss keeps the
+    quiet zero: there the absence is a fact about that
+    project, and the doctor reconciles the orphan. An
+    ambient HIT is a true read and verdicts normally."""
     root_arg = getattr(args, "root", None)
     if root_arg and not Path(root_arg).is_dir():
         print(f"{args.id}: project root gone — "
@@ -717,6 +730,22 @@ def cmd_progress_check(args):
     ctx = PlansCtx(args)
     code, line = progress_schedule_mod.check_todo(
         ctx.plans_dir, args.id)
+    pinned = bool(root_arg or getattr(args, "project",
+                                      None)
+                  or getattr(args, "db", None))
+    found = any(t.get("id") == args.id
+                for t in bundle_parser.list_todos(
+                    ctx.plans_dir))
+    if not pinned and not found:
+        slug = ctx.project_meta["slug"] \
+            if ctx.project_meta else "?"
+        print(f"{args.id}: not found in project "
+              f"{slug} — the context came from the "
+              f"working directory, and a todo id names "
+              f"one project's store only; pin the "
+              f"programme context (--root or --project) "
+              f"for a verdict")
+        return 2
     print(line)
     return code
 
@@ -1036,7 +1065,10 @@ def build_parser():
         help="one armed todo's stall verdict: exit 0 on "
              "track, exit 3 with a STALLED line when "
              "stalled (run by the todo's scheduler "
-             "entry)")
+             "entry, which pins --root); an unpinned "
+             "invocation whose id is absent from the "
+             "ambient project fails loud (exit 2) — a "
+             "todo id names one project's store only")
     sp.add_argument("id", help="the todo id")
     sp.set_defaults(fn=cmd_progress_check)
 
